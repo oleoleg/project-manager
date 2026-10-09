@@ -1,0 +1,14 @@
+DROP TABLE IF EXISTS stage_acts;
+DROP TABLE IF EXISTS stage_costs;
+DROP TABLE IF EXISTS stages;
+DROP TABLE IF EXISTS contract_cards;
+DROP TABLE IF EXISTS contracts;
+DROP TABLE IF EXISTS counterparties;
+DROP TABLE IF EXISTS work_kinds;
+DROP TABLE IF EXISTS stage_statuses;
+DROP TABLE IF EXISTS tracking_statuses;
+DROP TABLE IF EXISTS procurement_card_statuses;
+DROP TABLE IF EXISTS contract_types;
+DROP TABLE IF EXISTS contract_statuses;
+DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS roles;
