@@ -1,0 +1,28 @@
+# Бинарники
+/server
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Тесты
+*.test
+*.out
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Окружение
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Логи
+*.log
+logs/
