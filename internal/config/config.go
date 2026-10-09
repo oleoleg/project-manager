@@ -18,6 +18,12 @@ type Config struct {
 	DBPassword string
 	DBName     string
 	DBSSLMode  string
+
+	SessionSecret string
+
+	BootstrapAdminUsername string
+	BootstrapAdminPassword string
+	BootstrapAdminFullName string
 }
 
 // Load читает .env (если есть) и переменные окружения.
@@ -27,14 +33,19 @@ func Load() (*Config, error) {
 	_ = godotenv.Load()
 
 	cfg := &Config{
-		AppEnv:     getEnv("APP_ENV", "local"),
-		HTTPPort:   getEnv("HTTP_PORT", "8080"),
-		DBHost:     getEnv("DB_HOST", "localhost"),
-		DBPort:     getEnv("DB_PORT", "5432"),
-		DBUser:     getEnv("DB_USER", "postgres"),
-		DBPassword: getEnv("DB_PASSWORD", "postgres"),
-		DBName:     getEnv("DB_NAME", "project_manager"),
-		DBSSLMode:  getEnv("DB_SSLMODE", "disable"),
+		AppEnv:        getEnv("APP_ENV", "local"),
+		HTTPPort:      getEnv("HTTP_PORT", "8080"),
+		DBHost:        getEnv("DB_HOST", "localhost"),
+		DBPort:        getEnv("DB_PORT", "5432"),
+		DBUser:        getEnv("DB_USER", "postgres"),
+		DBPassword:    getEnv("DB_PASSWORD", "postgres"),
+		DBName:        getEnv("DB_NAME", "project_manager"),
+		DBSSLMode:     getEnv("DB_SSLMODE", "disable"),
+		SessionSecret: getEnv("SESSION_SECRET", ""),
+
+		BootstrapAdminUsername: getEnv("BOOTSTRAP_ADMIN_USERNAME", ""),
+		BootstrapAdminPassword: getEnv("BOOTSTRAP_ADMIN_PASSWORD", ""),
+		BootstrapAdminFullName: getEnv("BOOTSTRAP_ADMIN_FULLNAME", "Администратор"),
 	}
 
 	if _, err := strconv.Atoi(cfg.HTTPPort); err != nil {

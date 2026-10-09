@@ -1,0 +1,26 @@
+{{ define "login.html" }}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Вход — Project Manager</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="login-body">
+    <div class="login-card">
+        <h1>Project Manager</h1>
+        <p class="subtitle">Вход в систему</p>
+        {{ if .Error }}<div class="error">{{ .Error }}</div>{{ end }}
+        <form method="post" action="/login">
+            <label>Логин
+                <input type="text" name="username" required autofocus>
+            </label>
+            <label>Пароль
+                <input type="password" name="password" required>
+            </label>
+            <button type="submit" class="btn btn-primary">Войти</button>
+        </form>
+    </div>
+</body>
+</html>
+{{ end }}

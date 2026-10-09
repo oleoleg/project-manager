@@ -8,15 +8,67 @@ body {
     min-height: 100vh;
 }
 
-header {
-    background: #2f3640;
-    color: #fff;
-    padding: 24px 32px;
+/* Header */
+header { background: #2f3640; color: #fff; }
+.header-inner {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 32px;
+    max-width: 1200px; margin: 0 auto;
 }
+header h1 { font-size: 20px; }
+.user-box { display: flex; align-items: center; gap: 12px; font-size: 14px; }
+.user-box .role {
+    background: rgba(255,255,255,0.15);
+    padding: 2px 8px; border-radius: 10px; font-size: 12px;
+}
+.logout-form { display: inline; }
 
-header h1 { font-size: 24px; }
-.subtitle { opacity: 0.7; font-size: 14px; margin-top: 4px; }
+/* Main */
+main { max-width: 1200px; margin: 0 auto; padding: 32px; }
+h2 { margin-bottom: 12px; }
 
-main { padding: 32px; }
+/* Login */
+.login-body {
+    display: flex; align-items: center; justify-content: center;
+    background: #2f3640;
+}
+.login-card {
+    background: #fff;
+    padding: 40px 36px;
+    border-radius: 12px;
+    width: 100%; max-width: 380px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+}
+.login-card h1 { font-size: 22px; text-align: center; }
+.login-card .subtitle {
+    text-align: center; color: #718093; font-size: 14px; margin-bottom: 24px;
+}
+.login-card form { display: flex; flex-direction: column; gap: 16px; }
+.login-card label {
+    display: flex; flex-direction: column; gap: 6px;
+    font-size: 13px; color: #2f3640;
+}
+.login-card input {
+    padding: 10px 12px; border: 1px solid #dcdde1; border-radius: 6px;
+    font-size: 14px; outline: none;
+}
+.login-card input:focus { border-color: #40739e; }
+
+/* Buttons */
+.btn {
+    padding: 10px 16px; border: none; border-radius: 6px;
+    font-size: 14px; cursor: pointer; font-family: inherit;
+}
+.btn-primary { background: #40739e; color: #fff; }
+.btn-primary:hover { background: #38678a; }
+.btn-ghost { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,0.3); }
+.btn-ghost:hover { background: rgba(255,255,255,0.1); }
+
+/* Error */
+.error {
+    background: #ffe0e0; color: #c0392b;
+    padding: 10px 12px; border-radius: 6px;
+    font-size: 13px; margin-bottom: 16px;
+}
 
 a { color: #40739e; }

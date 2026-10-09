@@ -1,0 +1,9 @@
+{{ define "dashboard.html" }}
+{{ template "layout" . }}
+{{ end }}
+
+{{ define "content" }}
+<h2>Добро пожаловать, {{ .User.FullName }}</h2>
+<p>Роль: <strong>{{ .RoleName }}</strong></p>
+<p>Это защищённая страница. Скоро здесь появится реестр договоров.</p>
+{{ end }}

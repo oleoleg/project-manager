@@ -1,0 +1,29 @@
+{{ define "layout" }}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ .Title }}</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    {{ if .User }}
+    <header>
+        <div class="header-inner">
+            <h1>Project Manager</h1>
+            <div class="user-box">
+                <span>{{ .User.FullName }}</span>
+                <span class="role">{{ .RoleName }}</span>
+                <form method="post" action="/logout" class="logout-form">
+                    <button type="submit" class="btn btn-ghost">Выйти</button>
+                </form>
+            </div>
+        </div>
+    </header>
+    {{ end }}
+    <main>
+        {{ template "content" . }}
+    </main>
+</body>
+</html>
+{{ end }}
