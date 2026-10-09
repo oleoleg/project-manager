@@ -1,17 +1,26 @@
 # Project Manager
 
-Внутренний инструмент управления проектами (договоры, этапы, бюджеты, табели).
+Внутренний веб-инструмент для управления проектами: договоры, этапы, бюджеты,
+табели сотрудников и финансы. Замена Excel/VBA-наработкам.
 
 ## Стек
-- Go + chi
-- PostgreSQL
-- HTML / CSS (без внешних фреймворков)
 
-## Локальный запуск
-1. `cp .env.example .env` и заполни параметры.
-2. `go run ./cmd/server`
-3. Открой http://localhost:8080
+- **Backend:** Go 1.22+, [chi](https://github.com/go-chi/chi) router
+- **DB:** PostgreSQL 14+
+- **Migrations:** [golang-migrate](https://github.com/golang-migrate/migrate) (встроены в бинарник через `embed`)
+- **Auth:** bcrypt + cookie-сессии ([gorilla/sessions](https://github.com/gorilla/sessions))
+- **Frontend:** HTML-шаблоны + собственный CSS (без внешних фреймворков)
 
-## Статус
-- [x] Шаг 0 — скелет проекта
-- [ ] Шаг 1 — PostgreSQL, миграции, схема БД
+## Требования
+
+- Go 1.22 или новее
+- PostgreSQL 14+
+- Git
+
+## Быстрый старт
+
+### 1. Клонировать репозиторий
+
+```bash
+git clone https://github.com/oleoleg/project-manager.git
+cd project-manager
