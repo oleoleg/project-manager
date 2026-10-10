@@ -1,0 +1,132 @@
+{{ define "contracts_form.html" }}
+{{ template "layout_header" . }}
+{{ $c := .Contract }}
+{{ $isNew := .IsNew }}
+
+<div class="page-header">
+    <h2>{{ if $isNew }}Новый договор{{ else }}Договор {{ $c.ID }}{{ end }}</h2>
+</div>
+
+{{ if .Error }}<div class="error">{{ .Error }}</div>{{ end }}
+
+<form method="post" action="{{ if $isNew }}/contracts{{ else }}/contracts/{{ $c.ID }}{{ end }}" class="form">
+
+    <label>
+        ID договора
+           <small class="hint">
+                Рекомендуется: 4 цифры номера проекта + необязательный суффикс через дефис.
+                Например: <code>6666</code>, <code>6666-П</code>, <code>6666-П2</code>.
+                Буквы: Н — монтаж, П — поставка, Р — проектирование.
+            </small>
+            <input type="text" name="id" value="{{ $c.ID }}" maxlength="16"
+                {{ if not $isNew }}readonly{{ end }} required>
+    </label>
+
+    <label>
+        № договора *
+        <input type="text" name="contract_number" value="{{ $c.ContractNumber }}" required>
+    </label>
+
+    <label>
+        Дата составления
+        <input type="date" name="contract_date" value="{{ if $c.ContractDate }}{{ $c.ContractDate.Format "2006-01-02" }}{{ end }}">
+    </label>
+
+    <label>
+        Наименование работ
+        <input type="text" name="work_name" value="{{ $c.WorkName }}">
+    </label>
+
+    <label>
+        Ответственное лицо
+        <input type="text" name="responsible_person" value="{{ $c.ResponsiblePerson }}">
+    </label>
+
+    <label>
+        Статус
+        <select name="status_code" required>
+            {{ range .Statuses }}
+                <option value="{{ .Code }}" {{ if eq .Code $c.StatusCode }}selected{{ end }}>{{ .Code }} — {{ .Name }}</option>
+            {{ end }}
+        </select>
+    </label>
+
+    <label>
+        Контрагент *
+        <select name="counterparty_id" required>
+            <option value="">— выберите —</option>
+            {{ range .Counterparties }}
+                <option value="{{ .ID }}" {{ if eq .ID $c.CounterpartyID }}selected{{ end }}>{{ .ID }} — {{ .Name }}</option>
+            {{ end }}
+        </select>
+    </label>
+
+    <label>
+        Тип договора *
+        <select name="contract_type" required>
+            <option value="">— выберите —</option>
+            {{ range .Types }}
+                <option value="{{ .Code }}" {{ if eq .Code $c.ContractType }}selected{{ end }}>{{ .Name }}</option>
+            {{ end }}
+        </select>
+    </label>
+
+    <label>
+        Цех
+        <input type="text" name="workshop" value="{{ $c.Workshop }}">
+    </label>
+
+    <label>
+        Гиперссылка на проект
+        <input type="url" name="project_url" value="{{ $c.ProjectURL }}">
+    </label>
+
+    <label>
+        Статус карты закупки
+        <select name="procurement_card_status">
+            <option value="">— не указано —</option>
+            {{ range .ProcurementStatuses }}
+                <option value="{{ .Code }}" {{ if eq .Code (deref $c.ProcurementCardStatus) }}selected{{ end }}>{{ .Name }}</option>
+            {{ end }}
+        </select>
+    </label>
+
+    <label>
+        Статус финплана
+        <select name="finplan_status">
+            <option value="">— не указано —</option>
+            {{ range .TrackingStatuses }}
+                <option value="{{ .Code }}" {{ if eq .Code (deref $c.FinplanStatus) }}selected{{ end }}>{{ .Name }}</option>
+            {{ end }}
+        </select>
+    </label>
+
+    <label>
+        Статус план-графика
+        <select name="plan_schedule_status">
+            <option value="">— не указано —</option>
+            {{ range .TrackingStatuses }}
+                <option value="{{ .Code }}" {{ if eq .Code (deref $c.PlanScheduleStatus) }}selected{{ end }}>{{ .Name }}</option>
+            {{ end }}
+        </select>
+    </label>
+
+    <label>
+        Краткое имя
+        <input type="text" name="short_name" value="{{ $c.ShortName }}">
+    </label>
+
+    <label>
+        Доп. реквизиты
+        <textarea name="extra_details" rows="3">{{ $c.ExtraDetails }}</textarea>
+    </label>
+
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Сохранить</button>
+        <a href="{{ if $isNew }}/contracts{{ else }}/contracts/{{ $c.ID }}{{ end }}" class="btn">Отмена</a>
+    </div>
+
+</form>
+
+{{ template "layout_footer" . }}
+{{ end }}

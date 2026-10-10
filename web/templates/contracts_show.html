@@ -1,0 +1,45 @@
+{{ define "contracts_show.html" }}
+{{ template "layout_header" . }}
+{{ $c := .Contract }}
+
+<div class="page-header">
+    <h2>Договор {{ $c.ID }}</h2>
+    <div class="actions">
+        {{ if or (eq .User.RoleCode "admin") (eq .User.RoleCode "rp_chief") (eq .User.RoleCode "rp") }}
+            <a href="/contracts/{{ $c.ID }}/edit" class="btn btn-primary">Изменить</a>
+        {{ end }}
+        {{ if or (eq .User.RoleCode "admin") (eq .User.RoleCode "rp_chief") }}
+            <form method="post" action="/contracts/{{ $c.ID }}/delete"
+                  onsubmit="return confirm('Удалить договор {{ $c.ID }}?');" class="inline">
+                <button type="submit" class="btn btn-danger">Удалить</button>
+            </form>
+        {{ end }}
+    </div>
+</div>
+
+<dl class="detail-list">
+    <dt>ID</dt>                <dd>{{ $c.ID }}</dd>
+    <dt>№ договора</dt>        <dd>{{ $c.ContractNumber }}</dd>
+    <dt>Дата</dt>              <dd>{{ if $c.ContractDate }}{{ $c.ContractDate.Format "02.01.2006" }}{{ end }}</dd>
+    <dt>Наименование работ</dt><dd>{{ $c.WorkName }}</dd>
+    <dt>Отв. лицо</dt>         <dd>{{ $c.ResponsiblePerson }}</dd>
+    <dt>Статус</dt>            <dd>{{ $c.StatusCode }} — {{ .StatusName }}</dd>
+    <dt>Контрагент</dt>
+    <dd>
+        <a href="/counterparties/{{ $c.CounterpartyID }}">{{ $c.CounterpartyID }}</a>
+        {{ if .Counterparty }} — {{ .Counterparty.Name }}{{ end }}
+    </dd>
+    <dt>Цех</dt>               <dd>{{ $c.Workshop }}</dd>
+    <dt>Ссылка на проект</dt>  <dd>{{ if $c.ProjectURL }}<a href="{{ $c.ProjectURL }}" target="_blank">{{ $c.ProjectURL }}</a>{{ end }}</dd>
+    <dt>Карта закупки</dt>     <dd>{{ deref $c.ProcurementCardStatus }}</dd>
+    <dt>Доп. реквизиты</dt>    <dd>{{ $c.ExtraDetails }}</dd>
+    <dt>Финплан</dt>           <dd>{{ deref $c.FinplanStatus }}</dd>
+    <dt>План-график</dt>       <dd>{{ deref $c.PlanScheduleStatus }}</dd>
+    <dt>Краткое имя</dt>       <dd>{{ $c.ShortName }}</dd>
+    <dt>Тип договора</dt>      <dd>{{ $c.ContractType }} — {{ .TypeName }}</dd>
+</dl>
+
+<p><a href="/contracts">← К списку</a></p>
+
+{{ template "layout_footer" . }}
+{{ end }}

@@ -1,0 +1,68 @@
+{{ define "contracts_list.html" }}
+{{ template "layout_header" . }}
+
+<div class="page-header">
+    <h2>Договоры</h2>
+    {{ if or (eq .User.RoleCode "admin") (eq .User.RoleCode "rp_chief") (eq .User.RoleCode "rp") }}
+        <a href="/contracts/new" class="btn btn-primary">+ Новый договор</a>
+    {{ end }}
+</div>
+
+<form method="get" action="/contracts" class="filter-form">
+    <input type="text" name="q" value="{{ .Search }}" placeholder="Поиск по ID, номеру, названию…">
+
+    <select name="counterparty">
+        <option value="">— все контрагенты —</option>
+        {{ range .Counterparties }}
+            <option value="{{ .ID }}" {{ if eq .ID $.FilterCounterparty }}selected{{ end }}>
+                {{ .ID }} — {{ .Name }}
+            </option>
+        {{ end }}
+    </select>
+
+    <select name="status">
+        <option value="">— все статусы —</option>
+        {{ range .Statuses }}
+            <option value="{{ .Code }}" {{ if eq .Code $.FilterStatus }}selected{{ end }}>
+                {{ .Code }} — {{ .Name }}
+            </option>
+        {{ end }}
+    </select>
+
+    <button type="submit" class="btn">Фильтр</button>
+    <a href="/contracts" class="btn btn-ghost-dark">Сбросить</a>
+</form>
+
+{{ if .List }}
+<table class="data-table">
+    <thead>
+    <tr>
+        <th>ID</th>
+        <th>№</th>
+        <th>Дата</th>
+        <th>Наименование</th>
+        <th>Контрагент</th>
+        <th>Статус</th>
+        <th></th>
+    </tr>
+    </thead>
+    <tbody>
+    {{ range .List }}
+        <tr>
+            <td><a href="/contracts/{{ .ID }}">{{ .ID }}</a></td>
+            <td>{{ .ContractNumber }}</td>
+            <td>{{ if .ContractDate }}{{ .ContractDate.Format "02.01.2006" }}{{ end }}</td>
+            <td>{{ .WorkName }}</td>
+            <td>{{ .CounterpartyID }}</td>
+            <td>{{ .StatusCode }}</td>
+            <td class="actions"><a href="/contracts/{{ .ID }}" class="btn btn-sm">Открыть</a></td>
+        </tr>
+    {{ end }}
+    </tbody>
+</table>
+{{ else }}
+<p class="empty">Договоров не найдено.</p>
+{{ end }}
+
+{{ template "layout_footer" . }}
+{{ end }}

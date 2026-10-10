@@ -167,3 +167,27 @@ a { color: #40739e; }
 .form input[readonly] { background: #f1f2f6; color: #718093; }
 .form-actions { display: flex; gap: 10px; margin-top: 8px; }
 .form-actions .btn { padding: 9px 18px; }
+
+
+.filter-form {
+    display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px;
+    background: #fff; padding: 12px; border-radius: 8px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+}
+.filter-form input[type="text"] { flex: 1; min-width: 220px; padding: 8px 12px; border: 1px solid #dcdde1; border-radius: 6px; font-size: 14px; }
+.filter-form select { padding: 8px 12px; border: 1px solid #dcdde1; border-radius: 6px; font-size: 14px; background: #fff; }
+
+.form .hint {
+    font-size: 12px;
+    color: #718093;
+    line-height: 1.4;
+    margin-bottom: 4px;
+    display: block;
+}
+.form .hint code {
+    background: #f1f2f6;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 11px;
+    color: #2f3640;
+}

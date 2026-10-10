@@ -42,16 +42,27 @@ func main() {
 	if err := db.BootstrapAdmin(ctx, pool, cfg); err != nil {
 		log.Fatalf("bootstrap admin: %v", err)
 	}
+
 	counterpartyRepo := db.NewCounterpartyRepo(pool)
+	contractRepo := db.NewContractRepo(pool)
 
 	// Репозитории и сервисы
 	userRepo := db.NewUserRepo(pool)
 	authSvc := services.NewAuthService(userRepo)
 	sessMgr := services.NewSessionManager(cfg.SessionSecret)
 	counterpartySvc := services.NewCounterpartyService(counterpartyRepo)
+	contractSvc := services.NewContractService(contractRepo)
 
 	// Шаблоны — общий набор
-	tmpl, err := template.ParseGlob(filepath.Join("web", "templates", "*.html"))
+	tmpl := template.New("").Funcs(template.FuncMap{
+		"deref": func(p *string) string {
+			if p == nil {
+				return ""
+			}
+			return *p
+		},
+	})
+	tmpl, err = tmpl.ParseGlob(filepath.Join("web", "templates", "*.html"))
 	if err != nil {
 		log.Fatalf("templates: %v", err)
 	}
@@ -64,6 +75,7 @@ func main() {
 	authH := handlers.NewAuthHandler(authSvc, sessMgr, tmpl)
 	dashH := handlers.NewDashboardHandler(tmpl)
 	counterpartyH := handlers.NewCounterpartyHandler(counterpartySvc, tmpl)
+	contractH := handlers.NewContractHandler(contractSvc, counterpartySvc, tmpl)
 
 	// Роутер
 	r := chi.NewRouter()
@@ -93,23 +105,33 @@ func main() {
 	r.Group(func(r chi.Router) {
 		r.Use(mw.RequireAuth)
 		r.Get("/dashboard", dashH.Index)
+
 		// Контрагенты: просмотр — всем
 		r.Get("/counterparties", counterpartyH.List)
 		r.Get("/counterparties/new", counterpartyH.New)
 		r.Get("/counterparties/{id}", counterpartyH.Show)
 		r.Get("/counterparties/{id}/edit", counterpartyH.Edit)
 
+		// Договоры — GET-ы
+		r.Get("/contracts", contractH.List)
+		r.Get("/contracts/new", contractH.New)
+		r.Get("/contracts/{id}", contractH.Show)
+		r.Get("/contracts/{id}/edit", contractH.Edit)
+
 		// Создание/редактирование
 		r.Group(func(r chi.Router) {
 			r.Use(mw.RequireRole("admin", "rp_chief", "rp"))
 			r.Post("/counterparties", counterpartyH.Create)
 			r.Post("/counterparties/{id}", counterpartyH.Update)
+			r.Post("/contracts", contractH.Create)
+			r.Post("/contracts/{id}", contractH.Update)
 		})
 
 		// Удаление
 		r.Group(func(r chi.Router) {
 			r.Use(mw.RequireRole("admin", "rp_chief"))
 			r.Post("/counterparties/{id}/delete", counterpartyH.Delete)
+			r.Post("/contracts/{id}/delete", contractH.Delete)
 		})
 	})
 
