@@ -1,0 +1,109 @@
+{{ define "stages_form.html" }}
+{{ template "layout_header" . }}
+{{ $s := .Stage }}
+{{ $isNew := .IsNew }}
+
+<div class="page-header">
+    <h2>{{ if $isNew }}Новый этап{{ else }}Этап: {{ $s.Name }}{{ end }}</h2>
+</div>
+
+<p class="breadcrumb">
+    <a href="/contracts">Договоры</a> →
+    <a href="/contracts/{{ .Contract.ID }}">{{ .Contract.ID }}</a> →
+    <a href="/contracts/{{ .Contract.ID }}/stages">Этапы</a>
+</p>
+
+{{ if .Error }}<div class="error">{{ .Error }}</div>{{ end }}
+
+<form method="post"
+      action="{{ if $isNew }}/contracts/{{ .Contract.ID }}/stages{{ else }}/contracts/{{ .Contract.ID }}/stages/{{ $s.GUID }}{{ end }}"
+      class="form">
+
+    <label>
+        Порядок отображения
+        <input type="number" name="row_order" value="{{ $s.RowOrder }}" min="0">
+    </label>
+
+    <label>
+        № этапа
+        <input type="text" name="stage_number" value="{{ $s.StageNumber }}">
+    </label>
+
+    <label>
+        Наименование этапа *
+        <input type="text" name="name" value="{{ $s.Name }}" required>
+    </label>
+
+    <label>
+        Вид работы *
+        <select name="work_kind_code" required>
+            <option value="">— выберите —</option>
+            {{ range .WorkKinds }}
+                <option value="{{ .Code }}" {{ if eq .Code $s.WorkKindCode }}selected{{ end }}>{{ .Name }}</option>
+            {{ end }}
+        </select>
+    </label>
+
+    <label>
+        Стоимость этапа, руб (без НДС)
+        <input type="text" name="cost" value="{{ printf "%.2f" $s.Cost }}">
+    </label>
+
+    <label>
+        Закрыто по актам, руб
+        <input type="text" name="closed_by_acts" value="{{ printf "%.2f" $s.ClosedByActs }}">
+    </label>
+
+    <label>
+        НДС, %
+        <input type="text" name="vat_percent" value="{{ printf "%.2f" $s.VATPercent }}">
+    </label>
+
+    <label>
+        Аванс, %
+        <input type="text" name="advance_percent" value="{{ printf "%.2f" $s.AdvancePercent }}">
+    </label>
+
+    <label>
+        Условия начала
+        <textarea name="start_conditions" rows="2">{{ $s.StartConditions }}</textarea>
+    </label>
+
+    <label>
+        Условия окончания
+        <textarea name="end_conditions" rows="2">{{ $s.EndConditions }}</textarea>
+    </label>
+
+    <label>
+        Дата закрытия (план)
+        <input type="date" name="close_date_plan"
+               value="{{ if $s.CloseDatePlan }}{{ $s.CloseDatePlan.Format "2006-01-02" }}{{ end }}">
+    </label>
+
+    <label>
+        Ответственный в реализации
+        <input type="text" name="responsible_person" value="{{ $s.ResponsiblePerson }}">
+    </label>
+
+    <label>
+        Статус
+        <select name="status_code" required>
+            {{ range .Statuses }}
+                <option value="{{ .Code }}" {{ if eq .Code $s.StatusCode }}selected{{ end }}>{{ .Code }} — {{ .Name }}</option>
+            {{ end }}
+        </select>
+    </label>
+
+    <label>
+        Примечание
+        <textarea name="note" rows="3">{{ $s.Note }}</textarea>
+    </label>
+
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Сохранить</button>
+        <a href="/contracts/{{ .Contract.ID }}/stages" class="btn">Отмена</a>
+    </div>
+</form>
+
+{{ template "layout_footer" . }}
+{{ end }}

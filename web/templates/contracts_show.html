@@ -7,8 +7,9 @@
     <div class="actions">
         {{ if or (eq .User.RoleCode "admin") (eq .User.RoleCode "rp_chief") (eq .User.RoleCode "rp") }}
             <a href="/contracts/{{ $c.ID }}/edit" class="btn btn-primary">Изменить</a>
+            <a href="/contracts/{{ $c.ID }}/stages" class="btn">Этапы</a>
         {{ end }}
-        {{ if or (eq .User.RoleCode "admin") (eq .User.RoleCode "rp_chief") }}
+        {{ if or (eq .User.RoleCode "admin") (eq .User.RoleCode "rp_chief") (eq .User.RoleCode "rp") }}
             <form method="post" action="/contracts/{{ $c.ID }}/delete"
                   onsubmit="return confirm('Удалить договор {{ $c.ID }}?');" class="inline">
                 <button type="submit" class="btn btn-danger">Удалить</button>

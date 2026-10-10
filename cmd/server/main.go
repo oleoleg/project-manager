@@ -45,6 +45,7 @@ func main() {
 
 	counterpartyRepo := db.NewCounterpartyRepo(pool)
 	contractRepo := db.NewContractRepo(pool)
+	stageRepo := db.NewStageRepo(pool)
 
 	// Репозитории и сервисы
 	userRepo := db.NewUserRepo(pool)
@@ -52,6 +53,7 @@ func main() {
 	sessMgr := services.NewSessionManager(cfg.SessionSecret)
 	counterpartySvc := services.NewCounterpartyService(counterpartyRepo)
 	contractSvc := services.NewContractService(contractRepo)
+	stageSvc := services.NewStageService(stageRepo)
 
 	// Шаблоны — общий набор
 	tmpl := template.New("").Funcs(template.FuncMap{
@@ -76,6 +78,7 @@ func main() {
 	dashH := handlers.NewDashboardHandler(tmpl)
 	counterpartyH := handlers.NewCounterpartyHandler(counterpartySvc, tmpl)
 	contractH := handlers.NewContractHandler(contractSvc, counterpartySvc, tmpl)
+	stageH := handlers.NewStageHandler(stageSvc, contractSvc, tmpl)
 
 	// Роутер
 	r := chi.NewRouter()
@@ -118,6 +121,11 @@ func main() {
 		r.Get("/contracts/{id}", contractH.Show)
 		r.Get("/contracts/{id}/edit", contractH.Edit)
 
+		// Этапы договора
+		r.Get("/contracts/{id}/stages", stageH.List)
+		r.Get("/contracts/{id}/stages/new", stageH.New)
+		r.Get("/contracts/{id}/stages/{guid}/edit", stageH.Edit)
+
 		// Создание/редактирование
 		r.Group(func(r chi.Router) {
 			r.Use(mw.RequireRole("admin", "rp_chief", "rp"))
@@ -125,6 +133,9 @@ func main() {
 			r.Post("/counterparties/{id}", counterpartyH.Update)
 			r.Post("/contracts", contractH.Create)
 			r.Post("/contracts/{id}", contractH.Update)
+			r.Post("/contracts/{id}/stages", stageH.Create)
+			r.Post("/contracts/{id}/stages/{guid}", stageH.Update)
+			r.Post("/contracts/{id}/stages/{guid}/delete", stageH.Delete)
 		})
 
 		// Удаление
@@ -132,6 +143,7 @@ func main() {
 			r.Use(mw.RequireRole("admin", "rp_chief"))
 			r.Post("/counterparties/{id}/delete", counterpartyH.Delete)
 			r.Post("/contracts/{id}/delete", contractH.Delete)
+			r.Post("/contracts/{id}/stages/{guid}/delete", stageH.Delete)
 		})
 	})
 

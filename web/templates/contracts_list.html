@@ -55,7 +55,10 @@
             <td>{{ .WorkName }}</td>
             <td>{{ .CounterpartyID }}</td>
             <td>{{ .StatusCode }}</td>
-            <td class="actions"><a href="/contracts/{{ .ID }}" class="btn btn-sm">Открыть</a></td>
+            <td class="actions">
+                <a href="/contracts/{{ .ID }}" class="btn btn-sm">Открыть</a>
+                <a href="/contracts/{{ .ID }}/stages" class="btn btn-sm">Этапы</a>
+            </td>
         </tr>
     {{ end }}
     </tbody>

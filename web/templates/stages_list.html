@@ -1,0 +1,73 @@
+{{ define "stages_list.html" }}
+{{ template "layout_header" . }}
+
+<div class="page-header">
+    <h2>Этапы договора {{ .Contract.ID }}</h2>
+    {{ if or (eq .User.RoleCode "admin") (eq .User.RoleCode "rp_chief") (eq .User.RoleCode "rp") }}
+        <a href="/contracts/{{ .Contract.ID }}/stages/new" class="btn btn-primary">+ Новый этап</a>
+    {{ end }}
+</div>
+
+<p class="breadcrumb">
+    <a href="/contracts">Договоры</a> →
+    <a href="/contracts/{{ .Contract.ID }}">{{ .Contract.ID }}</a> →
+    Этапы
+</p>
+
+<div class="totals">
+    <div class="total-card"><span>Этапов</span><strong>{{ .Totals.Count }}</strong></div>
+    <div class="total-card"><span>Общая стоимость</span><strong>{{ printf "%.2f" .Totals.TotalCost }} ₽</strong></div>
+    <div class="total-card"><span>Закрыто по актам</span><strong>{{ printf "%.2f" .Totals.TotalClosed }} ₽</strong></div>
+</div>
+
+{{ if .Stages }}
+<table class="data-table">
+    <thead>
+    <tr>
+        <th>№</th>
+        <th>Наименование</th>
+        <th>Вид работы</th>
+        <th>Стоимость</th>
+        <th>Закрыто</th>
+        <th>НДС %</th>
+        <th>Аванс %</th>
+        <th>Закрытие (план)</th>
+        <th>Ответственный</th>
+        <th>Статус</th>
+        <th></th>
+    </tr>
+    </thead>
+    <tbody>
+    {{ range .Stages }}
+        <tr>
+            <td>{{ .StageNumber }}</td>
+            <td>{{ .Name }}</td>
+            <td>{{ call $.WorkKindName .WorkKindCode }}</td>
+            <td>{{ printf "%.2f" .Cost }}</td>
+            <td>{{ printf "%.2f" .ClosedByActs }}</td>
+            <td>{{ printf "%.2f" .VATPercent }}</td>
+            <td>{{ printf "%.2f" .AdvancePercent }}</td>
+            <td>{{ if .CloseDatePlan }}{{ .CloseDatePlan.Format "02.01.2006" }}{{ end }}</td>
+            <td>{{ .ResponsiblePerson }}</td>
+            <td>{{ call $.StatusName .StatusCode }}</td>
+            <td class="actions">
+                {{ if or (eq $.User.RoleCode "admin") (eq $.User.RoleCode "rp_chief") (eq $.User.RoleCode "rp") }}
+                    <a href="/contracts/{{ $.Contract.ID }}/stages/{{ .GUID }}/edit" class="btn btn-sm">Изменить</a>
+                {{ end }}
+                {{ if or (eq $.User.RoleCode "admin") (eq $.User.RoleCode "rp_chief") }}
+                    <form method="post" action="/contracts/{{ $.Contract.ID }}/stages/{{ .GUID }}/delete"
+                          onsubmit="return confirm('Удалить этап «{{ .Name }}»?');" class="inline">
+                        <button type="submit" class="btn btn-sm btn-danger">Удалить</button>
+                    </form>
+                {{ end }}
+            </td>
+        </tr>
+    {{ end }}
+    </tbody>
+</table>
+{{ else }}
+<p class="empty">Этапов пока нет. Добавь первый.</p>
+{{ end }}
+
+{{ template "layout_footer" . }}
+{{ end }}
