@@ -1,0 +1,37 @@
+{{ define "counterparties_show.html" }}
+{{ template "layout_header" . }}
+{{ $c := .Counterparty }}
+
+<div class="page-header">
+    <h2>Контрагент {{ $c.ID }}</h2>
+    <div class="actions">
+        {{ if or (eq .User.RoleCode "admin") (eq .User.RoleCode "rp_chief") (eq .User.RoleCode "rp") }}
+            <a href="/counterparties/{{ $c.ID }}/edit" class="btn btn-primary">Изменить</a>
+        {{ end }}
+        {{ if or (eq .User.RoleCode "admin") (eq .User.RoleCode "rp_chief") }}
+            <form method="post" action="/counterparties/{{ $c.ID }}/delete"
+                  onsubmit="return confirm('Удалить контрагента {{ $c.ID }}?');" class="inline">
+                <button type="submit" class="btn btn-danger">Удалить</button>
+            </form>
+        {{ end }}
+    </div>
+</div>
+
+<dl class="detail-list">
+    <dt>ID</dt>            <dd>{{ $c.ID }}</dd>
+    <dt>Наименование</dt>  <dd>{{ $c.Name }}</dd>
+    <dt>Партнёр</dt>       <dd>{{ $c.Partner }}</dd>
+    <dt>Сокращённо</dt>    <dd>{{ $c.ShortName }}</dd>
+    <dt>Факт. адрес</dt>   <dd>{{ $c.AddressActual }}</dd>
+    <dt>Юр. адрес</dt>     <dd>{{ $c.AddressLegal }}</dd>
+    <dt>workplace</dt>     <dd>{{ if $c.URLWorkplace }}<a href="{{ $c.URLWorkplace }}" target="_blank">{{ $c.URLWorkplace }}</a>{{ end }}</dd>
+    <dt>servicework</dt>   <dd>{{ if $c.URLServicework }}<a href="{{ $c.URLServicework }}" target="_blank">{{ $c.URLServicework }}</a>{{ end }}</dd>
+    <dt>salesprep</dt>     <dd>{{ if $c.URLSalesprep }}<a href="{{ $c.URLSalesprep }}" target="_blank">{{ $c.URLSalesprep }}</a>{{ end }}</dd>
+    <dt>Создан</dt>        <dd>{{ $c.CreatedAt.Format "02.01.2006 15:04" }}</dd>
+    <dt>Обновлён</dt>      <dd>{{ $c.UpdatedAt.Format "02.01.2006 15:04" }}</dd>
+</dl>
+
+<p><a href="/counterparties">← К списку</a></p>
+
+{{ template "layout_footer" . }}
+{{ end }}

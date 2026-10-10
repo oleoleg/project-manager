@@ -1,0 +1,35 @@
+{{ define "counterparties_list.html" }}
+{{ template "layout_header" . }}
+<div class="page-header">
+    <h2>Контрагенты</h2>
+    <a href="/counterparties/new" class="btn btn-primary">+ Новый контрагент</a>
+</div>
+
+<form method="get" action="/counterparties" class="search-form">
+    <input type="text" name="q" value="{{ .Search }}" placeholder="Поиск…">
+    <button type="submit" class="btn">Найти</button>
+    {{ if .Search }}<a href="/counterparties" class="btn btn-ghost-dark">Сбросить</a>{{ end }}
+</form>
+
+{{ if .List }}
+<table class="data-table">
+    <thead>
+    <tr><th>ID</th><th>Наименование</th><th>Сокращённо</th><th>Партнёр</th><th></th></tr>
+    </thead>
+    <tbody>
+    {{ range .List }}
+        <tr>
+            <td><a href="/counterparties/{{ .ID }}">{{ .ID }}</a></td>
+            <td>{{ .Name }}</td>
+            <td>{{ .ShortName }}</td>
+            <td>{{ .Partner }}</td>
+            <td class="actions"><a href="/counterparties/{{ .ID }}" class="btn btn-sm">Открыть</a></td>
+        </tr>
+    {{ end }}
+    </tbody>
+</table>
+{{ else }}
+<p class="empty">Пока нет контрагентов.</p>
+{{ end }}
+{{ template "layout_footer" . }}
+{{ end }}

@@ -1,29 +1,38 @@
-{{ define "layout" }}
+{{ define "layout_header" }}
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>{{ .Title }}</title>
+    <title>{{ .Title }} — Project Manager</title>
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    {{ if .User }}
-    <header>
-        <div class="header-inner">
-            <h1>Project Manager</h1>
-            <div class="user-box">
-                <span>{{ .User.FullName }}</span>
-                <span class="role">{{ .RoleName }}</span>
-                <form method="post" action="/logout" class="logout-form">
-                    <button type="submit" class="btn btn-ghost">Выйти</button>
-                </form>
-            </div>
+{{ if .User }}
+<header>
+    <div class="header-inner">
+        <div class="brand">
+            <a href="/dashboard">Project Manager</a>
         </div>
-    </header>
-    {{ end }}
-    <main>
-        {{ template "content" . }}
-    </main>
+        <nav class="main-nav">
+            <a href="/dashboard">Дашборд</a>
+            <a href="/counterparties">Контрагенты</a>
+        </nav>
+        <div class="user-box">
+            <span>{{ .User.FullName }}</span>
+            <span class="role">{{ .RoleName }}</span>
+            <form method="post" action="/logout" class="logout-form">
+                <button type="submit" class="btn btn-ghost">Выйти</button>
+            </form>
+        </div>
+    </div>
+</header>
+{{ end }}
+<main>
+    {{ if .Flash }}<div class="flash">{{ .Flash }}</div>{{ end }}
+{{ end }}
+
+{{ define "layout_footer" }}
+</main>
 </body>
 </html>
 {{ end }}

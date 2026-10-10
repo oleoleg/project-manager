@@ -42,22 +42,28 @@ func main() {
 	if err := db.BootstrapAdmin(ctx, pool, cfg); err != nil {
 		log.Fatalf("bootstrap admin: %v", err)
 	}
+	counterpartyRepo := db.NewCounterpartyRepo(pool)
 
 	// Репозитории и сервисы
 	userRepo := db.NewUserRepo(pool)
 	authSvc := services.NewAuthService(userRepo)
 	sessMgr := services.NewSessionManager(cfg.SessionSecret)
+	counterpartySvc := services.NewCounterpartyService(counterpartyRepo)
 
 	// Шаблоны — общий набор
 	tmpl, err := template.ParseGlob(filepath.Join("web", "templates", "*.html"))
 	if err != nil {
 		log.Fatalf("templates: %v", err)
 	}
+	for _, t := range tmpl.Templates() {
+		log.Printf("template loaded: %q", t.Name())
+	}
 
 	// Хендлеры
 	healthH := handlers.NewHealthHandler(cfg.AppEnv)
 	authH := handlers.NewAuthHandler(authSvc, sessMgr, tmpl)
 	dashH := handlers.NewDashboardHandler(tmpl)
+	counterpartyH := handlers.NewCounterpartyHandler(counterpartySvc, tmpl)
 
 	// Роутер
 	r := chi.NewRouter()
@@ -87,6 +93,24 @@ func main() {
 	r.Group(func(r chi.Router) {
 		r.Use(mw.RequireAuth)
 		r.Get("/dashboard", dashH.Index)
+		// Контрагенты: просмотр — всем
+		r.Get("/counterparties", counterpartyH.List)
+		r.Get("/counterparties/new", counterpartyH.New)
+		r.Get("/counterparties/{id}", counterpartyH.Show)
+		r.Get("/counterparties/{id}/edit", counterpartyH.Edit)
+
+		// Создание/редактирование
+		r.Group(func(r chi.Router) {
+			r.Use(mw.RequireRole("admin", "rp_chief", "rp"))
+			r.Post("/counterparties", counterpartyH.Create)
+			r.Post("/counterparties/{id}", counterpartyH.Update)
+		})
+
+		// Удаление
+		r.Group(func(r chi.Router) {
+			r.Use(mw.RequireRole("admin", "rp_chief"))
+			r.Post("/counterparties/{id}/delete", counterpartyH.Delete)
+		})
 	})
 
 	// Пример роута только для админа (пригодится в шаге 3)

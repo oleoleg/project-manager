@@ -1,0 +1,58 @@
+{{ define "counterparties_form.html" }}
+{{ template "layout_header" . }}
+{{ $c := .Counterparty }}
+{{ $isNew := .IsNew }}
+
+<div class="page-header">
+    <h2>{{ if $isNew }}Новый контрагент{{ else }}Контрагент {{ $c.ID }}{{ end }}</h2>
+</div>
+
+{{ if .Error }}<div class="error">{{ .Error }}</div>{{ end }}
+
+<form method="post" action="{{ if $isNew }}/counterparties{{ else }}/counterparties/{{ $c.ID }}{{ end }}" class="form">
+    <label>
+        ID (4 цифры)
+        <input type="text" name="id" value="{{ $c.ID }}" maxlength="4" pattern="[0-9]{4}"
+               {{ if not $isNew }}readonly{{ end }} required>
+    </label>
+    <label>
+        Наименование *
+        <input type="text" name="name" value="{{ $c.Name }}" required>
+    </label>
+    <label>
+        Партнёр
+        <input type="text" name="partner" value="{{ $c.Partner }}">
+    </label>
+    <label>
+        Сокращённо
+        <input type="text" name="short_name" value="{{ $c.ShortName }}">
+    </label>
+    <label>
+        Фактический адрес
+        <textarea name="address_actual" rows="2">{{ $c.AddressActual }}</textarea>
+    </label>
+    <label>
+        Юридический адрес
+        <textarea name="address_legal" rows="2">{{ $c.AddressLegal }}</textarea>
+    </label>
+    <label>
+        workplace (URL)
+        <input type="url" name="url_workplace" value="{{ $c.URLWorkplace }}">
+    </label>
+    <label>
+        servicework (URL)
+        <input type="url" name="url_servicework" value="{{ $c.URLServicework }}">
+    </label>
+    <label>
+        salesprep (URL)
+        <input type="url" name="url_salesprep" value="{{ $c.URLSalesprep }}">
+    </label>
+
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Сохранить</button>
+        <a href="{{ if $isNew }}/counterparties{{ else }}/counterparties/{{ $c.ID }}{{ end }}" class="btn">Отмена</a>
+    </div>
+</form>
+
+{{ template "layout_footer" . }}
+{{ end }}
