@@ -88,3 +88,91 @@ func (r *UserRepo) UpdateTheme(ctx context.Context, userID int64, theme string) 
 	}
 	return nil
 }
+
+func (r *UserRepo) List(ctx context.Context) ([]models.User, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, username, full_name, password_hash, role_code, is_active, theme, created_at, updated_at
+		FROM users
+		ORDER BY is_active DESC, role_code, username
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("list users: %w", err)
+	}
+	defer rows.Close()
+
+	var res []models.User
+	for rows.Next() {
+		var u models.User
+		if err := rows.Scan(
+			&u.ID, &u.Username, &u.FullName, &u.PasswordHash,
+			&u.RoleCode, &u.IsActive, &u.Theme,
+			&u.CreatedAt, &u.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan user: %w", err)
+		}
+		res = append(res, u)
+	}
+	return res, rows.Err()
+}
+
+func (r *UserRepo) Update(ctx context.Context, u *models.User) error {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE users SET
+			full_name = $2,
+			role_code = $3,
+			is_active = $4,
+			updated_at = NOW()
+		WHERE id = $1
+	`, u.ID, u.FullName, u.RoleCode, u.IsActive)
+	if err != nil {
+		return fmt.Errorf("update user: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrUserNotFound
+	}
+	return nil
+}
+
+func (r *UserRepo) UpdatePassword(ctx context.Context, userID int64, hash string) error {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE users SET password_hash = $2, updated_at = NOW() WHERE id = $1
+	`, userID, hash)
+	if err != nil {
+		return fmt.Errorf("update password: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrUserNotFound
+	}
+	return nil
+}
+
+func (r *UserRepo) ToggleActive(ctx context.Context, userID int64) error {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE users SET is_active = NOT is_active, updated_at = NOW() WHERE id = $1
+	`, userID)
+	if err != nil {
+		return fmt.Errorf("toggle active: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrUserNotFound
+	}
+	return nil
+}
+
+func (r *UserRepo) ListRoles(ctx context.Context) ([]models.Role, error) {
+	rows, err := r.pool.Query(ctx, `SELECT code, name, COALESCE(description,'') FROM roles ORDER BY code`)
+	if err != nil {
+		return nil, fmt.Errorf("list roles: %w", err)
+	}
+	defer rows.Close()
+
+	var res []models.Role
+	for rows.Next() {
+		var r models.Role
+		if err := rows.Scan(&r.Code, &r.Name, &r.Description); err != nil {
+			return nil, err
+		}
+		res = append(res, r)
+	}
+	return res, rows.Err()
+}

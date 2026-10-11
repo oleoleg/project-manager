@@ -62,6 +62,13 @@ func main() {
 			}
 			return *p
 		},
+		// derefInt разыменовывает *int64, nil -> 0
+		"derefInt": func(p *int64) int64 {
+			if p == nil {
+				return 0
+			}
+			return *p
+		},
 		// money форматирует сумму: 1234567.5 -> "1 234 567.50 ₽"
 		"money": func(v float64) string {
 			s := strconv.FormatFloat(v, 'f', 2, 64)
@@ -113,6 +120,7 @@ func main() {
 	counterpartyH := handlers.NewCounterpartyHandler(counterpartySvc, tmpl)
 	contractH := handlers.NewContractHandler(contractSvc, counterpartySvc, stageSvc, tmpl)
 	stageH := handlers.NewStageHandler(stageSvc, contractSvc, counterpartySvc, tmpl)
+	adminUserH := handlers.NewAdminUserHandler(userSvc, tmpl)
 
 	// =====================================================
 	// 7. Роутер и middleware
@@ -143,6 +151,11 @@ func main() {
 	// =====================================================
 	// 8. Защищённые роуты (требуется вход)
 	// =====================================================
+
+	ownerCheck := func(ctx context.Context, contractID string) (int64, bool) {
+		return contractSvc.GetResponsibleUserID(ctx, contractID)
+	}
+
 	r.Group(func(r chi.Router) {
 		r.Use(mw.RequireAuth)
 
@@ -170,16 +183,23 @@ func main() {
 		r.Get("/contracts/{id}/stages/new", stageH.New)
 		r.Get("/contracts/{id}/stages/{guid}/edit", stageH.Edit)
 
-		// --- Создание / редактирование (admin, rp_chief, rp) ---
+		// --- Создание / редактирование (admin, rp_chief, director, rp) ---
 		r.Group(func(r chi.Router) {
-			r.Use(mw.RequireRole("admin", "rp_chief", "rp"))
+			r.Use(mw.RequireRole("admin", "rp_chief", "director", "rp"))
 
 			r.Post("/counterparties", counterpartyH.Create)
 			r.Post("/counterparties/{id}", counterpartyH.Update)
+		})
 
-			r.Post("/contracts", contractH.Create)
+		r.Group(func(r chi.Router) {
+			// admin, rp_chief, director — могут всё; rp — только свои
+			r.Use(func(next http.Handler) http.Handler {
+				return mw.RequireContractOwnerOrRoles(
+					[]string{"admin", "rp_chief", "director"},
+					ownerCheck,
+				)(next)
+			})
 			r.Post("/contracts/{id}", contractH.Update)
-
 			r.Post("/contracts/{id}/stages", stageH.Create)
 			r.Post("/contracts/{id}/stages/{guid}", stageH.Update)
 			r.Post("/contracts/{id}/stages/{guid}/move", stageH.Move)
@@ -192,6 +212,20 @@ func main() {
 			r.Post("/counterparties/{id}/delete", counterpartyH.Delete)
 			r.Post("/contracts/{id}/delete", contractH.Delete)
 			r.Post("/contracts/{id}/stages/{guid}/delete", stageH.Delete)
+		})
+
+		// --- Управление пользователями (только admin) ---
+		r.Group(func(r chi.Router) {
+			r.Use(mw.RequireRole("admin"))
+
+			r.Get("/admin/users", adminUserH.List)
+			r.Get("/admin/users/new", adminUserH.New)
+			r.Get("/admin/users/{id}/edit", adminUserH.Edit)
+
+			r.Post("/admin/users", adminUserH.Create)
+			r.Post("/admin/users/{id}", adminUserH.Update)
+			r.Post("/admin/users/{id}/password", adminUserH.ChangePassword)
+			r.Post("/admin/users/{id}/toggle", adminUserH.ToggleActive)
 		})
 	})
 

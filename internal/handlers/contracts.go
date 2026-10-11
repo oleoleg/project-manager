@@ -110,6 +110,7 @@ func (h *ContractHandler) Show(w http.ResponseWriter, r *http.Request) {
 	totals, _ := h.stageSvc.Totals(r.Context(), c.ID)
 	problems, _ := h.stageSvc.ProblemStages(r.Context(), c.ID)
 	stageStatuses, _ := h.stageSvc.Statuses(r.Context())
+	assignees, _ := h.svc.ListAssignees(r.Context(), c.ID)
 
 	data := h.commonData(r, "Договор "+c.ID)
 	data["Contract"] = c
@@ -130,6 +131,14 @@ func (h *ContractHandler) Show(w http.ResponseWriter, r *http.Request) {
 		return ""
 	}
 	data["Today"] = time.Now()
+
+	var responsible *models.User
+	if c.ResponsibleUserID != nil {
+		responsible, _ = h.svc.GetResponsible(r.Context(), *c.ResponsibleUserID)
+	}
+	data["Assignees"] = assignees
+	data["Responsible"] = responsible
+
 	h.render(w, "contracts_show.html", data)
 }
 
@@ -141,6 +150,7 @@ func (h *ContractHandler) New(w http.ResponseWriter, r *http.Request) {
 	cp, _ := h.cpSvc.List(r.Context(), "")
 	pcs, _ := h.svc.ProcurementCardStatuses(r.Context())
 	ts, _ := h.svc.TrackingStatuses(r.Context())
+	users, _ := h.svc.ListActiveUsers(r.Context())
 
 	data := h.commonData(r, "Новый договор")
 	data["Contract"] = &models.Contract{}
@@ -151,6 +161,7 @@ func (h *ContractHandler) New(w http.ResponseWriter, r *http.Request) {
 	data["TrackingStatuses"] = ts
 	data["IsNew"] = true
 	data["Error"] = ""
+	data["ActiveUsers"] = users
 	h.render(w, "contracts_form.html", data)
 }
 
@@ -161,6 +172,7 @@ func (h *ContractHandler) Create(w http.ResponseWriter, r *http.Request) {
 		h.renderFormWithError(w, r, c, true, humanizeContractError(err))
 		return
 	}
+
 	http.Redirect(w, r, "/contracts?flash="+url.QueryEscape("Договор создан"), http.StatusSeeOther)
 }
 
@@ -190,6 +202,7 @@ func (h *ContractHandler) Update(w http.ResponseWriter, r *http.Request) {
 		h.renderFormWithError(w, r, c, false, humanizeContractError(err))
 		return
 	}
+
 	http.Redirect(w, r, "/contracts?flash="+url.QueryEscape("Изменения сохранены"), http.StatusSeeOther)
 }
 
@@ -218,6 +231,7 @@ func (h *ContractHandler) renderFormWithError(w http.ResponseWriter, r *http.Req
 	cp, _ := h.cpSvc.List(r.Context(), "")
 	pcs, _ := h.svc.ProcurementCardStatuses(r.Context())
 	ts, _ := h.svc.TrackingStatuses(r.Context())
+	users, _ := h.svc.ListActiveUsers(r.Context())
 
 	data := h.commonData(r, "Договор")
 	data["Contract"] = c
@@ -228,7 +242,7 @@ func (h *ContractHandler) renderFormWithError(w http.ResponseWriter, r *http.Req
 	data["TrackingStatuses"] = ts
 	data["IsNew"] = isNew
 	data["Error"] = errMsg
-
+	data["ActiveUsers"] = users
 	if errMsg != "" {
 		w.WriteHeader(http.StatusBadRequest)
 	}
@@ -241,18 +255,27 @@ func parseContractForm(r *http.Request) *models.Contract {
 	if v, err := strconv.Atoi(r.FormValue("status_code")); err == nil {
 		statusCode = int16(v)
 	}
+
+	var responsibleID *int64
+	if v := r.FormValue("responsible_user_id"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
+			responsibleID = &n
+		}
+	}
+
 	return &models.Contract{
 		ID:                    strings.TrimSpace(r.FormValue("id")),
 		ContractNumber:        strings.TrimSpace(r.FormValue("contract_number")),
 		ContractDate:          services.ParseDate(r.FormValue("contract_date")),
 		WorkName:              strings.TrimSpace(r.FormValue("work_name")),
 		ResponsiblePerson:     strings.TrimSpace(r.FormValue("responsible_person")),
+		ResponsibleUserID:     responsibleID,
 		StatusCode:            statusCode,
 		CounterpartyID:        strings.TrimSpace(r.FormValue("counterparty_id")),
 		Workshop:              strings.TrimSpace(r.FormValue("workshop")),
 		ProjectURL:            strings.TrimSpace(r.FormValue("project_url")),
 		ProcurementCardStatus: nullIfEmpty(r.FormValue("procurement_card_status")),
-		ExtraDetails:          strings.TrimSpace(r.FormValue("extra_details")), // это просто TEXT, можно оставить как есть
+		ExtraDetails:          strings.TrimSpace(r.FormValue("extra_details")),
 		FinplanStatus:         nullIfEmpty(r.FormValue("finplan_status")),
 		PlanScheduleStatus:    nullIfEmpty(r.FormValue("plan_schedule_status")),
 		ShortName:             strings.TrimSpace(r.FormValue("short_name")),

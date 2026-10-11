@@ -22,7 +22,7 @@ func NewContractRepo(pool *pgxpool.Pool) *ContractRepo {
 }
 
 const contractColumns = `
-	id, contract_number, contract_date, work_name, responsible_person,
+	id, contract_number, contract_date, work_name, responsible_person, responsible_user_id,
 	status_code, counterparty_id, workshop, project_url,
 	procurement_card_status, extra_details, finplan_status, plan_schedule_status,
 	short_name, contract_type, created_at, updated_at
@@ -30,7 +30,7 @@ const contractColumns = `
 
 func scanContract(row pgx.Row, c *models.Contract) error {
 	return row.Scan(
-		&c.ID, &c.ContractNumber, &c.ContractDate, &c.WorkName, &c.ResponsiblePerson,
+		&c.ID, &c.ContractNumber, &c.ContractDate, &c.WorkName, &c.ResponsiblePerson, &c.ResponsibleUserID,
 		&c.StatusCode, &c.CounterpartyID, &c.Workshop, &c.ProjectURL,
 		&c.ProcurementCardStatus, &c.ExtraDetails, &c.FinplanStatus, &c.PlanScheduleStatus,
 		&c.ShortName, &c.ContractType, &c.CreatedAt, &c.UpdatedAt,
@@ -100,12 +100,14 @@ func (r *ContractRepo) Create(ctx context.Context, c *models.Contract) error {
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO contracts (
 			id, contract_number, contract_date, work_name, responsible_person,
+			responsible_user_id,
 			status_code, counterparty_id, workshop, project_url,
 			procurement_card_status, extra_details, finplan_status, plan_schedule_status,
 			short_name, contract_type
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
 	`,
 		c.ID, c.ContractNumber, c.ContractDate, c.WorkName, c.ResponsiblePerson,
+		c.ResponsibleUserID,
 		c.StatusCode, c.CounterpartyID, c.Workshop, c.ProjectURL,
 		c.ProcurementCardStatus, c.ExtraDetails, c.FinplanStatus, c.PlanScheduleStatus,
 		c.ShortName, c.ContractType,
@@ -120,13 +122,15 @@ func (r *ContractRepo) Update(ctx context.Context, c *models.Contract) error {
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE contracts SET
 			contract_number = $2, contract_date = $3, work_name = $4, responsible_person = $5,
-			status_code = $6, counterparty_id = $7, workshop = $8, project_url = $9,
-			procurement_card_status = $10, extra_details = $11, finplan_status = $12,
-			plan_schedule_status = $13, short_name = $14, contract_type = $15,
+			responsible_user_id = $6,
+			status_code = $7, counterparty_id = $8, workshop = $9, project_url = $10,
+			procurement_card_status = $11, extra_details = $12, finplan_status = $13,
+			plan_schedule_status = $14, short_name = $15, contract_type = $16,
 			updated_at = NOW()
 		WHERE id = $1
 	`,
 		c.ID, c.ContractNumber, c.ContractDate, c.WorkName, c.ResponsiblePerson,
+		c.ResponsibleUserID,
 		c.StatusCode, c.CounterpartyID, c.Workshop, c.ProjectURL,
 		c.ProcurementCardStatus, c.ExtraDetails, c.FinplanStatus, c.PlanScheduleStatus,
 		c.ShortName, c.ContractType,
@@ -219,4 +223,117 @@ func (r *ContractRepo) ListTrackingStatuses(ctx context.Context) ([]models.Track
 		res = append(res, s)
 	}
 	return res, rows.Err()
+}
+
+// ListAssignees — пользователи, назначенные на договор (кроме главного ответственного).
+func (r *ContractRepo) ListAssignees(ctx context.Context, contractID string) ([]models.User, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT u.id, u.username, u.full_name, u.password_hash, u.role_code, u.is_active, u.theme, u.created_at, u.updated_at
+		FROM contract_assignees ca
+		JOIN users u ON u.id = ca.user_id
+		WHERE ca.contract_id = $1
+		ORDER BY u.full_name
+	`, contractID)
+	if err != nil {
+		return nil, fmt.Errorf("list assignees: %w", err)
+	}
+	defer rows.Close()
+
+	var res []models.User
+	for rows.Next() {
+		var u models.User
+		if err := rows.Scan(
+			&u.ID, &u.Username, &u.FullName, &u.PasswordHash,
+			&u.RoleCode, &u.IsActive, &u.Theme,
+			&u.CreatedAt, &u.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		res = append(res, u)
+	}
+	return res, rows.Err()
+}
+
+// SetAssignees — заменить список назначенных пользователей.
+func (r *ContractRepo) SetAssignees(ctx context.Context, contractID string, userIDs []int64) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx, `DELETE FROM contract_assignees WHERE contract_id = $1`, contractID); err != nil {
+		return fmt.Errorf("clear assignees: %w", err)
+	}
+
+	for _, uid := range userIDs {
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO contract_assignees (contract_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+			contractID, uid,
+		); err != nil {
+			return fmt.Errorf("insert assignee: %w", err)
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+// ListActiveUsers — для выпадающих списков в форме договора.
+func (r *ContractRepo) ListActiveUsers(ctx context.Context) ([]models.User, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, username, full_name, password_hash, role_code, is_active, theme, created_at, updated_at
+		FROM users
+		WHERE is_active = TRUE
+		ORDER BY full_name
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("list active users: %w", err)
+	}
+	defer rows.Close()
+
+	var res []models.User
+	for rows.Next() {
+		var u models.User
+		if err := rows.Scan(
+			&u.ID, &u.Username, &u.FullName, &u.PasswordHash,
+			&u.RoleCode, &u.IsActive, &u.Theme,
+			&u.CreatedAt, &u.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		res = append(res, u)
+	}
+	return res, rows.Err()
+}
+
+// GetResponsible — обёртка для получения пользователя-ответственного.
+func (r *ContractRepo) GetResponsible(ctx context.Context, userID int64) (*models.User, error) {
+	row := r.pool.QueryRow(ctx, `
+		SELECT id, username, full_name, password_hash, role_code, is_active, theme, created_at, updated_at
+		FROM users WHERE id = $1
+	`, userID)
+	var u models.User
+	if err := row.Scan(
+		&u.ID, &u.Username, &u.FullName, &u.PasswordHash,
+		&u.RoleCode, &u.IsActive, &u.Theme,
+		&u.CreatedAt, &u.UpdatedAt,
+	); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+		return nil, err
+	}
+	return &u, nil
+}
+
+// GetResponsibleUserID возвращает responsible_user_id договора.
+// ok = false, если договор не найден или ответственный не назначен.
+func (r *ContractRepo) GetResponsibleUserID(ctx context.Context, contractID string) (int64, bool) {
+	var id *int64
+	err := r.pool.QueryRow(ctx,
+		`SELECT responsible_user_id FROM contracts WHERE id = $1`, contractID,
+	).Scan(&id)
+	if err != nil || id == nil {
+		return 0, false
+	}
+	return *id, true
 }

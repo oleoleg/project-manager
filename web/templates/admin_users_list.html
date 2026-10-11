@@ -1,0 +1,59 @@
+{{ define "admin_users_list.html" }}
+{{ template "layout_header" . }}
+
+<div class="page-header">
+    <h2>Пользователи</h2>
+    <a href="/admin/users/new" class="btn btn-primary">+ Новый пользователь</a>
+</div>
+
+{{ if .Users }}
+<table class="data-table">
+    <thead>
+    <tr>
+        <th>ID</th>
+        <th>Логин</th>
+        <th>ФИО</th>
+        <th>Роль</th>
+        <th>Тема</th>
+        <th>Статус</th>
+        <th>Создан</th>
+        <th></th>
+    </tr>
+    </thead>
+    <tbody>
+    {{ range .Users }}
+        <tr class="{{ if not .IsActive }}row-inactive{{ end }}">
+            <td>{{ .ID }}</td>
+            <td>{{ .Username }}</td>
+            <td>{{ .FullName }}</td>
+            <td>{{ call $.RoleLabel .RoleCode }}</td>
+            <td>{{ .Theme }}</td>
+            <td>
+                {{ if .IsActive }}
+                    <span class="badge badge-ok">активен</span>
+                {{ else }}
+                    <span class="badge badge-off">отключён</span>
+                {{ end }}
+            </td>
+            <td>{{ .CreatedAt.Format "02.01.2006" }}</td>
+            <td class="actions">
+                <a href="/admin/users/{{ .ID }}/edit" class="btn btn-sm">Изменить</a>
+                {{ if ne .ID $.User.ID }}
+                    <form method="post" action="/admin/users/{{ .ID }}/toggle" class="inline"
+                          onsubmit="return confirm('{{ if .IsActive }}Отключить{{ else }}Включить{{ end }} пользователя {{ .Username }}?');">
+                        <button type="submit" class="btn btn-sm {{ if .IsActive }}btn-danger{{ end }}">
+                            {{ if .IsActive }}Отключить{{ else }}Включить{{ end }}
+                        </button>
+                    </form>
+                {{ end }}
+            </td>
+        </tr>
+    {{ end }}
+    </tbody>
+</table>
+{{ else }}
+<p class="empty">Пользователей нет.</p>
+{{ end }}
+
+{{ template "layout_footer" . }}
+{{ end }}

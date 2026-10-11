@@ -8,6 +8,7 @@ type Contract struct {
 	ContractDate          *time.Time // может быть пустой
 	WorkName              string
 	ResponsiblePerson     string
+	ResponsibleUserID     *int64 // FK на users
 	StatusCode            int16
 	CounterpartyID        string
 	Workshop              string

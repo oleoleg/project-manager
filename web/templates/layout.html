@@ -25,6 +25,9 @@
             <a href="/counterparties">Контрагенты</a>
              <a href="/contracts">Договоры</a>
              <a href="/settings">Настройки</a>
+             {{ if eq .User.RoleCode "admin" }}
+                <a href="/admin/users">Пользователи</a>
+            {{ end }}
         </nav>
         <div class="user-box">
             <span>{{ .User.FullName }}</span>

@@ -1,0 +1,68 @@
+{{ define "admin_users_form.html" }}
+{{ template "layout_header" . }}
+{{ $u := .FormUser }}
+{{ $isNew := .IsNew }}
+
+<div class="page-header">
+    <h2>{{ if $isNew }}Новый пользователь{{ else }}Пользователь: {{ $u.Username }}{{ end }}</h2>
+</div>
+
+{{ if .Error }}<div class="error">{{ .Error }}</div>{{ end }}
+
+<form method="post" action="{{ if $isNew }}/admin/users{{ else }}/admin/users/{{ $u.ID }}{{ end }}" class="form">
+
+    <label>
+        Логин *
+        <input type="text" name="username" value="{{ $u.Username }}" {{ if not $isNew }}readonly{{ end }} required>
+    </label>
+
+    <label>
+        ФИО *
+        <input type="text" name="full_name" value="{{ $u.FullName }}" required>
+    </label>
+
+    <label>
+        Роль *
+        <select name="role_code" required>
+            <option value="">— выберите —</option>
+            {{ range .Roles }}
+                <option value="{{ .Code }}" {{ if eq .Code $u.RoleCode }}selected{{ end }}>{{ .Name }}</option>
+            {{ end }}
+        </select>
+    </label>
+
+    {{ if $isNew }}
+    <label>
+        Пароль *
+        <small class="hint">Минимум 6 символов.</small>
+        <input type="password" name="password" required>
+    </label>
+    {{ end }}
+
+    <label class="checkbox-row">
+        <input type="checkbox" name="is_active" {{ if $u.IsActive }}checked{{ end }}>
+        Активен
+    </label>
+
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Сохранить</button>
+        <a href="/admin/users" class="btn">Отмена</a>
+    </div>
+</form>
+
+{{ if not $isNew }}
+<form method="post" action="/admin/users/{{ $u.ID }}/password" class="form" style="margin-top: 20px;">
+    <h3>Сменить пароль</h3>
+    <label>
+        Новый пароль *
+        <small class="hint">Минимум 6 символов.</small>
+        <input type="password" name="password" required>
+    </label>
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Сменить пароль</button>
+    </div>
+</form>
+{{ end }}
+
+{{ template "layout_footer" . }}
+{{ end }}

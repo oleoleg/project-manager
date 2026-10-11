@@ -34,7 +34,14 @@
     <header class="collapsible-header">
         <h3>Этапы в работе ({{ len .Problems }})</h3>
         <div class="collapsible-actions">
-            <a href="/contracts/{{ $c.ID }}/stages" class="btn btn-sm">Редактировать</a>
+            {{ if or
+                (eq .User.RoleCode "admin")
+                (eq .User.RoleCode "rp_chief")
+                (eq .User.RoleCode "director")
+                (and (eq .User.RoleCode "rp") .Responsible (eq .Responsible.ID .User.ID))
+            }}
+                <a href="/contracts/{{ $c.ID }}/stages" class="btn btn-sm">Редактировать</a>
+            {{ end }}
             <button type="button" class="toggle-btn" aria-expanded="true" onclick="toggleSection('section-stages')">Свернуть</button>
         </div>
     </header>
@@ -85,7 +92,12 @@
     <header class="collapsible-header">
         <h3>Реквизиты договора</h3>
         <div class="collapsible-actions">
-            {{ if or (eq .User.RoleCode "admin") (eq .User.RoleCode "rp_chief") (eq .User.RoleCode "rp") }}
+            {{ if or
+                (eq .User.RoleCode "admin")
+                (eq .User.RoleCode "rp_chief")
+                (eq .User.RoleCode "director")
+                (and (eq .User.RoleCode "rp") .Responsible (eq .Responsible.ID .User.ID))
+            }}
                 <a href="/contracts/{{ $c.ID }}/edit" class="btn btn-sm">Редактировать</a>
             {{ end }}
             <button type="button" class="toggle-btn" aria-expanded="true" onclick="toggleSection('section-details')">Свернуть</button>
@@ -97,7 +109,18 @@
             <dt>№ договора</dt>        <dd>{{ if $c.ContractNumber }}{{ $c.ContractNumber }}{{ else }}<span class="muted">не присвоен</span>{{ end }}</dd>
             <dt>Дата</dt>              <dd>{{ if $c.ContractDate }}{{ $c.ContractDate.Format "02.01.2006" }}{{ end }}</dd>
             <dt>Наименование работ</dt><dd>{{ $c.WorkName }}</dd>
-            <dt>Отв. лицо</dt>         <dd>{{ $c.ResponsiblePerson }}</dd>
+            <dt>Отв. лицо (РП)</dt>
+            <dd>
+                {{ if .Responsible }}
+                    {{ .Responsible.FullName }}
+                    <span class="muted">({{ .Responsible.Username }})</span>
+                {{ else if $c.ResponsiblePerson }}
+                    {{ $c.ResponsiblePerson }}
+                {{ else }}
+                    <span class="muted">не назначен</span>
+                {{ end }}
+            </dd>
+
             <dt>Статус</dt>            <dd>{{ $c.StatusCode }} — {{ .StatusName }}</dd>
             <dt>Контрагент</dt>
             <dd>

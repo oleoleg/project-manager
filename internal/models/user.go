@@ -15,6 +15,12 @@ type User struct {
 }
 
 // Роли
+type Role struct {
+	Code        string
+	Name        string
+	Description string
+}
+
 const (
 	RoleAdmin      = "admin"
 	RoleRPCheief   = "rp_chief"

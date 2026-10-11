@@ -38,10 +38,19 @@
     </label>
 
     <label>
-        Ответственное лицо
-        <input type="text" name="responsible_person" value="{{ $c.ResponsiblePerson }}">
+        Ответственное лицо (главный РП по договору)
+        <small class="hint">Выбирается из активных пользователей. ФИО подставится автоматически.</small>
+        <select name="responsible_user_id">
+            <option value="">— не назначен —</option>
+            {{ range .ActiveUsers }}
+                <option value="{{ .ID }}" {{ if and $c.ResponsibleUserID (eq (derefInt $c.ResponsibleUserID) .ID) }}selected{{ end }}>
+                    {{ .FullName }} ({{ .Username }})
+                </option>
+            {{ end }}
+        </select>
     </label>
 
+ 
     <label>
         Статус
         <select name="status_code" required>

@@ -105,3 +105,23 @@ func ParseDate(s string) *time.Time {
 	}
 	return &t
 }
+
+func (s *ContractService) ListActiveUsers(ctx context.Context) ([]models.User, error) {
+	return s.repo.ListActiveUsers(ctx)
+}
+
+func (s *ContractService) ListAssignees(ctx context.Context, contractID string) ([]models.User, error) {
+	return s.repo.ListAssignees(ctx, contractID)
+}
+
+func (s *ContractService) SetAssignees(ctx context.Context, contractID string, userIDs []int64) error {
+	return s.repo.SetAssignees(ctx, contractID, userIDs)
+}
+
+func (s *ContractService) GetResponsible(ctx context.Context, userID int64) (*models.User, error) {
+	return s.repo.GetResponsible(ctx, userID)
+}
+
+func (s *ContractService) GetResponsibleUserID(ctx context.Context, contractID string) (int64, bool) {
+	return s.repo.GetResponsibleUserID(ctx, contractID)
+}
