@@ -20,13 +20,20 @@ import (
 
 type StageHandler struct {
 	svc         *services.StageService
+	costSvc     *services.StageCostService
 	contractSvc *services.ContractService
 	cpSvc       *services.CounterpartyService
 	tmpl        *template.Template
 }
 
-func NewStageHandler(svc *services.StageService, contractSvc *services.ContractService, cpSvc *services.CounterpartyService, tmpl *template.Template) *StageHandler {
-	return &StageHandler{svc: svc, contractSvc: contractSvc, cpSvc: cpSvc, tmpl: tmpl}
+func NewStageHandler(
+	svc *services.StageService,
+	costSvc *services.StageCostService,
+	contractSvc *services.ContractService,
+	cpSvc *services.CounterpartyService,
+	tmpl *template.Template,
+) *StageHandler {
+	return &StageHandler{svc: svc, costSvc: costSvc, contractSvc: contractSvc, cpSvc: cpSvc, tmpl: tmpl}
 }
 
 func (h *StageHandler) commonData(r *http.Request, title string) map[string]any {
@@ -76,6 +83,7 @@ func (h *StageHandler) List(w http.ResponseWriter, r *http.Request) {
 	totals, _ := h.svc.Totals(r.Context(), contractID)
 	card, _ := h.svc.GetCard(r.Context(), contractID)
 	cp, _ := h.cpSvc.GetByID(r.Context(), contract.CounterpartyID)
+	costTotals, _ := h.svc.StageCostTotals(r.Context(), contractID)
 
 	data := h.commonData(r, "Этапы договора "+contractID)
 	data["Contract"] = contract
@@ -88,6 +96,7 @@ func (h *StageHandler) List(w http.ResponseWriter, r *http.Request) {
 	data["StatusName"] = func(code int16) string { return stageStatusName(statuses, code) }
 	data["WorkKindName"] = func(code string) string { return workKindName(workKinds, code) }
 	data["Flash"] = r.URL.Query().Get("flash")
+	data["CostTotals"] = costTotals
 	h.render(w, "stages_list.html", data)
 }
 
@@ -127,9 +136,7 @@ func (h *StageHandler) Create(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "id")
 	st, err := parseStageForm(r)
 	if err != nil {
-		// положим в stage-заглушку, чтобы шаблон отрисовал значения
-		empty := &models.Stage{ContractID: contractID}
-		h.renderFormWithError(w, r, empty, true, err.Error())
+		h.renderFormWithError(w, r, &models.Stage{ContractID: contractID}, true, err.Error())
 		return
 	}
 	st.ContractID = contractID
@@ -138,6 +145,16 @@ func (h *StageHandler) Create(w http.ResponseWriter, r *http.Request) {
 		h.renderFormWithError(w, r, st, true, humanizeStageError(err))
 		return
 	}
+
+	costs := parseStageCostsForm(r)
+	if err := h.costSvc.ReplaceForStage(r.Context(), st.GUID, costs); err != nil {
+		log.Printf("save stage costs: %v", err)
+		http.Redirect(w, r,
+			"/contracts/"+contractID+"/stages/"+st.GUID+"/edit?flash="+url.QueryEscape(humanizeStageCostError(err)),
+			http.StatusSeeOther)
+		return
+	}
+
 	http.Redirect(w, r, "/contracts/"+contractID+"/stages?flash="+url.QueryEscape("Этап создан"), http.StatusSeeOther)
 }
 
@@ -174,8 +191,7 @@ func (h *StageHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	st, err := parseStageForm(r)
 	if err != nil {
-		empty := &models.Stage{GUID: guid, ContractID: contractID}
-		h.renderFormWithError(w, r, empty, false, err.Error())
+		h.renderFormWithError(w, r, &models.Stage{GUID: guid, ContractID: contractID}, false, err.Error())
 		return
 	}
 	st.GUID = guid
@@ -185,6 +201,14 @@ func (h *StageHandler) Update(w http.ResponseWriter, r *http.Request) {
 		h.renderFormWithError(w, r, st, false, humanizeStageError(err))
 		return
 	}
+
+	costs := parseStageCostsForm(r)
+	if err := h.costSvc.ReplaceForStage(r.Context(), guid, costs); err != nil {
+		log.Printf("save stage costs: %v", err)
+		h.renderFormWithError(w, r, st, false, humanizeStageCostError(err))
+		return
+	}
+
 	http.Redirect(w, r, "/contracts/"+contractID+"/stages?flash="+url.QueryEscape("Изменения сохранены"), http.StatusSeeOther)
 }
 
@@ -218,7 +242,7 @@ func (h *StageHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "id")
 	guid := chi.URLParam(r, "guid")
 
-	err := h.svc.Delete(r.Context(), guid)
+	err := h.svc.Delete(r.Context(), contractID, guid)
 	if errors.Is(err, db.ErrStageNotFound) {
 		http.NotFound(w, r)
 		return
@@ -239,11 +263,30 @@ func (h *StageHandler) renderFormWithError(w http.ResponseWriter, r *http.Reques
 	statuses, _ := h.svc.Statuses(r.Context())
 	workKinds, _ := h.svc.WorkKinds(r.Context())
 
+	var costs []models.StageCost
+	if !isNew && st.GUID != "" {
+		costs, _ = h.costSvc.ListByStage(r.Context(), st.GUID)
+	}
+	if len(costs) == 0 {
+		// одна пустая строка по умолчанию
+		costs = []models.StageCost{{}}
+	}
+
+	// work kinds для строк затрат — без "complex"
+	var costWorkKinds []models.WorkKindRef
+	for _, wk := range workKinds {
+		if !wk.IsComplex {
+			costWorkKinds = append(costWorkKinds, wk)
+		}
+	}
+
 	data := h.commonData(r, "Этап")
 	data["Contract"] = contract
 	data["Stage"] = st
+	data["Costs"] = costs
 	data["Statuses"] = statuses
 	data["WorkKinds"] = workKinds
+	data["CostWorkKinds"] = costWorkKinds
 	data["IsNew"] = isNew
 	data["Error"] = errMsg
 	if errMsg != "" {
@@ -255,7 +298,6 @@ func (h *StageHandler) renderFormWithError(w http.ResponseWriter, r *http.Reques
 func parseStageForm(r *http.Request) (*models.Stage, error) {
 	_ = r.ParseForm()
 
-	rowOrder, _ := strconv.Atoi(r.FormValue("row_order"))
 	statusCode := int16(0)
 	if v, err := strconv.Atoi(r.FormValue("status_code")); err == nil {
 		statusCode = int16(v)
@@ -279,7 +321,7 @@ func parseStageForm(r *http.Request) (*models.Stage, error) {
 	}
 
 	return &models.Stage{
-		RowOrder:          rowOrder,
+		RowOrder:          0,
 		StageNumber:       strings.TrimSpace(r.FormValue("stage_number")),
 		Name:              strings.TrimSpace(r.FormValue("name")),
 		Cost:              cost,
@@ -333,4 +375,90 @@ func workKindName(list []models.WorkKindRef, code string) string {
 		}
 	}
 	return code
+}
+
+// parseStageCostsForm собирает затраты из полей формы,
+// которые приходят массивами: cost_work_kind[], cost_amount[], и т.д.
+func parseStageCostsForm(r *http.Request) []models.StageCost {
+	_ = r.ParseForm()
+
+	workKinds := r.Form["cost_work_kind"]
+	amounts := r.Form["cost_amount"]
+	fotPlans := r.Form["cost_fot_plan"]
+	ratios := r.Form["cost_fot_ratio"]
+	days := r.Form["cost_labor_days"]
+	rates := r.Form["cost_rate_per_day"]
+	travels := r.Form["cost_travel"]
+	eqSales := r.Form["cost_equipment_sale"]
+	eqCosts := r.Form["cost_equipment_cost"]
+	subs := r.Form["cost_subcontract"]
+	comms := r.Form["cost_commission"]
+	others := r.Form["cost_other"]
+
+	n := len(workKinds)
+	res := make([]models.StageCost, 0, n)
+	for i := 0; i < n; i++ {
+		wc := strings.TrimSpace(getSlice(workKinds, i))
+		if wc == "" {
+			continue
+		}
+		res = append(res, models.StageCost{
+			WorkKindCode:   wc,
+			Cost:           parseMoneyOrZero(getSlice(amounts, i)),
+			FOTPlan:        parseMoneyOrZero(getSlice(fotPlans, i)),
+			FOTRatio:       parseRatioOrZero(getSlice(ratios, i)),
+			LaborDays:      parseMoneyOrZero(getSlice(days, i)),
+			RatePerDay:     parseMoneyOrZero(getSlice(rates, i)),
+			TravelExpenses: parseMoneyOrZero(getSlice(travels, i)),
+			EquipmentSale:  parseMoneyOrZero(getSlice(eqSales, i)),
+			EquipmentCost:  parseMoneyOrZero(getSlice(eqCosts, i)),
+			Subcontract:    parseMoneyOrZero(getSlice(subs, i)),
+			Commission:     parseMoneyOrZero(getSlice(comms, i)),
+			OtherExpenses:  parseMoneyOrZero(getSlice(others, i)),
+		})
+	}
+	return res
+}
+
+func getSlice(s []string, i int) string {
+	if i < len(s) {
+		return s[i]
+	}
+	return ""
+}
+
+func parseMoneyOrZero(s string) float64 {
+	v, err := services.ParseMoney(s)
+	if err != nil {
+		return 0
+	}
+	return v
+}
+
+func parseRatioOrZero(s string) float64 {
+	v, err := services.ParseMoney(s)
+	if err != nil {
+		return 0
+	}
+	if v > 1 {
+		v = 1
+	}
+	if v < 0 {
+		v = 0
+	}
+	return v
+}
+
+func humanizeStageCostError(err error) string {
+	switch {
+	case errors.Is(err, services.ErrStageCostWorkKindEmpty):
+		return "В затратах не выбран вид работы"
+	case errors.Is(err, services.ErrStageCostComplex):
+		return "В затратах нельзя выбрать «Комплексный» вид работы"
+	case errors.Is(err, services.ErrStageCostNegative):
+		return "Суммы в затратах не могут быть отрицательными"
+	case errors.Is(err, services.ErrStageCostRatioRange):
+		return "Коэффициент должен быть в диапазоне 0..1"
+	}
+	return "Затраты: " + err.Error()
 }

@@ -4,9 +4,14 @@
 {{ $isNew := .IsNew }}
 
 <div class="page-header">
+    <p class="back-link">
+        <a href="{{ if $isNew }}/contracts/{{ .Contract.ID }}/stages{{ else }}/contracts/{{ .Contract.ID }}/stages{{ end }}">← Назад</a>
+    </p>
     <h2>{{ if $isNew }}Новый договор{{ else }}Договор {{ $c.ID }}{{ end }}</h2>
 </div>
-
+<p class="back-link">
+    <a href="{{ if $isNew }}/contracts/{{ .Contract.ID }}/stages{{ else }}/contracts/{{ .Contract.ID }}/stages{{ end }}">← Назад</a>
+</p>
 {{ if .Error }}<div class="error">{{ .Error }}</div>{{ end }}
 
 <form method="post" action="{{ if $isNew }}/contracts{{ else }}/contracts/{{ $c.ID }}{{ end }}" class="form">

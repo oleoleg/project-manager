@@ -20,6 +20,7 @@ import (
 	"github.com/oleoleg/project-manager/internal/db"
 	"github.com/oleoleg/project-manager/internal/handlers"
 	mw "github.com/oleoleg/project-manager/internal/middleware"
+	"github.com/oleoleg/project-manager/internal/models"
 	"github.com/oleoleg/project-manager/internal/services"
 )
 
@@ -54,6 +55,7 @@ func main() {
 	// =====================================================
 	// 3. Шаблоны (загружаются один раз при старте)
 	// =====================================================
+
 	tmpl := template.New("").Funcs(template.FuncMap{
 		// deref разыменовывает *string, nil -> ""
 		"deref": func(p *string) string {
@@ -79,6 +81,29 @@ func main() {
 			s := strconv.FormatFloat(v, 'f', 0, 64)
 			return groupThousands(s) + " ₽"
 		},
+
+		// addVAT — добавляет НДС по указанной ставке (для отображения «с НДС»)
+		"addVAT": func(v float64, vatPercent float64) float64 {
+			return v * (1 + vatPercent/100.0)
+		},
+		// moneyVAT — сразу форматирует сумму с НДС (для использования в шаблонах)
+		// "moneyVAT": func(v float64, vatPercent float64) string {
+		// 	withVAT := v * (1 + vatPercent/100.0)
+		// 	s := strconv.FormatFloat(withVAT, 'f', 2, 64)
+		// 	return groupThousands(s) + " ₽"
+		// },
+
+		"isComplexWork": func(code string) bool {
+			return code == "complex"
+		},
+		"workKindLabel": func(list []models.WorkKindRef, code string) string {
+			for _, w := range list {
+				if w.Code == code {
+					return w.Name
+				}
+			}
+			return code
+		},
 	})
 
 	parsed, err := tmpl.ParseGlob(filepath.Join("web", "templates", "*.html"))
@@ -99,6 +124,7 @@ func main() {
 	counterpartyRepo := db.NewCounterpartyRepo(pool)
 	contractRepo := db.NewContractRepo(pool)
 	stageRepo := db.NewStageRepo(pool)
+	stageCostRepo := db.NewStageCostRepo(pool)
 
 	// =====================================================
 	// 5. Сервисы (бизнес-логика)
@@ -109,6 +135,7 @@ func main() {
 	counterpartySvc := services.NewCounterpartyService(counterpartyRepo)
 	contractSvc := services.NewContractService(contractRepo)
 	stageSvc := services.NewStageService(stageRepo)
+	stageCostSvc := services.NewStageCostService(stageCostRepo)
 
 	// =====================================================
 	// 6. HTTP-хендлеры
@@ -119,7 +146,7 @@ func main() {
 	settingsH := handlers.NewSettingsHandler(userSvc, tmpl)
 	counterpartyH := handlers.NewCounterpartyHandler(counterpartySvc, tmpl)
 	contractH := handlers.NewContractHandler(contractSvc, counterpartySvc, stageSvc, tmpl)
-	stageH := handlers.NewStageHandler(stageSvc, contractSvc, counterpartySvc, tmpl)
+	stageH := handlers.NewStageHandler(stageSvc, stageCostSvc, contractSvc, counterpartySvc, tmpl)
 	adminUserH := handlers.NewAdminUserHandler(userSvc, tmpl)
 
 	// =====================================================

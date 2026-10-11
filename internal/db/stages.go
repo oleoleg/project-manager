@@ -95,13 +95,13 @@ func (r *StageRepo) Create(ctx context.Context, s *models.Stage) error {
 func (r *StageRepo) Update(ctx context.Context, s *models.Stage) error {
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE stages SET
-			row_order = $2, stage_number = $3, name = $4, cost = $5, closed_by_acts = $6,
-			vat_percent = $7, advance_percent = $8, start_conditions = $9, end_conditions = $10,
-			close_date_plan = $11, responsible_person = $12, status_code = $13,
-			work_kind_code = $14, note = $15, updated_at = NOW()
+			stage_number = $2, name = $3, cost = $4, closed_by_acts = $5,
+			vat_percent = $6, advance_percent = $7, start_conditions = $8, end_conditions = $9,
+			close_date_plan = $10, responsible_person = $11, status_code = $12,
+			work_kind_code = $13, note = $14, updated_at = NOW()
 		WHERE guid = $1
 	`,
-		s.GUID, s.RowOrder, s.StageNumber, s.Name, s.Cost, s.ClosedByActs,
+		s.GUID, s.StageNumber, s.Name, s.Cost, s.ClosedByActs,
 		s.VATPercent, s.AdvancePercent, s.StartConditions, s.EndConditions,
 		s.CloseDatePlan, s.ResponsiblePerson, s.StatusCode, s.WorkKindCode, s.Note,
 	)
@@ -212,22 +212,50 @@ func (r *StageRepo) NextRowOrder(ctx context.Context, contractID string) (int, e
 }
 
 // StageTotals — итоги по договору.
+// Все суммы — без НДС. С НДС считаем в шаблоне или в отдельном методе.
 type StageTotals struct {
 	Count          int
 	TotalCost      float64
 	TotalClosed    float64
 	TotalRemaining float64
+
+	// То же самое, но с НДС по каждому этапу отдельно.
+	TotalCostVAT      float64
+	TotalClosedVAT    float64
+	TotalRemainingVAT float64
+
+	// Сумма затрат этапа (по stage_costs), без НДС.
+	TotalExpenses float64
 }
 
 func (r *StageRepo) Totals(ctx context.Context, contractID string) (StageTotals, error) {
 	var t StageTotals
 	err := r.pool.QueryRow(ctx, `
-		SELECT COUNT(*),
-		       COALESCE(SUM(cost),0),
-		       COALESCE(SUM(closed_by_acts),0),
-		       COALESCE(SUM(cost - closed_by_acts),0)
-		FROM stages WHERE contract_id = $1
-	`, contractID).Scan(&t.Count, &t.TotalCost, &t.TotalClosed, &t.TotalRemaining)
+		WITH s AS (
+			SELECT guid, cost, closed_by_acts, vat_percent
+			FROM stages WHERE contract_id = $1
+		),
+		costs AS (
+			SELECT COALESCE(SUM(sc.cost), 0) AS total_expenses
+			FROM stage_costs sc
+			JOIN stages st ON st.guid = sc.stage_guid
+			WHERE st.contract_id = $1
+		)
+		SELECT
+			(SELECT COUNT(*) FROM s),
+			(SELECT COALESCE(SUM(cost), 0) FROM s),
+			(SELECT COALESCE(SUM(closed_by_acts), 0) FROM s),
+			(SELECT COALESCE(SUM(cost - closed_by_acts), 0) FROM s),
+			(SELECT COALESCE(SUM(cost * (1 + vat_percent/100.0)), 0) FROM s),
+			(SELECT COALESCE(SUM(closed_by_acts * (1 + vat_percent/100.0)), 0) FROM s),
+			(SELECT COALESCE(SUM((cost - closed_by_acts) * (1 + vat_percent/100.0)), 0) FROM s),
+			(SELECT total_expenses FROM costs)
+	`, contractID).Scan(
+		&t.Count,
+		&t.TotalCost, &t.TotalClosed, &t.TotalRemaining,
+		&t.TotalCostVAT, &t.TotalClosedVAT, &t.TotalRemainingVAT,
+		&t.TotalExpenses,
+	)
 	if err != nil {
 		return t, fmt.Errorf("stage totals: %w", err)
 	}
@@ -339,4 +367,43 @@ func (r *StageRepo) ProblemStages(ctx context.Context, contractID string) ([]Pro
 		res = append(res, s)
 	}
 	return res, rows.Err()
+}
+
+// StageCostTotals — сумма затрат по каждому этапу.
+func (r *StageRepo) StageCostTotals(ctx context.Context, contractID string) (map[string]float64, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT sc.stage_guid, COALESCE(SUM(sc.cost), 0)
+		FROM stage_costs sc
+		JOIN stages s ON s.guid = sc.stage_guid
+		WHERE s.contract_id = $1
+		GROUP BY sc.stage_guid
+	`, contractID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	res := make(map[string]float64)
+	for rows.Next() {
+		var guid string
+		var total float64
+		if err := rows.Scan(&guid, &total); err != nil {
+			return nil, err
+		}
+		res[guid] = total
+	}
+	return res, rows.Err()
+}
+
+// NormalizeOrder пересобирает row_order по порядку (1, 2, 3, ...).
+func (r *StageRepo) NormalizeOrder(ctx context.Context, contractID string) error {
+	_, err := r.pool.Exec(ctx, `
+		WITH ordered AS (
+			SELECT guid, ROW_NUMBER() OVER (ORDER BY row_order, stage_number, created_at) AS rn
+			FROM stages WHERE contract_id = $1
+		)
+		UPDATE stages s SET row_order = o.rn
+		FROM ordered o WHERE s.guid = o.guid
+	`, contractID)
+	return err
 }

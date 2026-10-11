@@ -1,6 +1,17 @@
 {{ define "contracts_show.html" }}
 {{ template "layout_header" . }}
 {{ $c := .Contract }}
+{{ $vatMode := .VATMode }}
+{{ $showAll := .ShowAll }}
+{{ $showCosts := .ShowCosts }}
+
+{{/* удобный конструктор URL с сохранением всех параметров */}}
+{{ $base := printf "/contracts/%s" $c.ID }}
+{{ $curVat := $vatMode }}
+{{ $curStages := "open" }}
+{{ if $showAll }}{{ $curStages = "all" }}{{ end }}
+{{ $curCosts := "0" }}
+{{ if $showCosts }}{{ $curCosts = "1" }}{{ end }}
 
 <div class="page-header">
     <div class="contract-title">
@@ -21,19 +32,57 @@
             {{ end }}
         </p>
     </div>
+    <div class="actions">
+        <div class="vat-toggle">
+            <a href="{{ $base }}?vat=without&stages={{ $curStages }}&costs={{ $curCosts }}"
+               class="btn btn-sm {{ if ne $vatMode "with" }}active{{ end }}">Без НДС</a>
+            <a href="{{ $base }}?vat=with&stages={{ $curStages }}&costs={{ $curCosts }}"
+               class="btn btn-sm {{ if eq $vatMode "with" }}active{{ end }}">С НДС</a>
+        </div>
+    </div>
 </div>
 
 <div class="totals">
-    <div class="total-card"><span>Стоимость договора</span><strong>{{ money .Totals.TotalCost }}</strong></div>
-    <div class="total-card"><span>Закрыто</span><strong>{{ money .Totals.TotalClosed }}</strong></div>
-    <div class="total-card"><span>Остаток</span><strong>{{ money .Totals.TotalRemaining }}</strong></div>
+    <div class="total-card"><span>Стоимость договора</span>
+        <strong>
+            {{ if eq $vatMode "with" }}{{ money .Totals.TotalCostVAT }}{{ else }}{{ money .Totals.TotalCost }}{{ end }}
+        </strong>
+    </div>
+    <div class="total-card"><span>Закрыто</span>
+        <strong>
+            {{ if eq $vatMode "with" }}{{ money .Totals.TotalClosedVAT }}{{ else }}{{ money .Totals.TotalClosed }}{{ end }}
+        </strong>
+    </div>
+    <div class="total-card"><span>Остаток</span>
+        <strong>
+            {{ if eq $vatMode "with" }}{{ money .Totals.TotalRemainingVAT }}{{ else }}{{ money .Totals.TotalRemaining }}{{ end }}
+        </strong>
+    </div>
+    <div class="total-card"><span>Затраты</span>
+        <strong>{{ money .Totals.TotalExpenses }}</strong>
+    </div>
     <div class="total-card"><span>Этапов</span><strong>{{ .Totals.Count }}</strong></div>
 </div>
 
 <section class="collapsible" id="section-stages">
     <header class="collapsible-header">
-        <h3>Этапы в работе ({{ len .Problems }})</h3>
+        <h3>Этапы ({{ len .Problems }})</h3>
         <div class="collapsible-actions">
+            <div class="stage-toggle">
+                <a href="{{ $base }}?vat={{ $curVat }}&stages=open&costs={{ $curCosts }}"
+                   class="btn btn-sm {{ if not $showAll }}active{{ end }}">В работе</a>
+                <a href="{{ $base }}?vat={{ $curVat }}&stages=all&costs={{ $curCosts }}"
+                   class="btn btn-sm {{ if $showAll }}active{{ end }}">Все</a>
+            </div>
+
+            {{ if $showCosts }}
+                <a href="{{ $base }}?vat={{ $curVat }}&stages={{ $curStages }}&costs=0"
+                   class="btn btn-sm">Свернуть стоимости</a>
+            {{ else }}
+                <a href="{{ $base }}?vat={{ $curVat }}&stages={{ $curStages }}&costs=1"
+                   class="btn btn-sm">Развернуть стоимости</a>
+            {{ end }}
+
             {{ if or
                 (eq .User.RoleCode "admin")
                 (eq .User.RoleCode "rp_chief")
@@ -42,48 +91,99 @@
             }}
                 <a href="/contracts/{{ $c.ID }}/stages" class="btn btn-sm">Редактировать</a>
             {{ end }}
-            <button type="button" class="toggle-btn" aria-expanded="true" onclick="toggleSection('section-stages')">Свернуть</button>
+            <button type="button" class="toggle-btn" aria-expanded="true"
+                    onclick="toggleSection('section-stages')">Свернуть</button>
         </div>
     </header>
+
     <div class="collapsible-body">
-        {{ if .Problems }}
-        <table class="data-table">
-            <thead>
-            <tr>
-                <th>№</th>
-                <th>Этап</th>
-                <th>Статус</th>
-                <th>Закрытие (план)</th>
-                <th>Отв.</th>
-                <th>Остаток</th>
-                <th>Причина / примечание</th>
-            </tr>
-            </thead>
-            <tbody>
-            {{ range .Problems }}
-                {{ $overdue := false }}
-                {{ if .CloseDatePlan }}{{ if .CloseDatePlan.Before $.Today }}{{ $overdue = true }}{{ end }}{{ end }}
-                <tr class="{{ if $overdue }}row-overdue{{ end }}">
-                    <td><a href="/contracts/{{ $.Contract.ID }}/stages/{{ .GUID }}/edit">{{ .StageNumber }}</a></td>
-                    <td>{{ .Name }}</td>
-                    <td>{{ call $.StageStatusName .StatusCode }}</td>
-                    <td>
-                        {{ if .CloseDatePlan }}
-                            {{ .CloseDatePlan.Format "02.01.2006" }}
-                            {{ if $overdue }}<span class="badge-overdue">просрочен</span>{{ end }}
-                        {{ else }}
-                            <span class="muted">—</span>
-                        {{ end }}
-                    </td>
-                    <td>{{ .ResponsiblePerson }}</td>
-                    <td>{{ money .Remaining }}</td>
-                    <td>{{ .Note }}</td>
+        {{ if $showCosts }}
+            {{ if .AllStages }}
+            <table class="data-table">
+                <thead>
+                <tr>
+                    <th>№</th>
+                    <th>Этап</th>
+                    <th>Статус</th>
+                    <th class="num col-money">Стоимость</th>
+                    <th class="num">НДС, %</th>
+                    <th class="num">Аванс, %</th>
+                    <th class="num col-money">Закрыто</th>
+                    <th class="num col-money">Затраты</th>
                 </tr>
+                </thead>
+                <tbody>
+                {{ range .AllStages }}
+                    <tr class="{{ if or (eq .StatusCode 0) (eq .StatusCode 3) (eq .StatusCode 5) }}row-muted{{ end }}">
+                        <td><a href="/contracts/{{ $c.ID }}/stages/{{ .GUID }}/edit">{{ .StageNumber }}</a></td>
+                        <td>{{ .Name }}</td>
+                        <td>{{ call $.StageStatusName .StatusCode }}</td>
+                        <td class="num col-money">
+                            {{ if eq $vatMode "with" }}
+                                {{ money (addVAT .Cost .VATPercent) }}
+                            {{ else }}
+                                {{ money .Cost }}
+                            {{ end }}
+                        </td>
+                        <td class="num">{{ printf "%.2f" .VATPercent }}</td>
+                        <td class="num">{{ printf "%.2f" .AdvancePercent }}</td>
+                        <td class="num col-money">
+                            {{ if eq $vatMode "with" }}
+                                {{ money (addVAT .Closed .VATPercent) }}
+                            {{ else }}
+                                {{ money .Closed }}
+                            {{ end }}
+                        </td>
+                        <td class="num col-money">{{ money .Expenses }}</td>
+                    </tr>
+                {{ end }}
+                </tbody>
+            </table>
+            {{ else }}
+            <p class="muted">Этапов нет.</p>
             {{ end }}
-            </tbody>
-        </table>
         {{ else }}
-        <p class="muted">Все этапы закрыты или ещё не созданы.</p>
+            {{ if .Problems }}
+            <table class="data-table">
+                <thead>
+                <tr>
+                    <th>№</th>
+                    <th>Этап</th>
+                    <th>Статус</th>
+                    <th>Закрытие (план)</th>
+                    <th>Отв.</th>
+                    <th>Причина / примечание</th>
+                </tr>
+                </thead>
+                <tbody>
+                {{ range .Problems }}
+                    {{ $overdue := false }}
+                    {{ $muted := false }}
+                    {{ if eq .StatusCode 1 }}
+                        {{ if .CloseDatePlan }}{{ if .CloseDatePlan.Before $.Today }}{{ $overdue = true }}{{ end }}{{ end }}
+                    {{ end }}
+                    {{ if or (eq .StatusCode 0) (eq .StatusCode 3) (eq .StatusCode 5) }}{{ $muted = true }}{{ end }}
+                    <tr class="{{ if $overdue }}row-overdue{{ end }}{{ if $muted }} row-muted{{ end }}">
+                        <td><a href="/contracts/{{ $.Contract.ID }}/stages/{{ .GUID }}/edit">{{ .StageNumber }}</a></td>
+                        <td>{{ .Name }}</td>
+                        <td>{{ call $.StageStatusName .StatusCode }}</td>
+                        <td>
+                            {{ if .CloseDatePlan }}
+                                {{ .CloseDatePlan.Format "02.01.2006" }}
+                                {{ if $overdue }}<span class="badge-overdue">просрочен</span>{{ end }}
+                            {{ else }}
+                                <span class="muted">—</span>
+                            {{ end }}
+                        </td>
+                        <td>{{ .ResponsiblePerson }}</td>
+                        <td>{{ .Note }}</td>
+                    </tr>
+                {{ end }}
+                </tbody>
+            </table>
+            {{ else }}
+            <p class="muted">Все этапы закрыты или ещё не созданы.</p>
+            {{ end }}
         {{ end }}
     </div>
 </section>
@@ -100,7 +200,8 @@
             }}
                 <a href="/contracts/{{ $c.ID }}/edit" class="btn btn-sm">Редактировать</a>
             {{ end }}
-            <button type="button" class="toggle-btn" aria-expanded="true" onclick="toggleSection('section-details')">Свернуть</button>
+            <button type="button" class="toggle-btn" aria-expanded="true"
+                    onclick="toggleSection('section-details')">Свернуть</button>
         </div>
     </header>
     <div class="collapsible-body">
@@ -120,7 +221,6 @@
                     <span class="muted">не назначен</span>
                 {{ end }}
             </dd>
-
             <dt>Статус</dt>            <dd>{{ $c.StatusCode }} — {{ .StatusName }}</dd>
             <dt>Контрагент</dt>
             <dd>

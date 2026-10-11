@@ -446,3 +446,106 @@ a { color: var(--accent); }
     background: var(--danger-bg); color: var(--danger-text);
 }
 .row-inactive td { opacity: 0.6; }
+
+/* Форма этапа — разделы */
+.form-section-title {
+    font-size: 15px;
+    color: var(--text);
+    margin: 16px 0 4px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border-soft);
+}
+.form-section-title:first-of-type { margin-top: 0; }
+
+/* Таблица затрат */
+.costs-table-wrapper {
+    overflow-x: auto;
+    margin-top: 12px;
+}
+.costs-table {
+    border-collapse: collapse;
+    font-size: 13px;
+    background: var(--surface);
+    border-radius: 8px;
+    min-width: 1400px; /* чтобы влезли все столбцы */
+}
+.costs-table th, .costs-table td {
+    padding: 6px 8px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-soft);
+    vertical-align: middle;
+}
+.costs-table th {
+    background: var(--surface-alt);
+    font-weight: 600;
+    color: var(--text-mid);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+}
+.costs-table input,
+.costs-table select {
+    width: 100%;
+    padding: 5px 6px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 13px;
+    background: var(--surface);
+    color: var(--text);
+}
+.costs-table td.cell-narrow input { min-width: 90px; }
+.costs-table td.cell-wide input { min-width: 130px; }
+
+form.form { max-width: 100%; }
+
+.warning {
+    background: #fff3cd;
+    color: #856404;
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    margin: 12px 0;
+    border: 1px solid #ffeeba;
+}
+html[data-theme="dark"] .warning {
+    background: #4a3c14;
+    color: #ffe9a8;
+    border-color: #6b571c;
+}
+
+.costs-table.compact .col-optional { display: none; }
+
+.back-link { margin-bottom: 12px; font-size: 14px; }
+.back-link a { color: var(--accent); text-decoration: none; }
+.back-link a:hover { text-decoration: underline; }
+
+.vat-toggle { display: inline-flex; gap: 4px; margin-right: 8px; }
+.vat-toggle .btn.active { background: var(--accent); color: #fff; }
+
+
+.data-table .col-money { min-width: 160px; text-align: right; white-space: nowrap; }
+.data-table .num { text-align: right; white-space: nowrap; }
+
+/* Сегментированный переключатель "В работе / Все" */
+.stage-toggle {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+}
+.stage-toggle .btn {
+    border-radius: 0;
+    background: transparent;
+    border: none;
+    color: var(--text);
+}
+.stage-toggle .btn.active {
+    background: var(--accent);
+    color: #fff;
+}
+
+/* Приглушённые строки (закрытые, неактивные) */
+.row-muted td { color: var(--text-soft); }
+.row-muted td a { color: var(--text-soft); }
+

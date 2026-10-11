@@ -12,7 +12,6 @@ import (
 var (
 	ErrStageNameRequired   = errors.New("наименование этапа обязательно")
 	ErrStageWorkKindNeeded = errors.New("вид работы обязателен")
-	ErrStageCostNegative   = errors.New("стоимость не может быть отрицательной")
 )
 
 type StageService struct {
@@ -56,7 +55,11 @@ func (s *StageService) Create(ctx context.Context, st *models.Stage) error {
 		}
 		st.RowOrder = n
 	}
-	return s.repo.Create(ctx, st)
+	if err := s.repo.Create(ctx, st); err != nil {
+		return err
+	}
+	// нормализуем порядок после вставки
+	return s.repo.NormalizeOrder(ctx, st.ContractID)
 }
 
 func (s *StageService) Update(ctx context.Context, st *models.Stage) error {
@@ -66,8 +69,12 @@ func (s *StageService) Update(ctx context.Context, st *models.Stage) error {
 	return s.repo.Update(ctx, st)
 }
 
-func (s *StageService) Delete(ctx context.Context, guid string) error {
-	return s.repo.Delete(ctx, guid)
+func (s *StageService) Delete(ctx context.Context, contractID, guid string) error {
+	if err := s.repo.Delete(ctx, guid); err != nil {
+		return err
+	}
+	// пересобираем порядок
+	return s.repo.NormalizeOrder(ctx, contractID)
 }
 
 func (s *StageService) Statuses(ctx context.Context) ([]models.StageStatusRef, error) {
@@ -95,9 +102,17 @@ func (s *StageService) Totals(ctx context.Context, contractID string) (db.StageT
 }
 
 func (s *StageService) Move(ctx context.Context, contractID, guid string, direction int) error {
-	return s.repo.SwapOrder(ctx, contractID, guid, direction)
+	if err := s.repo.SwapOrder(ctx, contractID, guid, direction); err != nil {
+		return err
+	}
+	// пересобираем порядок, чтобы не было дублей
+	return s.repo.NormalizeOrder(ctx, contractID)
 }
 
 func (s *StageService) ProblemStages(ctx context.Context, contractID string) ([]db.ProblemStage, error) {
 	return s.repo.ProblemStages(ctx, contractID)
+}
+
+func (s *StageService) StageCostTotals(ctx context.Context, contractID string) (map[string]float64, error) {
+	return s.repo.StageCostTotals(ctx, contractID)
 }

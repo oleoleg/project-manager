@@ -45,13 +45,14 @@
         <th>№</th>
         <th>Наименование</th>
         <th>Вид работы</th>
-        <th>Стоимость</th>
-        <th>Закрыто</th>
+        <th class="num col-money">Стоимость</th>
+        <th class="num col-money">Закрыто</th>
+        <th class="num col-money">Затраты</th>
         <th>НДС %</th>
         <th>Аванс %</th>
         <th>Закрытие (план)</th>
         <th>Ответственный</th>
-        <th>Статус</th>
+        <th>Статус</th> 
         <th></th>
     </tr>
     </thead>
@@ -61,8 +62,9 @@
             <td>{{ .StageNumber }}</td>
             <td>{{ .Name }}</td>
             <td>{{ call $.WorkKindName .WorkKindCode }}</td>
-            <td>{{ money .Cost }}</td>
-            <td>{{ money .ClosedByActs }}</td>
+            <td class="num col-money">{{ money .Cost }}</td>
+            <td class="num col-money">{{ money .ClosedByActs }}</td>
+            <td class="num col-money">{{ money (index $.CostTotals .GUID) }}</td>
             <td>{{ printf "%.2f" .VATPercent }}</td>
             <td>{{ printf "%.2f" .AdvancePercent }}</td>
             <td>{{ if .CloseDatePlan }}{{ .CloseDatePlan.Format "02.01.2006" }}{{ end }}</td>

@@ -55,6 +55,7 @@
             if (/^-?\d+\.\d$/.test(v)) v = v + "0";
             el.value = formatMoney(v);
         });
+        window.attachMoneyInput = attach;
     }
 
     document.addEventListener("DOMContentLoaded", function () {

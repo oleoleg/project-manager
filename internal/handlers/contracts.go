@@ -108,9 +108,9 @@ func (h *ContractHandler) Show(w http.ResponseWriter, r *http.Request) {
 	types, _ := h.svc.Types(r.Context())
 	cp, _ := h.cpSvc.GetByID(r.Context(), c.CounterpartyID)
 	totals, _ := h.stageSvc.Totals(r.Context(), c.ID)
-	problems, _ := h.stageSvc.ProblemStages(r.Context(), c.ID)
 	stageStatuses, _ := h.stageSvc.Statuses(r.Context())
 	assignees, _ := h.svc.ListAssignees(r.Context(), c.ID)
+	costTotals, _ := h.stageSvc.StageCostTotals(r.Context(), c.ID)
 
 	data := h.commonData(r, "Договор "+c.ID)
 	data["Contract"] = c
@@ -120,7 +120,6 @@ func (h *ContractHandler) Show(w http.ResponseWriter, r *http.Request) {
 	data["StatusName"] = findStatusName(statuses, c.StatusCode)
 	data["TypeName"] = findTypeName(types, c.ContractType)
 	data["Totals"] = totals
-	data["Problems"] = problems
 	data["StageStatuses"] = stageStatuses
 	data["StageStatusName"] = func(code int16) string {
 		for _, s := range stageStatuses {
@@ -131,6 +130,7 @@ func (h *ContractHandler) Show(w http.ResponseWriter, r *http.Request) {
 		return ""
 	}
 	data["Today"] = time.Now()
+	data["CostTotals"] = costTotals
 
 	var responsible *models.User
 	if c.ResponsibleUserID != nil {
@@ -138,6 +138,81 @@ func (h *ContractHandler) Show(w http.ResponseWriter, r *http.Request) {
 	}
 	data["Assignees"] = assignees
 	data["Responsible"] = responsible
+
+	// Параметры отображения
+	vatMode := r.URL.Query().Get("vat")
+	if vatMode != "with" {
+		vatMode = "without"
+	}
+	data["VATMode"] = vatMode
+
+	showAll := r.URL.Query().Get("stages") == "all"
+	showCosts := r.URL.Query().Get("costs") == "1"
+	data["ShowAll"] = showAll
+	data["ShowCosts"] = showCosts
+
+	// Готовим единый список этапов с учётом showAll.
+	// Он используется и для проблемных, и для расширенной таблицы.
+	var srcStages []models.Stage
+	if showAll {
+		srcStages, _ = h.stageSvc.List(r.Context(), c.ID)
+	} else {
+		// только «в работе» (все, кроме закрытых и гарантии)
+		all, _ := h.stageSvc.List(r.Context(), c.ID)
+		for _, s := range all {
+			if s.StatusCode == 3 || s.StatusCode == 5 {
+				continue
+			}
+			srcStages = append(srcStages, s)
+		}
+	}
+
+	// problems — для компактной таблицы
+	var problems []db.ProblemStage
+	for _, s := range srcStages {
+		problems = append(problems, db.ProblemStage{
+			GUID:              s.GUID,
+			StageNumber:       s.StageNumber,
+			Name:              s.Name,
+			StatusCode:        s.StatusCode,
+			CloseDatePlan:     s.CloseDatePlan,
+			ResponsiblePerson: s.ResponsiblePerson,
+			Note:              s.Note,
+			Remaining:         s.Cost - s.ClosedByActs,
+		})
+	}
+
+	// allStages — для расширенной таблицы (только если showCosts)
+	type stageRow struct {
+		GUID           string
+		StageNumber    string
+		Name           string
+		StatusCode     int16
+		Cost           float64
+		Closed         float64
+		Expenses       float64
+		VATPercent     float64
+		AdvancePercent float64
+	}
+	var allStages []stageRow
+	if showCosts {
+		for _, s := range srcStages {
+			allStages = append(allStages, stageRow{
+				GUID:           s.GUID,
+				StageNumber:    s.StageNumber,
+				Name:           s.Name,
+				StatusCode:     s.StatusCode,
+				Cost:           s.Cost,
+				Closed:         s.ClosedByActs,
+				Expenses:       costTotals[s.GUID],
+				VATPercent:     s.VATPercent,
+				AdvancePercent: s.AdvancePercent,
+			})
+		}
+	}
+
+	data["Problems"] = problems
+	data["AllStages"] = allStages
 
 	h.render(w, "contracts_show.html", data)
 }
@@ -294,7 +369,6 @@ func humanizeContractError(err error) string {
 	case errors.Is(err, services.ErrContractExists):
 		return "Договор с таким ID уже существует"
 	}
-	return "Не удалось сохранить: " + err.Error()
 
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23503" {
