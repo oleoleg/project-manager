@@ -93,3 +93,11 @@ func (s *StageService) UpdateCardOverhead(ctx context.Context, contractID string
 func (s *StageService) Totals(ctx context.Context, contractID string) (db.StageTotals, error) {
 	return s.repo.Totals(ctx, contractID)
 }
+
+func (s *StageService) Move(ctx context.Context, contractID, guid string, direction int) error {
+	return s.repo.SwapOrder(ctx, contractID, guid, direction)
+}
+
+func (s *StageService) ProblemStages(ctx context.Context, contractID string) ([]db.ProblemStage, error) {
+	return s.repo.ProblemStages(ctx, contractID)
+}

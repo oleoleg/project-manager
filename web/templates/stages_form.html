@@ -46,22 +46,24 @@
 
     <label>
         Стоимость этапа, руб (без НДС)
-        <input type="text" name="cost" value="{{ printf "%.2f" $s.Cost }}">
+        <small class="hint">Можно с пробелами: <code>1 000 000.00</code> или <code>1000000</code>. Разделитель — точка или запятая.</small>
+        <input type="text" name="cost" class="money-input" value="{{ if $s.Cost }}{{ printf "%.2f" $s.Cost }}{{ end }}" inputmode="decimal">
     </label>
 
     <label>
         Закрыто по актам, руб
-        <input type="text" name="closed_by_acts" value="{{ printf "%.2f" $s.ClosedByActs }}">
+        <small class="hint">Формат тот же: <code>4 800 500.00</code></small>
+        <input type="text" name="closed_by_acts" class="money-input" value="{{ if $s.ClosedByActs }}{{ printf "%.2f" $s.ClosedByActs }}{{ end }}" inputmode="decimal">
     </label>
 
     <label>
         НДС, %
-        <input type="text" name="vat_percent" value="{{ printf "%.2f" $s.VATPercent }}">
+        <input type="text" name="vat_percent" value="{{ if $s.VATPercent }}{{ printf "%.2f" $s.VATPercent }}{{ end }}" inputmode="decimal">
     </label>
 
     <label>
         Аванс, %
-        <input type="text" name="advance_percent" value="{{ printf "%.2f" $s.AdvancePercent }}">
+        <input type="text" name="advance_percent" value="{{ if $s.AdvancePercent }}{{ printf "%.2f" $s.AdvancePercent }}{{ end }}" inputmode="decimal">
     </label>
 
     <label>

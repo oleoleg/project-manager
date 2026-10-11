@@ -1,10 +1,17 @@
 {{ define "layout_header" }}
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" {{ if .User }}data-theme="{{ if eq .User.Theme "dark" }}dark{{ else }}light{{ end }}"{{ else }}data-theme="light"{{ end }}>
 <head>
     <meta charset="UTF-8">
     <title>{{ .Title }} — Project Manager</title>
+    <script>
+        (function () {
+            var t = document.documentElement.getAttribute('data-theme');
+            // уже выставлено сервером, ничего не делаем — просто страховка
+        })();
+    </script>
     <link rel="stylesheet" href="/static/style.css">
+    <script src="/static/app.js" defer></script>
 </head>
 <body>
 {{ if .User }}
@@ -17,6 +24,7 @@
             <a href="/dashboard">Дашборд</a>
             <a href="/counterparties">Контрагенты</a>
              <a href="/contracts">Договоры</a>
+             <a href="/settings">Настройки</a>
         </nav>
         <div class="user-box">
             <span>{{ .User.FullName }}</span>

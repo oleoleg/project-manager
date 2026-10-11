@@ -12,16 +12,15 @@ import (
 )
 
 var (
-	ErrContractIDFormat       = errors.New("ID договора должен начинаться с 4 цифр номера проекта (например 6666 или 6666-П2)")
-	ErrContractCounterparty   = errors.New("контрагент обязателен")
-	ErrContractType           = errors.New("тип договора обязателен")
-	ErrContractNumberRequired = errors.New("номер договора обязателен")
-	ErrContractExists         = errors.New("договор с таким ID уже существует")
+	ErrContractIDFormat     = errors.New("ID договора должен начинаться с 4 цифр номера проекта (например 6666 или 6666-D2)")
+	ErrContractCounterparty = errors.New("контрагент обязателен")
+	ErrContractType         = errors.New("тип договора обязателен")
+	ErrContractExists       = errors.New("договор с таким ID уже существует")
 )
 
 // Минимум: 4 цифры. Дальше может быть суффикс через дефис:
-// 6666, 6666-П, 6666-П2, 6666-H и т.п.
-var contractIDRe = regexp.MustCompile(`^[0-9]{4}(-[A-Za-zА-Яа-я0-9]{1,5})?$`)
+// 6666, 6666-D, 6666-D2, 6666-D и т.п. (буквы только латинские)
+var contractIDRe = regexp.MustCompile(`^[0-9]{4}(-[A-Za-z0-9]{1,5})?$`)
 
 type ContractService struct {
 	repo *db.ContractRepo
@@ -38,9 +37,7 @@ func (s *ContractService) Validate(c *models.Contract) error {
 	if !contractIDRe.MatchString(c.ID) {
 		return ErrContractIDFormat
 	}
-	if c.ContractNumber == "" {
-		return ErrContractNumberRequired
-	}
+	// номер договора — необязателен на старте
 	if c.CounterpartyID == "" {
 		return ErrContractCounterparty
 	}

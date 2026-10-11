@@ -1,0 +1,31 @@
+{{ define "settings.html" }}
+{{ template "layout_header" . }}
+
+<h2>Настройки интерфейса</h2>
+
+{{ if .Error }}<div class="error">{{ .Error }}</div>{{ end }}
+
+<form method="post" action="/settings/theme" class="form" style="max-width: 520px;">
+    <label>
+        Тема оформления
+        <small class="hint">Применяется ко всем страницам.</small>
+    </label>
+
+    <div class="theme-options">
+        <label class="theme-option">
+            <input type="radio" name="theme" value="light" {{ if ne .User.Theme "dark" }}checked{{ end }}>
+            <span class="theme-preview theme-light">Светлая</span>
+        </label>
+        <label class="theme-option">
+            <input type="radio" name="theme" value="dark" {{ if eq .User.Theme "dark" }}checked{{ end }}>
+            <span class="theme-preview theme-dark">Тёмная</span>
+        </label>
+    </div>
+
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Сохранить</button>
+    </div>
+</form>
+
+{{ template "layout_footer" . }}
+{{ end }}

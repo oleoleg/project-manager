@@ -23,13 +23,13 @@ func NewUserRepo(pool *pgxpool.Pool) *UserRepo {
 
 func (r *UserRepo) GetByUsername(ctx context.Context, username string) (*models.User, error) {
 	row := r.pool.QueryRow(ctx, `
-		SELECT id, username, full_name, password_hash, role_code, is_active, created_at, updated_at
+		SELECT id, username, full_name, password_hash, role_code, is_active, theme, created_at, updated_at
 		FROM users
 		WHERE username = $1
 	`, username)
 
 	var u models.User
-	err := row.Scan(&u.ID, &u.Username, &u.FullName, &u.PasswordHash, &u.RoleCode, &u.IsActive, &u.CreatedAt, &u.UpdatedAt)
+	err := row.Scan(&u.ID, &u.Username, &u.FullName, &u.PasswordHash, &u.RoleCode, &u.IsActive, &u.Theme, &u.CreatedAt, &u.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrUserNotFound
 	}
@@ -41,13 +41,13 @@ func (r *UserRepo) GetByUsername(ctx context.Context, username string) (*models.
 
 func (r *UserRepo) GetByID(ctx context.Context, id int64) (*models.User, error) {
 	row := r.pool.QueryRow(ctx, `
-		SELECT id, username, full_name, password_hash, role_code, is_active, created_at, updated_at
+		SELECT id, username, full_name, password_hash, role_code, is_active, theme, created_at, updated_at
 		FROM users
 		WHERE id = $1
 	`, id)
 
 	var u models.User
-	err := row.Scan(&u.ID, &u.Username, &u.FullName, &u.PasswordHash, &u.RoleCode, &u.IsActive, &u.CreatedAt, &u.UpdatedAt)
+	err := row.Scan(&u.ID, &u.Username, &u.FullName, &u.PasswordHash, &u.RoleCode, &u.IsActive, &u.Theme, &u.CreatedAt, &u.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrUserNotFound
 	}
@@ -77,4 +77,14 @@ func (r *UserRepo) Count(ctx context.Context) (int64, error) {
 		return 0, fmt.Errorf("count users: %w", err)
 	}
 	return n, nil
+}
+
+func (r *UserRepo) UpdateTheme(ctx context.Context, userID int64, theme string) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE users SET theme = $2, updated_at = NOW() WHERE id = $1
+	`, userID, theme)
+	if err != nil {
+		return fmt.Errorf("update theme: %w", err)
+	}
+	return nil
 }

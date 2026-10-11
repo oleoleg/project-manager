@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
@@ -20,11 +21,12 @@ import (
 type StageHandler struct {
 	svc         *services.StageService
 	contractSvc *services.ContractService
+	cpSvc       *services.CounterpartyService
 	tmpl        *template.Template
 }
 
-func NewStageHandler(svc *services.StageService, contractSvc *services.ContractService, tmpl *template.Template) *StageHandler {
-	return &StageHandler{svc: svc, contractSvc: contractSvc, tmpl: tmpl}
+func NewStageHandler(svc *services.StageService, contractSvc *services.ContractService, cpSvc *services.CounterpartyService, tmpl *template.Template) *StageHandler {
+	return &StageHandler{svc: svc, contractSvc: contractSvc, cpSvc: cpSvc, tmpl: tmpl}
 }
 
 func (h *StageHandler) commonData(r *http.Request, title string) map[string]any {
@@ -73,6 +75,7 @@ func (h *StageHandler) List(w http.ResponseWriter, r *http.Request) {
 	workKinds, _ := h.svc.WorkKinds(r.Context())
 	totals, _ := h.svc.Totals(r.Context(), contractID)
 	card, _ := h.svc.GetCard(r.Context(), contractID)
+	cp, _ := h.cpSvc.GetByID(r.Context(), contract.CounterpartyID)
 
 	data := h.commonData(r, "Этапы договора "+contractID)
 	data["Contract"] = contract
@@ -81,6 +84,7 @@ func (h *StageHandler) List(w http.ResponseWriter, r *http.Request) {
 	data["WorkKinds"] = workKinds
 	data["Totals"] = totals
 	data["Card"] = card
+	data["Counterparty"] = cp
 	data["StatusName"] = func(code int16) string { return stageStatusName(statuses, code) }
 	data["WorkKindName"] = func(code string) string { return workKindName(workKinds, code) }
 	data["Flash"] = r.URL.Query().Get("flash")
@@ -121,7 +125,13 @@ func (h *StageHandler) New(w http.ResponseWriter, r *http.Request) {
 
 func (h *StageHandler) Create(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "id")
-	st := parseStageForm(r)
+	st, err := parseStageForm(r)
+	if err != nil {
+		// положим в stage-заглушку, чтобы шаблон отрисовал значения
+		empty := &models.Stage{ContractID: contractID}
+		h.renderFormWithError(w, r, empty, true, err.Error())
+		return
+	}
 	st.ContractID = contractID
 
 	if err := h.svc.Create(r.Context(), st); err != nil {
@@ -161,7 +171,13 @@ func (h *StageHandler) Edit(w http.ResponseWriter, r *http.Request) {
 func (h *StageHandler) Update(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "id")
 	guid := chi.URLParam(r, "guid")
-	st := parseStageForm(r)
+
+	st, err := parseStageForm(r)
+	if err != nil {
+		empty := &models.Stage{GUID: guid, ContractID: contractID}
+		h.renderFormWithError(w, r, empty, false, err.Error())
+		return
+	}
 	st.GUID = guid
 	st.ContractID = contractID
 
@@ -170,6 +186,30 @@ func (h *StageHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/contracts/"+contractID+"/stages?flash="+url.QueryEscape("Изменения сохранены"), http.StatusSeeOther)
+}
+
+func (h *StageHandler) Move(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "id")
+	guid := chi.URLParam(r, "guid")
+
+	dirStr := r.URL.Query().Get("dir")
+	dir := 0
+	switch dirStr {
+	case "up":
+		dir = -1
+	case "down":
+		dir = 1
+	default:
+		http.Error(w, "bad direction", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.svc.Move(r.Context(), contractID, guid, dir); err != nil {
+		log.Printf("stage move: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/contracts/"+contractID+"/stages", http.StatusSeeOther)
 }
 
 // ---------- Delete ----------
@@ -212,7 +252,7 @@ func (h *StageHandler) renderFormWithError(w http.ResponseWriter, r *http.Reques
 	h.render(w, "stages_form.html", data)
 }
 
-func parseStageForm(r *http.Request) *models.Stage {
+func parseStageForm(r *http.Request) (*models.Stage, error) {
 	_ = r.ParseForm()
 
 	rowOrder, _ := strconv.Atoi(r.FormValue("row_order"))
@@ -220,10 +260,23 @@ func parseStageForm(r *http.Request) *models.Stage {
 	if v, err := strconv.Atoi(r.FormValue("status_code")); err == nil {
 		statusCode = int16(v)
 	}
-	cost, _ := strconv.ParseFloat(strings.ReplaceAll(r.FormValue("cost"), ",", "."), 64)
-	closed, _ := strconv.ParseFloat(strings.ReplaceAll(r.FormValue("closed_by_acts"), ",", "."), 64)
-	vat, _ := strconv.ParseFloat(strings.ReplaceAll(r.FormValue("vat_percent"), ",", "."), 64)
-	adv, _ := strconv.ParseFloat(strings.ReplaceAll(r.FormValue("advance_percent"), ",", "."), 64)
+
+	cost, err := services.ParseMoney(r.FormValue("cost"))
+	if err != nil {
+		return nil, fmt.Errorf("Стоимость: %w", err)
+	}
+	closed, err := services.ParseMoney(r.FormValue("closed_by_acts"))
+	if err != nil {
+		return nil, fmt.Errorf("Закрыто по актам: %w", err)
+	}
+	vat, err := parsePercent(r.FormValue("vat_percent"))
+	if err != nil {
+		return nil, fmt.Errorf("НДС: %w", err)
+	}
+	adv, err := parsePercent(r.FormValue("advance_percent"))
+	if err != nil {
+		return nil, fmt.Errorf("Аванс: %w", err)
+	}
 
 	return &models.Stage{
 		RowOrder:          rowOrder,
@@ -240,7 +293,16 @@ func parseStageForm(r *http.Request) *models.Stage {
 		StatusCode:        statusCode,
 		WorkKindCode:      strings.TrimSpace(r.FormValue("work_kind_code")),
 		Note:              strings.TrimSpace(r.FormValue("note")),
+	}, nil
+}
+
+// parsePercent — как ParseMoney, но для процентов (0..100).
+func parsePercent(s string) (float64, error) {
+	v, err := services.ParseMoney(s)
+	if err != nil {
+		return 0, err
 	}
+	return v, nil
 }
 
 func humanizeStageError(err error) string {

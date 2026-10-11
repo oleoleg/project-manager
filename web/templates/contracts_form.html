@@ -15,15 +15,15 @@
         ID договора
            <small class="hint">
                 Рекомендуется: 4 цифры номера проекта + необязательный суффикс через дефис.
-                Например: <code>6666</code>, <code>6666-П</code>, <code>6666-П2</code>.
-                Буквы: Н — монтаж, П — поставка, Р — проектирование.
+                Например: <code>6666</code>, <code>6666-W</code>, <code>6666-W2</code>.
+                Буквы (латиница): W — монтаж, S — поставка, D — проектирование.
             </small>
             <input type="text" name="id" value="{{ $c.ID }}" maxlength="16"
                 {{ if not $isNew }}readonly{{ end }} required>
     </label>
 
     <label>
-        № договора *
+        № договора
         <input type="text" name="contract_number" value="{{ $c.ContractNumber }}" required>
     </label>
 

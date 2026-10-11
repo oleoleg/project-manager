@@ -3,42 +3,129 @@
 {{ $c := .Contract }}
 
 <div class="page-header">
-    <h2>Договор {{ $c.ID }}</h2>
-    <div class="actions">
-        {{ if or (eq .User.RoleCode "admin") (eq .User.RoleCode "rp_chief") (eq .User.RoleCode "rp") }}
-            <a href="/contracts/{{ $c.ID }}/edit" class="btn btn-primary">Изменить</a>
-            <a href="/contracts/{{ $c.ID }}/stages" class="btn">Этапы</a>
-        {{ end }}
-        {{ if or (eq .User.RoleCode "admin") (eq .User.RoleCode "rp_chief") (eq .User.RoleCode "rp") }}
-            <form method="post" action="/contracts/{{ $c.ID }}/delete"
-                  onsubmit="return confirm('Удалить договор {{ $c.ID }}?');" class="inline">
-                <button type="submit" class="btn btn-danger">Удалить</button>
-            </form>
-        {{ end }}
+    <div class="contract-title">
+        <h2>
+            Договор
+            {{ if $c.ContractNumber }}
+                № {{ $c.ContractNumber }} от {{ if $c.ContractDate }}{{ $c.ContractDate.Format "02.01.2006" }}{{ else }}—{{ end }}
+            {{ else }}
+                № не присвоен
+            {{ end }}
+            <span class="contract-id">ID: {{ $c.ID }}</span>
+        </h2>
+        <p class="contract-subtitle">
+            {{ if $c.WorkName }}{{ $c.WorkName }}{{ else }}<span class="muted">наименование не указано</span>{{ end }}
+            {{ if .Counterparty }}
+                &nbsp;·&nbsp;
+                <a href="/counterparties/{{ .Counterparty.ID }}">{{ .Counterparty.Name }}</a>
+            {{ end }}
+        </p>
     </div>
 </div>
 
-<dl class="detail-list">
-    <dt>ID</dt>                <dd>{{ $c.ID }}</dd>
-    <dt>№ договора</dt>        <dd>{{ $c.ContractNumber }}</dd>
-    <dt>Дата</dt>              <dd>{{ if $c.ContractDate }}{{ $c.ContractDate.Format "02.01.2006" }}{{ end }}</dd>
-    <dt>Наименование работ</dt><dd>{{ $c.WorkName }}</dd>
-    <dt>Отв. лицо</dt>         <dd>{{ $c.ResponsiblePerson }}</dd>
-    <dt>Статус</dt>            <dd>{{ $c.StatusCode }} — {{ .StatusName }}</dd>
-    <dt>Контрагент</dt>
-    <dd>
-        <a href="/counterparties/{{ $c.CounterpartyID }}">{{ $c.CounterpartyID }}</a>
-        {{ if .Counterparty }} — {{ .Counterparty.Name }}{{ end }}
-    </dd>
-    <dt>Цех</dt>               <dd>{{ $c.Workshop }}</dd>
-    <dt>Ссылка на проект</dt>  <dd>{{ if $c.ProjectURL }}<a href="{{ $c.ProjectURL }}" target="_blank">{{ $c.ProjectURL }}</a>{{ end }}</dd>
-    <dt>Карта закупки</dt>     <dd>{{ deref $c.ProcurementCardStatus }}</dd>
-    <dt>Доп. реквизиты</dt>    <dd>{{ $c.ExtraDetails }}</dd>
-    <dt>Финплан</dt>           <dd>{{ deref $c.FinplanStatus }}</dd>
-    <dt>План-график</dt>       <dd>{{ deref $c.PlanScheduleStatus }}</dd>
-    <dt>Краткое имя</dt>       <dd>{{ $c.ShortName }}</dd>
-    <dt>Тип договора</dt>      <dd>{{ $c.ContractType }} — {{ .TypeName }}</dd>
-</dl>
+<div class="totals">
+    <div class="total-card"><span>Стоимость договора</span><strong>{{ money .Totals.TotalCost }}</strong></div>
+    <div class="total-card"><span>Закрыто</span><strong>{{ money .Totals.TotalClosed }}</strong></div>
+    <div class="total-card"><span>Остаток</span><strong>{{ money .Totals.TotalRemaining }}</strong></div>
+    <div class="total-card"><span>Этапов</span><strong>{{ .Totals.Count }}</strong></div>
+</div>
+
+<section class="collapsible" id="section-stages">
+    <header class="collapsible-header">
+        <h3>Этапы в работе ({{ len .Problems }})</h3>
+        <div class="collapsible-actions">
+            <a href="/contracts/{{ $c.ID }}/stages" class="btn btn-sm">Редактировать</a>
+            <button type="button" class="toggle-btn" aria-expanded="true" onclick="toggleSection('section-stages')">Свернуть</button>
+        </div>
+    </header>
+    <div class="collapsible-body">
+        {{ if .Problems }}
+        <table class="data-table">
+            <thead>
+            <tr>
+                <th>№</th>
+                <th>Этап</th>
+                <th>Статус</th>
+                <th>Закрытие (план)</th>
+                <th>Отв.</th>
+                <th>Остаток</th>
+                <th>Причина / примечание</th>
+            </tr>
+            </thead>
+            <tbody>
+            {{ range .Problems }}
+                {{ $overdue := false }}
+                {{ if .CloseDatePlan }}{{ if .CloseDatePlan.Before $.Today }}{{ $overdue = true }}{{ end }}{{ end }}
+                <tr class="{{ if $overdue }}row-overdue{{ end }}">
+                    <td><a href="/contracts/{{ $.Contract.ID }}/stages/{{ .GUID }}/edit">{{ .StageNumber }}</a></td>
+                    <td>{{ .Name }}</td>
+                    <td>{{ call $.StageStatusName .StatusCode }}</td>
+                    <td>
+                        {{ if .CloseDatePlan }}
+                            {{ .CloseDatePlan.Format "02.01.2006" }}
+                            {{ if $overdue }}<span class="badge-overdue">просрочен</span>{{ end }}
+                        {{ else }}
+                            <span class="muted">—</span>
+                        {{ end }}
+                    </td>
+                    <td>{{ .ResponsiblePerson }}</td>
+                    <td>{{ money .Remaining }}</td>
+                    <td>{{ .Note }}</td>
+                </tr>
+            {{ end }}
+            </tbody>
+        </table>
+        {{ else }}
+        <p class="muted">Все этапы закрыты или ещё не созданы.</p>
+        {{ end }}
+    </div>
+</section>
+
+<section class="collapsible" id="section-details">
+    <header class="collapsible-header">
+        <h3>Реквизиты договора</h3>
+        <div class="collapsible-actions">
+            {{ if or (eq .User.RoleCode "admin") (eq .User.RoleCode "rp_chief") (eq .User.RoleCode "rp") }}
+                <a href="/contracts/{{ $c.ID }}/edit" class="btn btn-sm">Редактировать</a>
+            {{ end }}
+            <button type="button" class="toggle-btn" aria-expanded="true" onclick="toggleSection('section-details')">Свернуть</button>
+        </div>
+    </header>
+    <div class="collapsible-body">
+        <dl class="detail-list">
+            <dt>ID</dt>                <dd>{{ $c.ID }}</dd>
+            <dt>№ договора</dt>        <dd>{{ if $c.ContractNumber }}{{ $c.ContractNumber }}{{ else }}<span class="muted">не присвоен</span>{{ end }}</dd>
+            <dt>Дата</dt>              <dd>{{ if $c.ContractDate }}{{ $c.ContractDate.Format "02.01.2006" }}{{ end }}</dd>
+            <dt>Наименование работ</dt><dd>{{ $c.WorkName }}</dd>
+            <dt>Отв. лицо</dt>         <dd>{{ $c.ResponsiblePerson }}</dd>
+            <dt>Статус</dt>            <dd>{{ $c.StatusCode }} — {{ .StatusName }}</dd>
+            <dt>Контрагент</dt>
+            <dd>
+                <a href="/counterparties/{{ $c.CounterpartyID }}">{{ $c.CounterpartyID }}</a>
+                {{ if .Counterparty }} — {{ .Counterparty.Name }}{{ end }}
+            </dd>
+            <dt>Цех</dt>               <dd>{{ $c.Workshop }}</dd>
+            <dt>Ссылка на проект</dt>  <dd>{{ if $c.ProjectURL }}<a href="{{ $c.ProjectURL }}" target="_blank">{{ $c.ProjectURL }}</a>{{ end }}</dd>
+            <dt>Карта закупки</dt>     <dd>{{ deref $c.ProcurementCardStatus }}</dd>
+            <dt>Доп. реквизиты</dt>    <dd>{{ $c.ExtraDetails }}</dd>
+            <dt>Финплан</dt>           <dd>{{ deref $c.FinplanStatus }}</dd>
+            <dt>План-график</dt>       <dd>{{ deref $c.PlanScheduleStatus }}</dd>
+            <dt>Краткое имя</dt>       <dd>{{ $c.ShortName }}</dd>
+            <dt>Тип договора</dt>      <dd>{{ $c.ContractType }} — {{ .TypeName }}</dd>
+        </dl>
+    </div>
+</section>
+
+{{ if or (eq .User.RoleCode "admin") (eq .User.RoleCode "rp_chief") }}
+<section class="danger-zone">
+    <h3>Опасная зона</h3>
+    <p class="muted">Действие необратимо. Удалятся все этапы этого договора.</p>
+    <form method="post" action="/contracts/{{ $c.ID }}/delete"
+          onsubmit="return confirm('Удалить договор {{ $c.ID }}? Все этапы и вложенные данные будут потеряны.');">
+        <button type="submit" class="btn btn-danger">Удалить договор</button>
+    </form>
+</section>
+{{ end }}
 
 <p><a href="/contracts">← К списку</a></p>
 

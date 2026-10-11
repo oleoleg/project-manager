@@ -9,6 +9,7 @@ type User struct {
 	PasswordHash string
 	RoleCode     string
 	IsActive     bool
+	Theme        string
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }

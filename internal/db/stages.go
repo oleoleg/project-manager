@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -212,19 +213,130 @@ func (r *StageRepo) NextRowOrder(ctx context.Context, contractID string) (int, e
 
 // StageTotals — итоги по договору.
 type StageTotals struct {
-	Count       int
-	TotalCost   float64
-	TotalClosed float64
+	Count          int
+	TotalCost      float64
+	TotalClosed    float64
+	TotalRemaining float64
 }
 
 func (r *StageRepo) Totals(ctx context.Context, contractID string) (StageTotals, error) {
 	var t StageTotals
 	err := r.pool.QueryRow(ctx, `
-		SELECT COUNT(*), COALESCE(SUM(cost),0), COALESCE(SUM(closed_by_acts),0)
+		SELECT COUNT(*),
+		       COALESCE(SUM(cost),0),
+		       COALESCE(SUM(closed_by_acts),0),
+		       COALESCE(SUM(cost - closed_by_acts),0)
 		FROM stages WHERE contract_id = $1
-	`, contractID).Scan(&t.Count, &t.TotalCost, &t.TotalClosed)
+	`, contractID).Scan(&t.Count, &t.TotalCost, &t.TotalClosed, &t.TotalRemaining)
 	if err != nil {
 		return t, fmt.Errorf("stage totals: %w", err)
 	}
 	return t, nil
+}
+
+// SwapOrder меняет row_order двух этапов одного договора.
+// Если сосед не найден (этап крайний) — ничего не делает.
+func (r *StageRepo) SwapOrder(ctx context.Context, contractID, guid string, direction int) error {
+	// direction: -1 вверх, +1 вниз
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var currentOrder int
+	err = tx.QueryRow(ctx,
+		`SELECT row_order FROM stages WHERE guid = $1 AND contract_id = $2`,
+		guid, contractID,
+	).Scan(&currentOrder)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrStageNotFound
+		}
+		return fmt.Errorf("get current order: %w", err)
+	}
+
+	// Ищем соседа: ближайший меньший или больший row_order
+	var neighbourGUID string
+	var neighbourOrder int
+	if direction < 0 {
+		err = tx.QueryRow(ctx, `
+			SELECT guid, row_order FROM stages
+			WHERE contract_id = $1 AND row_order < $2
+			ORDER BY row_order DESC LIMIT 1
+		`, contractID, currentOrder).Scan(&neighbourGUID, &neighbourOrder)
+	} else {
+		err = tx.QueryRow(ctx, `
+			SELECT guid, row_order FROM stages
+			WHERE contract_id = $1 AND row_order > $2
+			ORDER BY row_order ASC LIMIT 1
+		`, contractID, currentOrder).Scan(&neighbourGUID, &neighbourOrder)
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		// крайний — некуда двигать, это не ошибка
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("find neighbour: %w", err)
+	}
+
+	// Меняем местами. Если row_order совпадают — не свапнем, используем промежуточное.
+	if currentOrder == neighbourOrder {
+		neighbourOrder = currentOrder + direction
+		_, err = tx.Exec(ctx, `UPDATE stages SET row_order = $2 WHERE guid = $1`, neighbourGUID, neighbourOrder)
+		if err != nil {
+			return fmt.Errorf("bump neighbour: %w", err)
+		}
+	}
+
+	if _, err := tx.Exec(ctx, `UPDATE stages SET row_order = $2 WHERE guid = $1`, guid, neighbourOrder); err != nil {
+		return fmt.Errorf("update current: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE stages SET row_order = $2 WHERE guid = $1`, neighbourGUID, currentOrder); err != nil {
+		return fmt.Errorf("update neighbour: %w", err)
+	}
+
+	return tx.Commit(ctx)
+}
+
+// ProblemStage — этап, который стоит показать в сводке «что не закрыто».
+type ProblemStage struct {
+	GUID              string
+	StageNumber       string
+	Name              string
+	StatusCode        int16
+	CloseDatePlan     *time.Time
+	ResponsiblePerson string
+	Note              string
+	Remaining         float64
+}
+
+func (r *StageRepo) ProblemStages(ctx context.Context, contractID string) ([]ProblemStage, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT guid, stage_number, name, status_code, close_date_plan,
+		       responsible_person, note, (cost - closed_by_acts) AS remaining
+		FROM stages
+		WHERE contract_id = $1
+		  AND status_code NOT IN (3, 5)
+		ORDER BY
+		  CASE WHEN close_date_plan IS NULL THEN 1 ELSE 0 END,
+		  close_date_plan ASC,
+		  row_order
+	`, contractID)
+	if err != nil {
+		return nil, fmt.Errorf("problem stages: %w", err)
+	}
+	defer rows.Close()
+
+	var res []ProblemStage
+	for rows.Next() {
+		var s ProblemStage
+		if err := rows.Scan(&s.GUID, &s.StageNumber, &s.Name, &s.StatusCode,
+			&s.CloseDatePlan, &s.ResponsiblePerson, &s.Note, &s.Remaining); err != nil {
+			return nil, err
+		}
+		res = append(res, s)
+	}
+	return res, rows.Err()
 }

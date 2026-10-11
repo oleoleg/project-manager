@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -19,13 +20,14 @@ import (
 )
 
 type ContractHandler struct {
-	svc   *services.ContractService
-	cpSvc *services.CounterpartyService
-	tmpl  *template.Template
+	svc      *services.ContractService
+	cpSvc    *services.CounterpartyService
+	stageSvc *services.StageService
+	tmpl     *template.Template
 }
 
-func NewContractHandler(svc *services.ContractService, cpSvc *services.CounterpartyService, tmpl *template.Template) *ContractHandler {
-	return &ContractHandler{svc: svc, cpSvc: cpSvc, tmpl: tmpl}
+func NewContractHandler(svc *services.ContractService, cpSvc *services.CounterpartyService, stageSvc *services.StageService, tmpl *template.Template) *ContractHandler {
+	return &ContractHandler{svc: svc, cpSvc: cpSvc, stageSvc: stageSvc, tmpl: tmpl}
 }
 
 func (h *ContractHandler) commonData(r *http.Request, title string) map[string]any {
@@ -105,6 +107,9 @@ func (h *ContractHandler) Show(w http.ResponseWriter, r *http.Request) {
 	statuses, _ := h.svc.Statuses(r.Context())
 	types, _ := h.svc.Types(r.Context())
 	cp, _ := h.cpSvc.GetByID(r.Context(), c.CounterpartyID)
+	totals, _ := h.stageSvc.Totals(r.Context(), c.ID)
+	problems, _ := h.stageSvc.ProblemStages(r.Context(), c.ID)
+	stageStatuses, _ := h.stageSvc.Statuses(r.Context())
 
 	data := h.commonData(r, "Договор "+c.ID)
 	data["Contract"] = c
@@ -113,6 +118,18 @@ func (h *ContractHandler) Show(w http.ResponseWriter, r *http.Request) {
 	data["Counterparty"] = cp
 	data["StatusName"] = findStatusName(statuses, c.StatusCode)
 	data["TypeName"] = findTypeName(types, c.ContractType)
+	data["Totals"] = totals
+	data["Problems"] = problems
+	data["StageStatuses"] = stageStatuses
+	data["StageStatusName"] = func(code int16) string {
+		for _, s := range stageStatuses {
+			if s.Code == code {
+				return s.Name
+			}
+		}
+		return ""
+	}
+	data["Today"] = time.Now()
 	h.render(w, "contracts_show.html", data)
 }
 
@@ -246,9 +263,7 @@ func parseContractForm(r *http.Request) *models.Contract {
 func humanizeContractError(err error) string {
 	switch {
 	case errors.Is(err, services.ErrContractIDFormat):
-		return "ID должен быть в формате NNNN-AA, например 6666-П2 (Н — монтаж, П — поставка, Р — проектирование)"
-	case errors.Is(err, services.ErrContractNumberRequired):
-		return "Номер договора обязателен"
+		return "ID должен начинаться с 4 цифр номера проекта. Примеры: 6666, 6666-P, 6666-P2. Буквы — латинские: W (монтаж), S (поставка), D (проектирование)"
 	case errors.Is(err, services.ErrContractCounterparty):
 		return "Выберите контрагента"
 	case errors.Is(err, services.ErrContractType):
