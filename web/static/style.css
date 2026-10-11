@@ -114,7 +114,7 @@ header h1 { font-size: 20px; }
 .logout-form { display: inline; }
 
 /* Main */
-main { max-width: 1200px; margin: 0 auto; padding: 32px; }
+main { max-width: 1440px; margin: 0 auto; padding: 32px; }
 h2 { margin-bottom: 12px; }
 
 /* Login */
@@ -306,8 +306,13 @@ a { color: var(--accent); }
 
 /* Totals */
 .totals {
-    display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 20px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
 }
+.total-card { min-width: 0; }
+
 .total-card {
     background: var(--surface); padding: 14px 20px; border-radius: 8px;
     box-shadow: var(--shadow);
@@ -461,21 +466,23 @@ a { color: var(--accent); }
 .costs-table-wrapper {
     overflow-x: auto;
     margin-top: 12px;
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    background: var(--surface);
 }
 .costs-table {
     border-collapse: collapse;
     font-size: 13px;
-    background: var(--surface);
-    border-radius: 8px;
-    min-width: 1400px; /* чтобы влезли все столбцы */
+    width: 100%;
+    min-width: 1100px;
 }
 .costs-table th, .costs-table td {
-    padding: 6px 8px;
+    padding: 4px 6px;
     text-align: left;
     border-bottom: 1px solid var(--border-soft);
     vertical-align: middle;
 }
-.costs-table th {
+.costs-table thead th {
     background: var(--surface-alt);
     font-weight: 600;
     color: var(--text-mid);
@@ -483,7 +490,11 @@ a { color: var(--accent); }
     text-transform: uppercase;
     letter-spacing: 0.02em;
     white-space: nowrap;
+    position: sticky;
+    top: 0;
+    z-index: 1;
 }
+.costs-table tbody tr:last-child td { border-bottom: none; }
 .costs-table input,
 .costs-table select {
     width: 100%;
@@ -494,8 +505,7 @@ a { color: var(--accent); }
     background: var(--surface);
     color: var(--text);
 }
-.costs-table td.cell-narrow input { min-width: 90px; }
-.costs-table td.cell-wide input { min-width: 130px; }
+.costs-table.compact .col-lockable { display: none; }
 
 form.form { max-width: 100%; }
 
@@ -548,4 +558,158 @@ html[data-theme="dark"] .warning {
 /* Приглушённые строки (закрытые, неактивные) */
 .row-muted td { color: var(--text-soft); }
 .row-muted td a { color: var(--text-soft); }
+
+/* Список этапов — компактнее */
+.stages-table th, .stages-table td {
+    padding: 8px 10px;
+    font-size: 13px;
+}
+.stages-table .col-money { min-width: 130px; }
+.stages-table .col-narrow { min-width: 60px; }
+.stages-table .actions { min-width: 120px; text-align: right; }
+.stages-table .actions .btn-sm { padding: 3px 7px; font-size: 12px; }
+
+
+.table-scroll { overflow-x: auto; }
+
+/* Этапы: компактная таблица */
+.stages-table th, .stages-table td {
+    padding: 8px 10px;
+    font-size: 13px;
+    vertical-align: top;
+}
+.stages-table .col-money { min-width: 100px; text-align: right; white-space: nowrap; }
+.stages-table .num { text-align: right; white-space: nowrap; }
+.stages-table .cell-stage { min-width: 220px; }
+.stages-table .actions { text-align: right; white-space: nowrap; min-width: 130px; }
+.stages-table .actions .btn-sm { padding: 3px 7px; font-size: 12px; }
+
+/* Название + теги в ячейке */
+.stage-name { font-weight: 500; }
+.stage-tags { margin-top: 4px; display: flex; gap: 6px; flex-wrap: wrap; }
+.tag {
+    display: inline-block;
+    font-size: 11px;
+    padding: 1px 8px;
+    border-radius: 10px;
+    background: var(--surface-soft);
+    color: var(--text-mid);
+    border: 1px solid var(--border-soft);
+}
+.tag-work { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.tag-status { background: var(--surface-soft); color: var(--text-mid); }
+.tag-status-1 { background: #fff3cd; color: #856404; border-color: transparent; }  /* в работе */
+.tag-status-2 { background: #cfe2ff; color: #084298; border-color: transparent; }  /* подписание актов */
+.tag-status-3 { background: #d4edda; color: #155724; border-color: transparent; }  /* закрыт */
+.tag-status-4 { background: #f8d7da; color: #721c24; border-color: transparent; }  /* закрыт с долгами */
+.tag-status-5 { background: var(--surface-soft); color: var(--text-soft); }
+
+html[data-theme="dark"] .tag-status-1 { background: #4a3c14; color: #ffe9a8; }
+html[data-theme="dark"] .tag-status-2 { background: #1a2f4a; color: #a9c7f0; }
+html[data-theme="dark"] .tag-status-3 { background: #1f3d2a; color: #9fe0b3; }
+html[data-theme="dark"] .tag-status-4 { background: #3a2027; color: #ff9aa5; }
+
+.stage-note { font-size: 12px; color: var(--text-muted); margin-top: 3px; line-height: 1.35; }
+ 
+
+.money-blur {
+    background: linear-gradient(
+        90deg,
+        var(--surface-soft) 0%,
+        var(--border) 50%,
+        var(--surface-soft) 100%
+    );
+    background-size: 6px 6px;
+    color: transparent;
+    border-radius: 3px;
+    padding: 1px 8px;
+    display: inline-block;
+    user-select: none;
+    filter: blur(3px);
+}
+ 
+
+/* Карточки итогов — раскладка в сетку, чтобы не переносились вниз */
+.totals {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+}
+.total-card { min-width: 0; }
+
+/* Тег ответственного */
+.tag-resp { background: var(--surface-soft); color: var(--text-mid); }
+
+/* НДС-подпись под суммой */
+.vat-hint {
+    font-size: 10px;
+    color: var(--text-soft);
+    margin-top: 2px;
+    line-height: 1.2;
+}
+.total-card .vat-hint { text-transform: none; letter-spacing: normal; }
+
+.lock-btn {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 0;
+    opacity: 0.25;               /* открытый — совсем тусклый */
+    line-height: 1;
+    transition: opacity 0.15s;
+}
+.lock-btn:hover { opacity: 0.9; } /* при наведении — проявляется */
+.lock-btn.locked { opacity: 0.85; } /* залоченный — заметный */
+.cell-fot, .cell-ratio, .cell-days, .cell-rate { position: relative; }
+
+
+
+/* Поля в таблице затрат — точная подгонка под данные */
+.costs-table td.cell-work-kind  { min-width: 110px; }
+.costs-table td.cell-amount     { min-width: 110px; }
+.costs-table td.cell-fot        { min-width: 130px; }  /* ФОТп — до десятков млн */
+.costs-table td.cell-ratio      { min-width: 60px;  }  /* Коэф — 0.00 */
+.costs-table td.cell-days       { min-width: 60px;  }  /* т/з — круглые */
+.costs-table td.cell-rate       { min-width: 100px; }  /* Ставка — до 10 000 */
+.costs-table td.cell-travel     { min-width: 100px; }
+.costs-table td.cell-eq-sale    { min-width: 100px; }
+.costs-table td.cell-eq-cost    { min-width: 100px; }
+.costs-table td.cell-sub        { min-width: 100px; }
+.costs-table td.cell-comm       { min-width: 100px;  }
+.costs-table td.cell-other      { min-width: 100px; }  /* Другое — больше */
+
+.inline-checkbox input[type="checkbox"] {
+    width: auto;
+    padding: 0;
+    margin: 0;
+    flex-shrink: 0;
+}
+.inline-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-mid);
+    cursor: pointer;
+}
+
+.costs-toolbar {
+    display: flex;
+    justify-content: flex-start;
+    margin: 12px 0 4px;
+}
+
+th .th-sub {
+    font-size: 10px;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--text-soft);
+    font-weight: 400;
+}
 

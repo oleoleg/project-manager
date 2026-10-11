@@ -72,3 +72,19 @@ func (h *SettingsHandler) render(w http.ResponseWriter, name string, data any) {
 		log.Printf("template %s: %v", name, err)
 	}
 }
+
+func (h *SettingsHandler) SavePrivacy(w http.ResponseWriter, r *http.Request) {
+	u := middleware.UserFromContext(r.Context())
+	if u == nil {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	_ = r.ParseForm()
+	hide := r.FormValue("hide_financials") == "on"
+	if err := h.userSvc.SetHideFinancials(r.Context(), u.ID, hide); err != nil {
+		log.Printf("save privacy: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/settings?flash="+url.QueryEscape("Сохранено"), http.StatusSeeOther)
+}

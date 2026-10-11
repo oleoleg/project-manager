@@ -10,10 +10,10 @@ import (
 )
 
 var (
-	ErrStageCostWorkKindEmpty = errors.New("вид работы в затратах обязателен")
-	ErrStageCostComplex       = errors.New("вид работы «Комплексный» нельзя выбрать внутри затрат")
-	ErrStageCostNegative      = errors.New("суммы не могут быть отрицательными")
-	ErrStageCostRatioRange    = errors.New("коэффициент должен быть от 0 до 1")
+	ErrStageCostWorkKindEmpty     = errors.New("вид работы в затратах обязателен")
+	ErrStageCostComplex           = errors.New("вид работы «Комплексный» нельзя выбрать внутри затрат")
+	ErrStageCostNegative          = errors.New("суммы не могут быть отрицательными")
+	ErrStageCostDuplicateWorkKind = errors.New("вид работы не может повторяться в одном этапе")
 )
 
 type StageCostService struct {
@@ -41,29 +41,86 @@ func (s *StageCostService) Validate(c *models.StageCost) error {
 		c.Subcontract < 0 || c.Commission < 0 || c.OtherExpenses < 0 {
 		return ErrStageCostNegative
 	}
-	if c.FOTRatio < 0 || c.FOTRatio > 1 {
-		return ErrStageCostRatioRange
-	}
 	return nil
 }
 
-// Recalculate пересчитывает ФОТп и коэф, если они не заданы вручную.
-//   - если rate > 0 и days > 0 → ФОТп = rate * days
-//   - если cost > 0 → коэф = ФОТп / cost
+// Recalculate пересчитывает ФОТп / т/з / ставку в зависимости от замочков.
+// Коэф не хранится — он вычисляется только при отображении.
+//
+// lockedField может содержать одно или два значения через запятую:
+//
+//	"fot_plan", "labor_days", "rate_per_day",
+//	"fot_plan,labor_days", "fot_plan,rate_per_day", "labor_days,rate_per_day"
 func (s *StageCostService) Recalculate(c *models.StageCost) {
-	if c.RatePerDay > 0 && c.LaborDays > 0 {
-		c.FOTPlan = c.RatePerDay * c.LaborDays
-	}
-	if c.Cost > 0 {
-		c.FOTRatio = c.FOTPlan / c.Cost
-		if c.FOTRatio > 1 {
-			c.FOTRatio = 1
+	locks := parseLocks(c.LockedField)
+
+	hasFOT := locks["fot_plan"]
+	hasDays := locks["labor_days"]
+	hasRate := locks["rate_per_day"]
+
+	switch {
+	// --- Два замочка ---
+	case hasFOT && hasDays:
+		// зафиксированы ФОТп и т/з → ставка вычисляется
+		if c.LaborDays > 0 {
+			c.RatePerDay = c.FOTPlan / c.LaborDays
+		}
+
+	case hasFOT && hasRate:
+		// зафиксированы ФОТп и ставка → вычисляется т/з
+		if c.RatePerDay > 0 {
+			c.LaborDays = c.FOTPlan / c.RatePerDay
+		}
+
+	case hasDays && hasRate:
+		// зафиксированы т/з и ставка → вычисляется ФОТп
+		c.FOTPlan = c.LaborDays * c.RatePerDay
+
+	// --- Один замочек ---
+	case hasFOT:
+		if c.LaborDays > 0 {
+			c.RatePerDay = c.FOTPlan / c.LaborDays
+		}
+
+	case hasDays:
+		if c.LaborDays > 0 {
+			c.RatePerDay = c.FOTPlan / c.LaborDays
+		}
+
+	case hasRate:
+		if c.LaborDays > 0 {
+			c.FOTPlan = c.RatePerDay * c.LaborDays
+		}
+
+	// --- Ничего не зафиксировано ---
+	default:
+		if c.RatePerDay > 0 && c.LaborDays > 0 {
+			c.FOTPlan = c.RatePerDay * c.LaborDays
 		}
 	}
 }
 
+func parseLocks(s string) map[string]bool {
+	res := map[string]bool{}
+	for _, part := range strings.Split(s, ",") {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			res[part] = true
+		}
+	}
+	return res
+}
+
 func (s *StageCostService) ReplaceForStage(ctx context.Context, stageGUID string, costs []models.StageCost) error {
-	// валидация + пересчёт
+	// проверка дублей вида работы
+	seen := map[string]bool{}
+	for _, c := range costs {
+		if seen[c.WorkKindCode] {
+			return ErrStageCostDuplicateWorkKind
+		}
+		seen[c.WorkKindCode] = true
+	}
+
 	for i := range costs {
 		s.Recalculate(&costs[i])
 		if err := s.Validate(&costs[i]); err != nil {

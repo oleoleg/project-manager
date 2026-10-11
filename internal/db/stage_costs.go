@@ -18,20 +18,20 @@ func NewStageCostRepo(pool *pgxpool.Pool) *StageCostRepo {
 }
 
 const stageCostColumns = `
-	guid, stage_guid, work_kind_code, cost, fot_plan, fot_ratio,
+	guid, stage_guid, work_kind_code, cost, fot_plan, 
 	labor_days, rate_per_day, travel_expenses,
 	equipment_sale, equipment_cost, subcontract, commission, other_expenses,
-	created_at, updated_at
+	locked_field, created_at, updated_at
 `
 
 func scanStageCost(row interface {
 	Scan(dest ...any) error
 }, c *models.StageCost) error {
 	return row.Scan(
-		&c.GUID, &c.StageGUID, &c.WorkKindCode, &c.Cost, &c.FOTPlan, &c.FOTRatio,
+		&c.GUID, &c.StageGUID, &c.WorkKindCode, &c.Cost, &c.FOTPlan,
 		&c.LaborDays, &c.RatePerDay, &c.TravelExpenses,
 		&c.EquipmentSale, &c.EquipmentCost, &c.Subcontract, &c.Commission, &c.OtherExpenses,
-		&c.CreatedAt, &c.UpdatedAt,
+		&c.LockedField, &c.CreatedAt, &c.UpdatedAt,
 	)
 }
 
@@ -73,14 +73,14 @@ func (r *StageCostRepo) ReplaceForStage(ctx context.Context, stageGUID string, c
 	for _, c := range costs {
 		_, err := tx.Exec(ctx, `
 			INSERT INTO stage_costs (
-				stage_guid, work_kind_code, cost, fot_plan, fot_ratio,
+				stage_guid, work_kind_code, cost, fot_plan, 
 				labor_days, rate_per_day, travel_expenses,
-				equipment_sale, equipment_cost, subcontract, commission, other_expenses
+				equipment_sale, equipment_cost, subcontract, commission, other_expenses, locked_field
 			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
 		`,
-			stageGUID, c.WorkKindCode, c.Cost, c.FOTPlan, c.FOTRatio,
+			stageGUID, c.WorkKindCode, c.Cost, c.FOTPlan,
 			c.LaborDays, c.RatePerDay, c.TravelExpenses,
-			c.EquipmentSale, c.EquipmentCost, c.Subcontract, c.Commission, c.OtherExpenses,
+			c.EquipmentSale, c.EquipmentCost, c.Subcontract, c.Commission, c.OtherExpenses, c.LockedField,
 		)
 		if err != nil {
 			return fmt.Errorf("insert stage cost: %w", err)

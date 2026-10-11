@@ -97,6 +97,36 @@ func (h *StageHandler) List(w http.ResponseWriter, r *http.Request) {
 	data["WorkKindName"] = func(code string) string { return workKindName(workKinds, code) }
 	data["Flash"] = r.URL.Query().Get("flash")
 	data["CostTotals"] = costTotals
+
+	// Режим НДС: "with" или "without" (по умолчанию "without")
+	vatMode := r.URL.Query().Get("vat")
+	if vatMode != "with" {
+		vatMode = "without"
+	}
+	data["VATMode"] = vatMode
+
+	// Определяем единую ставку НДС по всем этапам договора.
+	// Если все этапы имеют одинаковую ставку — показываем её в карточке-итоге.
+	// Если разные — «смешанный НДС». Если этапов нет — НДС не начисляется.
+	var vatSingle float64
+	var vatMixed bool
+	seen := map[float64]bool{}
+	for _, s := range stages {
+		seen[s.VATPercent] = true
+	}
+	switch len(seen) {
+	case 0:
+		vatSingle = 0
+	case 1:
+		for k := range seen {
+			vatSingle = k
+		}
+	default:
+		vatMixed = true
+	}
+	data["VatSingle"] = vatSingle
+	data["VatMixed"] = vatMixed
+
 	h.render(w, "stages_list.html", data)
 }
 
@@ -385,7 +415,6 @@ func parseStageCostsForm(r *http.Request) []models.StageCost {
 	workKinds := r.Form["cost_work_kind"]
 	amounts := r.Form["cost_amount"]
 	fotPlans := r.Form["cost_fot_plan"]
-	ratios := r.Form["cost_fot_ratio"]
 	days := r.Form["cost_labor_days"]
 	rates := r.Form["cost_rate_per_day"]
 	travels := r.Form["cost_travel"]
@@ -394,6 +423,7 @@ func parseStageCostsForm(r *http.Request) []models.StageCost {
 	subs := r.Form["cost_subcontract"]
 	comms := r.Form["cost_commission"]
 	others := r.Form["cost_other"]
+	locked := r.Form["cost_locked"]
 
 	n := len(workKinds)
 	res := make([]models.StageCost, 0, n)
@@ -406,7 +436,6 @@ func parseStageCostsForm(r *http.Request) []models.StageCost {
 			WorkKindCode:   wc,
 			Cost:           parseMoneyOrZero(getSlice(amounts, i)),
 			FOTPlan:        parseMoneyOrZero(getSlice(fotPlans, i)),
-			FOTRatio:       parseRatioOrZero(getSlice(ratios, i)),
 			LaborDays:      parseMoneyOrZero(getSlice(days, i)),
 			RatePerDay:     parseMoneyOrZero(getSlice(rates, i)),
 			TravelExpenses: parseMoneyOrZero(getSlice(travels, i)),
@@ -415,6 +444,7 @@ func parseStageCostsForm(r *http.Request) []models.StageCost {
 			Subcontract:    parseMoneyOrZero(getSlice(subs, i)),
 			Commission:     parseMoneyOrZero(getSlice(comms, i)),
 			OtherExpenses:  parseMoneyOrZero(getSlice(others, i)),
+			LockedField:    getSlice(locked, i),
 		})
 	}
 	return res
@@ -435,20 +465,6 @@ func parseMoneyOrZero(s string) float64 {
 	return v
 }
 
-func parseRatioOrZero(s string) float64 {
-	v, err := services.ParseMoney(s)
-	if err != nil {
-		return 0
-	}
-	if v > 1 {
-		v = 1
-	}
-	if v < 0 {
-		v = 0
-	}
-	return v
-}
-
 func humanizeStageCostError(err error) string {
 	switch {
 	case errors.Is(err, services.ErrStageCostWorkKindEmpty):
@@ -457,8 +473,8 @@ func humanizeStageCostError(err error) string {
 		return "В затратах нельзя выбрать «Комплексный» вид работы"
 	case errors.Is(err, services.ErrStageCostNegative):
 		return "Суммы в затратах не могут быть отрицательными"
-	case errors.Is(err, services.ErrStageCostRatioRange):
-		return "Коэффициент должен быть в диапазоне 0..1"
+	case errors.Is(err, services.ErrStageCostDuplicateWorkKind):
+		return "Вид работы не может повторяться в одном этапе"
 	}
 	return "Затраты: " + err.Error()
 }

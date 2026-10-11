@@ -129,3 +129,7 @@ func (s *UserService) ToggleActive(ctx context.Context, userID, currentUserID in
 	}
 	return s.repo.ToggleActive(ctx, userID)
 }
+
+func (s *UserService) SetHideFinancials(ctx context.Context, userID int64, hide bool) error {
+	return s.repo.UpdateHideFinancials(ctx, userID, hide)
+}

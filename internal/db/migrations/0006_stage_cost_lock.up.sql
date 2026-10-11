@@ -1,0 +1,2 @@
+ALTER TABLE stage_costs
+    ADD COLUMN IF NOT EXISTS locked_field TEXT NOT NULL DEFAULT '';

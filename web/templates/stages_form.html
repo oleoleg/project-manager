@@ -8,14 +8,8 @@
 </p>
 
 <div class="page-header">
-    <p class="back-link">
-        <a href="{{ if $isNew }}/contracts/{{ .Contract.ID }}/stages{{ else }}/contracts/{{ .Contract.ID }}/stages{{ end }}">← Назад</a>
-    </p>
     <h2>{{ if $isNew }}Новый этап{{ else }}Этап: {{ $s.Name }}{{ end }}</h2>
 </div>
-<p class="back-link">
-    <a href="{{ if $isNew }}/contracts/{{ .Contract.ID }}/stages{{ else }}/contracts/{{ .Contract.ID }}/stages{{ end }}">← Назад</a>
-</p>
 
 <p class="breadcrumb">
     <a href="/contracts">Договоры</a> →
@@ -107,31 +101,33 @@
 
     <h3 class="form-section-title">Затраты этапа</h3>
     <p class="hint">
-        ФОТп = Ставка × т/з (если они заданы), коэф = ФОТп / Стоимость работ.
-        Значения в столбце «Стоимость работ» берутся из сметы.
+        ФОТп = Ставка × т/з. Коэф = ФОТп / Стоимость работ — вычисляется автоматически.
+        Замок 🔒 фиксирует поле; можно зафиксировать любое одно или два из трёх: ФОТп, т/з, ставка.
     </p>
 
-    <label class="inline-checkbox">
-        <input type="checkbox" id="costs-compact-toggle">
-        Компактный вид (скрыть второстепенные столбцы)
-    </label>
+    <div class="costs-toolbar">
+        <label class="inline-checkbox">
+            <input type="checkbox" id="costs-compact-toggle">
+            Компактный вид (скрыть коэф / т/з / ставка)
+        </label>
+    </div>
 
     <div class="costs-table-wrapper">
         <table class="costs-table" id="costs-table">
             <thead>
             <tr>
                 <th>Вид работы</th>
-                <th>Стоимость работ</th>
+                <th>Стоимость работ<br><small class="th-sub">продажа, ₽</small></th>
                 <th>ФОТп</th>
-                <th>Коэф</th>
-                <th>т/з, дни</th>
-                <th>Ставка ₽/день</th>
-                <th class="col-optional">Командир.</th>
+                <th class="col-optional">коэф</th>
+                <th class="col-optional">т/з, дни</th>
+                <th class="col-optional">Ставка ₽/день</th>
+                <th>Командир.</th>
                 <th class="col-optional">Обор. (прод.)</th>
-                <th class="col-optional">Обор. (себест.)</th>
-                <th class="col-optional">Субподряд</th>
-                <th class="col-optional">Комиссия</th>
-                <th class="col-optional">Другое</th>
+                <th>Обор. (себест.)</th>
+                <th>Субподряд</th>
+                <th>Комиссия</th>
+                <th>Другое</th>
                 <th></th>
             </tr>
             </thead>
@@ -151,17 +147,52 @@
                             <span class="cost-workkind-static">{{ workKindLabel $.WorkKinds $s.WorkKindCode }}</span>
                         {{ end }}
                     </td>
-                    <td><input type="text" name="cost_amount" class="money-input" value="{{ if $cost.Cost }}{{ printf "%.2f" $cost.Cost }}{{ end }}"></td>
-                    <td><input type="text" name="cost_fot_plan" class="money-input" value="{{ if $cost.FOTPlan }}{{ printf "%.2f" $cost.FOTPlan }}{{ end }}"></td>
-                    <td><input type="text" name="cost_fot_ratio" value="{{ if $cost.FOTRatio }}{{ printf "%.4f" $cost.FOTRatio }}{{ end }}"></td>
-                    <td><input type="text" name="cost_labor_days" class="money-input" value="{{ if $cost.LaborDays }}{{ printf "%.2f" $cost.LaborDays }}{{ end }}"></td>
-                    <td><input type="text" name="cost_rate_per_day" class="money-input" value="{{ if $cost.RatePerDay }}{{ printf "%.2f" $cost.RatePerDay }}{{ end }}"></td>
-                    <td class="col-optional"><input type="text" name="cost_travel" class="money-input" value="{{ if $cost.TravelExpenses }}{{ printf "%.2f" $cost.TravelExpenses }}{{ end }}"></td>
-                    <td class="col-optional"><input type="text" name="cost_equipment_sale" class="money-input" value="{{ if $cost.EquipmentSale }}{{ printf "%.2f" $cost.EquipmentSale }}{{ end }}"></td>
-                    <td class="col-optional"><input type="text" name="cost_equipment_cost" class="money-input" value="{{ if $cost.EquipmentCost }}{{ printf "%.2f" $cost.EquipmentCost }}{{ end }}"></td>
-                    <td class="col-optional"><input type="text" name="cost_subcontract" class="money-input" value="{{ if $cost.Subcontract }}{{ printf "%.2f" $cost.Subcontract }}{{ end }}"></td>
-                    <td class="col-optional"><input type="text" name="cost_commission" class="money-input" value="{{ if $cost.Commission }}{{ printf "%.2f" $cost.Commission }}{{ end }}"></td>
-                    <td class="col-optional"><input type="text" name="cost_other" class="money-input" value="{{ if $cost.OtherExpenses }}{{ printf "%.2f" $cost.OtherExpenses }}{{ end }}"></td>
+
+                    <td>
+                        <input type="text" name="cost_amount" class="money-input"
+                               value="{{ if $cost.Cost }}{{ printf "%.2f" $cost.Cost }}{{ end }}">
+                    </td>
+
+                    <td class="cell-fot">
+                        <input type="text" name="cost_fot_plan" class="money-input"
+                               value="{{ if $cost.FOTPlan }}{{ printf "%.2f" $cost.FOTPlan }}{{ end }}">
+                        <button type="button"
+                                class="lock-btn {{ if containsLock $cost.LockedField "fot_plan" }}locked{{ end }}"
+                                data-field="fot_plan"
+                                title="Зафиксировать ФОТп">🔓</button>
+                        <input type="hidden" name="cost_locked" value="{{ $cost.LockedField }}">
+                    </td>
+
+                    <td class="cell-ratio col-lockable">
+                        <input type="text" class="ratio-display"
+                               value="{{ if and $cost.Cost $cost.FOTPlan }}{{ printf "%.2f" (div $cost.FOTPlan $cost.Cost) }}{{ end }}"
+                               readonly tabindex="-1">
+                    </td>
+
+                    <td class="cell-days col-lockable">
+                        <input type="text" name="cost_labor_days" class="money-input"
+                               value="{{ if $cost.LaborDays }}{{ printf "%.2f" $cost.LaborDays }}{{ end }}">
+                        <button type="button"
+                                class="lock-btn {{ if containsLock $cost.LockedField "labor_days" }}locked{{ end }}"
+                                data-field="labor_days"
+                                title="Зафиксировать т/з">🔓</button>
+                    </td>
+
+                    <td class="cell-rate col-lockable">
+                        <input type="text" name="cost_rate_per_day" class="money-input"
+                               value="{{ if $cost.RatePerDay }}{{ printf "%.2f" $cost.RatePerDay }}{{ end }}">
+                        <button type="button"
+                                class="lock-btn {{ if containsLock $cost.LockedField "rate_per_day" }}locked{{ end }}"
+                                data-field="rate_per_day"
+                                title="Зафиксировать ставку">🔓</button>
+                    </td>
+
+                    <td><input type="text" name="cost_travel" class="money-input" value="{{ if $cost.TravelExpenses }}{{ printf "%.2f" $cost.TravelExpenses }}{{ end }}"></td>
+                    <td class="col-optional col-lockable"><input type="text" name="cost_equipment_sale" class="money-input" value="{{ if $cost.EquipmentSale }}{{ printf "%.2f" $cost.EquipmentSale }}{{ end }}"></td>
+                    <td><input type="text" name="cost_equipment_cost" class="money-input" value="{{ if $cost.EquipmentCost }}{{ printf "%.2f" $cost.EquipmentCost }}{{ end }}"></td>
+                    <td><input type="text" name="cost_subcontract" class="money-input" value="{{ if $cost.Subcontract }}{{ printf "%.2f" $cost.Subcontract }}{{ end }}"></td>
+                    <td><input type="text" name="cost_commission" class="money-input" value="{{ if $cost.Commission }}{{ printf "%.2f" $cost.Commission }}{{ end }}"></td>
+                    <td><input type="text" name="cost_other" class="money-input" value="{{ if $cost.OtherExpenses }}{{ printf "%.2f" $cost.OtherExpenses }}{{ end }}"></td>
                     <td>
                         <button type="button" class="btn btn-sm btn-danger cost-remove" title="Удалить">×</button>
                     </td>
@@ -171,7 +202,14 @@
         </table>
     </div>
 
+    <p class="hint">
+        Стоимость работ — продажа по виду работ (без НДС).
+        Для некомплексного этапа должна быть равна стоимости этапа.
+        Затраты (ФОТп, командировочные, оборудование себест., субподряд, комиссия, другое) — себестоимость.
+    </p>
+
     <div class="warning" id="costs-overrun-warning" style="display: none;"></div>
+    <div class="warning" id="costs-sale-mismatch-warning" style="display: none;"></div>
 
     {{ if isComplexWork $s.WorkKindCode }}
     <p>
@@ -197,7 +235,59 @@
         }
     })();
 
-    // 2. Пересчёт ФОТп / коэф / ставки внутри строки затрат + проверка превышения
+    // 2. Замки на ФОТп / т/з / ставку (до двух одновременно)
+    (function () {
+        const body = document.getElementById('costs-body');
+        if (!body) return;
+
+        function refreshRow(row) {
+            const hidden = row.querySelector('input[name="cost_locked"]');
+            if (!hidden) return;
+            const set = (hidden.value || '').split(',').map(s => s.trim()).filter(Boolean);
+            row.querySelectorAll('.lock-btn').forEach(b => {
+                if (set.includes(b.dataset.field)) {
+                    b.classList.add('locked');
+                    b.textContent = '🔒';
+                } else {
+                    b.classList.remove('locked');
+                    b.textContent = '🔓';
+                }
+            });
+        }
+
+        body.addEventListener('click', (e) => {
+            const btn = e.target.closest('.lock-btn');
+            if (!btn) return;
+            e.preventDefault();
+
+            const row = btn.closest('.cost-row');
+            const hidden = row.querySelector('input[name="cost_locked"]');
+            if (!hidden) return;
+
+            const field = btn.dataset.field;
+            let set = (hidden.value || '').split(',').map(s => s.trim()).filter(Boolean);
+
+            if (set.includes(field)) {
+                set = set.filter(f => f !== field);
+            } else {
+                if (set.length >= 2) {
+                    alert('Можно зафиксировать не больше двух параметров.');
+                    return;
+                }
+                set.push(field);
+            }
+            hidden.value = set.join(',');
+            refreshRow(row);
+
+            // после изменения замков — пересчитываем строку
+            row.dispatchEvent(new Event('recalc-request', { bubbles: true }));
+        });
+
+        // синхронизация иконок при загрузке
+        body.querySelectorAll('.cost-row').forEach(refreshRow);
+    })();
+
+    // 3. Пересчёт ФОТп / т/з / ставки + коэф + проверка превышения
     (function () {
         const body = document.getElementById('costs-body');
         if (!body) return;
@@ -208,6 +298,14 @@
             const v = parseFloat(s);
             return isNaN(v) ? 0 : v;
         }
+        
+        // Применяет форматирование к полю, если оно зарегистрировано как money-input
+        function formatMoneyEl(el) {
+            if (!el) return;
+            if (window.formatMoney && el.classList.contains('money-input')) {
+                el.value = window.formatMoney(el.value);
+            }
+        }
 
         function setVal(el, v) {
             if (v > 0 || v < 0) {
@@ -215,77 +313,226 @@
             } else {
                 el.value = '';
             }
+            formatMoneyEl(el);
+        }
+
+        function updateRatio(row) {
+            const amountEl = row.querySelector('[name="cost_amount"]');
+            const fotEl    = row.querySelector('[name="cost_fot_plan"]');
+            const ratioEl  = row.querySelector('.ratio-display');
+            if (!ratioEl) return;
+            const amount = num(amountEl.value);
+            const fot    = num(fotEl.value);
+            ratioEl.value = amount > 0 ? (fot / amount).toFixed(2) : '';
+        }
+
+       function recalcRow(row, changedName) {
+            const fotEl  = row.querySelector('[name="cost_fot_plan"]');
+            const daysEl = row.querySelector('[name="cost_labor_days"]');
+            const rateEl = row.querySelector('[name="cost_rate_per_day"]');
+            const lockEl = row.querySelector('input[name="cost_locked"]');
+
+            const locks = (lockEl.value || '').split(',').map(s => s.trim()).filter(Boolean);
+            const hasFOT  = locks.includes('fot_plan');
+            const hasDays = locks.includes('labor_days');
+            const hasRate = locks.includes('rate_per_day');
+
+            const days = num(daysEl.value);
+            const rate = num(rateEl.value);
+            const fot  = num(fotEl.value);
+
+            // --- Два замочка ---
+            if (hasFOT && hasDays) {
+                if (days > 0) {
+                    rateEl.value = (fot / days).toFixed(2);
+                    formatMoneyEl(rateEl);
+                }
+                updateRatio(row);
+                return;
+            }
+            if (hasFOT && hasRate) {
+                if (rate > 0) {
+                    daysEl.value = (fot / rate).toFixed(2);
+                    formatMoneyEl(daysEl);
+                }
+                updateRatio(row);
+                return;
+            }
+            if (hasDays && hasRate) {
+                setVal(fotEl, days * rate);
+                updateRatio(row);
+                return;
+            }
+
+            // --- Один замочек ---
+            if (hasFOT) {
+                // ФОТп зафиксирован — при вводе т/з или ставки пересчитываем ставку/т/з
+                if (changedName === 'cost_labor_days') {
+                    if (days > 0) {
+                        rateEl.value = (fot / days).toFixed(2);
+                        formatMoneyEl(rateEl);
+                    }
+                } else if (changedName === 'cost_rate_per_day') {
+                    if (rate > 0) {
+                        daysEl.value = (fot / rate).toFixed(2);
+                        formatMoneyEl(daysEl);
+                    }
+                }
+                updateRatio(row);
+                return;
+            }
+            if (hasDays) {
+                // т/з зафиксированы — при вводе ФОТп пересчитываем ставку
+                if (changedName === 'cost_fot_plan') {
+                    if (days > 0) {
+                        rateEl.value = (fot / days).toFixed(2);
+                        formatMoneyEl(rateEl);
+                    }
+                } else if (changedName === 'cost_rate_per_day') {
+                    // Ставку меняют — а т/з фиксирован → пересчитываем ФОТп
+                    setVal(fotEl, days * rate);
+                }
+                updateRatio(row);
+                return;
+            }
+            if (hasRate) {
+                // Ставка зафиксирована — при вводе т/з или ФОТп пересчитываем недостающее
+                if (changedName === 'cost_labor_days') {
+                    setVal(fotEl, rate * days);
+                } else if (changedName === 'cost_fot_plan') {
+                    // Ручной ввод ФОТп при фиксированной ставке → пересчитываем т/з
+                    if (rate > 0) {
+                        daysEl.value = (fot / rate).toFixed(2);
+                        formatMoneyEl(daysEl);
+                    }
+                }
+                updateRatio(row);
+                return;
+            }
+
+            // --- Без замочков ---
+            if (changedName === 'cost_fot_plan') {
+                // Ручной ввод ФОТп → пересчитываем т/з, если задана ставка
+                if (rate > 0) {
+                    daysEl.value = (fot / rate).toFixed(2);
+                    formatMoneyEl(daysEl);
+                }
+            } else if (changedName === 'cost_labor_days' || changedName === 'cost_rate_per_day') {
+                if (days > 0 && rate > 0) {
+                    setVal(fotEl, days * rate);
+                }
+            }
+
+            updateRatio(row);
+        }
+
+        function sumByField(field) {
+            let sum = 0;
+            body.querySelectorAll('.cost-row').forEach(r => {
+                const el = r.querySelector('[name="' + field + '"]');
+                if (el) sum += num(el.value);
+            });
+            return sum;
+        }
+
+        function sumExpenses() {
+            // Себестоимость: ФОТп + Командир. + Обор. (себест.) + Субподряд + Комиссия + Другое
+            let sum = 0;
+            body.querySelectorAll('.cost-row').forEach(r => {
+                sum += num(r.querySelector('[name="cost_fot_plan"]').value);
+                sum += num(r.querySelector('[name="cost_travel"]').value);
+                sum += num(r.querySelector('[name="cost_equipment_cost"]').value);
+                sum += num(r.querySelector('[name="cost_subcontract"]').value);
+                sum += num(r.querySelector('[name="cost_commission"]').value);
+                sum += num(r.querySelector('[name="cost_other"]').value);
+            });
+            return sum;
+        }
+
+        function sumSale() {
+            // Продажа (то, что закладываем в стоимость этапа):
+            // Стоимость работ + Командир. + Обор. (продажа) + Субподряд + Комиссия + Другое
+            let sum = 0;
+            body.querySelectorAll('.cost-row').forEach(r => {
+                sum += num(r.querySelector('[name="cost_amount"]').value);
+                sum += num(r.querySelector('[name="cost_travel"]').value);
+                sum += num(r.querySelector('[name="cost_equipment_sale"]').value);
+                sum += num(r.querySelector('[name="cost_subcontract"]').value);
+                sum += num(r.querySelector('[name="cost_commission"]').value);
+                sum += num(r.querySelector('[name="cost_other"]').value);
+            });
+            return sum;
         }
 
         function checkOverrun() {
-            const stageCostEl = document.querySelector('input[name="cost"]');
-            const stageCost = num(stageCostEl ? stageCostEl.value : 0);
-            let totalCosts = 0;
-            body.querySelectorAll('.cost-row').forEach(r => {
-                totalCosts += num(r.querySelector('[name="cost_amount"]').value);
-            });
-            const warn = document.getElementById('costs-overrun-warning');
-            if (warn) {
-                if (stageCost > 0 && totalCosts > stageCost) {
-                    warn.textContent = 'Внимание: суммарные затраты (' + totalCosts.toFixed(2) +
+            const stageCostEl   = document.querySelector('input[name="cost"]');
+            const stageCost     = num(stageCostEl ? stageCostEl.value : 0);
+            const totalExpenses = sumExpenses();
+
+            const w1 = document.getElementById('costs-overrun-warning');
+            if (w1) {
+                if (stageCost > 0 && totalExpenses > stageCost) {
+                    w1.textContent = 'Внимание: затраты (' + totalExpenses.toFixed(2) +
                         ' ₽) превышают стоимость этапа (' + stageCost.toFixed(2) +
-                        ' ₽). Этап будет убыточным.';
-                    warn.style.display = 'block';
+                        ' ₽). Этап убыточный.';
+                    w1.style.display = 'block';
                 } else {
-                    warn.style.display = 'none';
+                    w1.style.display = 'none';
                 }
             }
         }
 
+        function checkSaleMismatch() {
+            const stageCostEl = document.querySelector('input[name="cost"]');
+            const stageCost   = num(stageCostEl ? stageCostEl.value : 0);
+            const totalSale   = sumSale();
+
+            const w2 = document.getElementById('costs-sale-mismatch-warning');
+            if (!w2) return;
+
+            if (stageCost > 0 && totalSale > 0 && Math.abs(stageCost - totalSale) > 0.01) {
+                w2.textContent = 'Внимание: сумма разложения по строкам (' + totalSale.toFixed(2) +
+                    ' ₽) не совпадает со стоимостью этапа (' + stageCost.toFixed(2) +
+                    ' ₽). Можно сохранить, но проверьте смету.';
+                w2.style.display = 'block';
+            } else {
+                w2.style.display = 'none';
+            }
+        }
+
+        function checkAll() {
+            checkOverrun();
+            checkSaleMismatch();
+        }
         body.addEventListener('input', (e) => {
             const row = e.target.closest('.cost-row');
             if (!row) return;
-
-            const amountEl = row.querySelector('[name="cost_amount"]');
-            const fotEl    = row.querySelector('[name="cost_fot_plan"]');
-            const ratioEl  = row.querySelector('[name="cost_fot_ratio"]');
-            const daysEl   = row.querySelector('[name="cost_labor_days"]');
-            const rateEl   = row.querySelector('[name="cost_rate_per_day"]');
-
-            const amount = num(amountEl.value);
-            const days   = num(daysEl.value);
-            const rate   = num(rateEl.value);
-            const fot    = num(fotEl.value);
-            const ratio  = num(ratioEl.value);
-
-            const name = e.target.name;
-
-            if (name === 'cost_labor_days' || name === 'cost_rate_per_day') {
-                if (days > 0 && rate > 0) {
-                    const newFot = days * rate;
-                    setVal(fotEl, newFot);
-                    if (amount > 0) {
-                        ratioEl.value = (newFot / amount).toFixed(4);
-                    }
-                }
-            } else if (name === 'cost_fot_plan') {
-                if (amount > 0) {
-                    ratioEl.value = (fot / amount).toFixed(4);
-                }
-            } else if (name === 'cost_fot_ratio') {
-                if (amount > 0) {
-                    const newFot = ratio * amount;
-                    setVal(fotEl, newFot);
-                    if (days > 0) {
-                        rateEl.value = (newFot / days).toFixed(2);
-                    }
-                }
-            }
-
-            checkOverrun();
+            recalcRow(row, e.target.name);
+            checkAll();         // <-- вызываем оба предупреждения
         });
 
-        // также при вводе стоимости этапа
+        body.addEventListener('change', (e) => {
+            const row = e.target.closest('.cost-row');
+            if (!row) return;
+            recalcRow(row, e.target.name);
+            checkAll();
+        });
+
+        body.addEventListener('recalc-request', (e) => {
+            const row = e.target.closest('.cost-row');
+            if (!row) return;
+            recalcRow(row, '');
+        });
+
         const stageCostEl = document.querySelector('input[name="cost"]');
-        if (stageCostEl) stageCostEl.addEventListener('input', checkOverrun);
+        if (stageCostEl) stageCostEl.addEventListener('input', checkAll);
+
+        // первичный расчёт при загрузке
+        body.querySelectorAll('.cost-row').forEach(row => recalcRow(row, ''));
+        checkAll();
     })();
 
-    // 3. Добавление/удаление строк затрат
+    // 4. Добавление / удаление строк
     (function () {
         const body = document.getElementById('costs-body');
         const addBtn = document.getElementById('cost-add');
@@ -294,8 +541,16 @@
         function makeRow() {
             const tpl = body.querySelector('.cost-row');
             const row = tpl ? tpl.cloneNode(true) : document.createElement('tr');
-            row.querySelectorAll('input').forEach(i => { i.value = ''; });
+            row.querySelectorAll('input').forEach(i => {
+                if (i.type === 'hidden') { i.value = ''; return; }
+                i.value = '';
+            });
             row.querySelectorAll('select').forEach(s => { s.selectedIndex = 0; });
+            row.querySelectorAll('.lock-btn').forEach(b => {
+                b.classList.remove('locked');
+                b.textContent = '🔓';
+            });
+            row.querySelector('.ratio-display') && (row.querySelector('.ratio-display').value = '');
             row.classList.add('cost-row');
             return row;
         }

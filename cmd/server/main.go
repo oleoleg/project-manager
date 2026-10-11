@@ -104,6 +104,45 @@ func main() {
 			}
 			return code
 		},
+		"moneyOrBlur": func(u *models.User, v float64) template.HTML {
+			if u != nil && u.HideFinancials {
+				return template.HTML(`<span class="money-blur" title="Скрыто">•••••••</span>`)
+			}
+			s := strconv.FormatFloat(v, 'f', 2, 64)
+			return template.HTML(groupThousands(s) + " ₽")
+		},
+
+		// vatHint — подпись к сумме с учётом режима и ставки НДС.
+		//   vatPercent == 0              -> "НДС не начисляется"
+		//   mode == "with"               -> "в т.ч. НДС 22%"
+		//   mode == "without"            -> "без НДС (НДС 22%)"
+		"vatHint": func(vatPercent float64, mode string) string {
+			if vatPercent <= 0 {
+				return "НДС не начисляется"
+			}
+			// Форматируем процент: без лишних нулей после запятой.
+			// 22   -> "22"
+			// 22.5 -> "22.5"
+			p := strconv.FormatFloat(vatPercent, 'f', -1, 64)
+			if mode == "with" {
+				return "в т.ч. НДС " + p + "%"
+			}
+			return "без НДС (НДС " + p + "%)"
+		},
+		"div": func(a, b float64) float64 {
+			if b == 0 {
+				return 0
+			}
+			return a / b
+		},
+		"containsLock": func(locked, field string) bool {
+			for _, p := range strings.Split(locked, ",") {
+				if strings.TrimSpace(p) == field {
+					return true
+				}
+			}
+			return false
+		},
 	})
 
 	parsed, err := tmpl.ParseGlob(filepath.Join("web", "templates", "*.html"))
@@ -192,6 +231,7 @@ func main() {
 		// --- Настройки пользователя ---
 		r.Get("/settings", settingsH.Index)
 		r.Post("/settings/theme", settingsH.SaveTheme)
+		r.Post("/settings/privacy", settingsH.SavePrivacy)
 
 		// --- Контрагенты: просмотр доступен всем ролям ---
 		r.Get("/counterparties", counterpartyH.List)

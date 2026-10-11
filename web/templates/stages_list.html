@@ -2,6 +2,10 @@
 {{ template "layout_header" . }}
 {{ $c := .Contract }}
 
+<p class="back-link">
+    <a href="/contracts/{{ $c.ID }}">← К договору</a>
+</p>
+
 <div class="page-header">
     <div class="contract-title">
         <h2>
@@ -21,9 +25,15 @@
             {{ end }}
         </p>
     </div>
-    {{ if or (eq .User.RoleCode "admin") (eq .User.RoleCode "rp_chief") (eq .User.RoleCode "rp") }}
-        <a href="/contracts/{{ $c.ID }}/stages/new" class="btn btn-primary">+ Новый этап</a>
-    {{ end }}
+    <div class="actions">
+        <div class="vat-toggle">
+            <a href="?vat=without" class="btn btn-sm {{ if ne .VATMode "with" }}active{{ end }}">Без НДС</a>
+            <a href="?vat=with"    class="btn btn-sm {{ if eq .VATMode "with" }}active{{ end }}">С НДС</a>
+        </div>
+        {{ if or (eq .User.RoleCode "admin") (eq .User.RoleCode "rp_chief") (eq .User.RoleCode "rp") }}
+            <a href="/contracts/{{ $c.ID }}/stages/new" class="btn btn-primary">+ Новый этап</a>
+        {{ end }}
+    </div>
 </div>
 
 <p class="breadcrumb">
@@ -34,42 +44,85 @@
 
 <div class="totals">
     <div class="total-card"><span>Этапов</span><strong>{{ .Totals.Count }}</strong></div>
-    <div class="total-card"><span>Общая стоимость</span><strong>{{ money .Totals.TotalCost }}</strong></div>
-    <div class="total-card"><span>Закрыто по актам</span><strong>{{ money .Totals.TotalClosed }}</strong></div>
+    <div class="total-card"><span>Стоимость</span>
+        <strong>
+            {{ if eq .VATMode "with" }}{{ money .Totals.TotalCostVAT }}{{ else }}{{ money .Totals.TotalCost }}{{ end }}
+        </strong>
+        <div class="vat-hint">
+            {{ if .VatMixed }}смешанный НДС{{ else }}{{ vatHint .VatSingle .VATMode }}{{ end }}
+        </div>
+    </div>
+    <div class="total-card"><span>Закрыто</span>
+        <strong>
+            {{ if eq .VATMode "with" }}{{ money .Totals.TotalClosedVAT }}{{ else }}{{ money .Totals.TotalClosed }}{{ end }}
+        </strong>
+        <div class="vat-hint">
+            {{ if .VatMixed }}смешанный НДС{{ else }}{{ vatHint .VatSingle .VATMode }}{{ end }}
+        </div>
+    </div>
+     <div class="total-card"><span>Остаток</span>
+        <strong>
+            {{ if eq .VATMode "with" }}{{ money .Totals.TotalRemainingVAT }}{{ else }}{{ money .Totals.TotalRemaining }}{{ end }}
+        </strong>
+        <div class="vat-hint">
+            {{ if .VatMixed }}смешанный НДС{{ else }}{{ vatHint .VatSingle .VATMode }}{{ end }}
+        </div>
+    </div>   
+    <div class="total-card"><span>Затраты (план)</span><strong>{{ moneyOrBlur .User .Totals.TotalExpenses }}</strong></div>
+    <div class="total-card"><span>Затраты (факт)</span><strong class="muted">—</strong></div>
 </div>
 
 {{ if .Stages }}
-<table class="data-table">
+<div class="table-scroll">
+<table class="data-table stages-table">
     <thead>
     <tr>
         <th>№</th>
-        <th>Наименование</th>
-        <th>Вид работы</th>
+        <th>Этап</th>
         <th class="num col-money">Стоимость</th>
         <th class="num col-money">Закрыто</th>
-        <th class="num col-money">Затраты</th>
-        <th>НДС %</th>
-        <th>Аванс %</th>
+        <th class="num col-money">Затраты (план)</th>
+        <th class="num col-money">Затраты (факт)</th>
         <th>Закрытие (план)</th>
-        <th>Ответственный</th>
-        <th>Статус</th> 
         <th></th>
     </tr>
     </thead>
     <tbody>
     {{ range .Stages }}
-        <tr>
+        {{ $muted := false }}
+        {{ if or (eq .StatusCode 0) (eq .StatusCode 3) (eq .StatusCode 5) }}{{ $muted = true }}{{ end }}
+        <tr class="{{ if $muted }}row-muted{{ end }}">
             <td>{{ .StageNumber }}</td>
-            <td>{{ .Name }}</td>
-            <td>{{ call $.WorkKindName .WorkKindCode }}</td>
-            <td class="num col-money">{{ money .Cost }}</td>
-            <td class="num col-money">{{ money .ClosedByActs }}</td>
-            <td class="num col-money">{{ money (index $.CostTotals .GUID) }}</td>
-            <td>{{ printf "%.2f" .VATPercent }}</td>
-            <td>{{ printf "%.2f" .AdvancePercent }}</td>
+            <td class="cell-stage">
+                <div class="stage-name">{{ .Name }}</div>
+                <div class="stage-tags">
+                    <span class="tag tag-work">{{ call $.WorkKindName .WorkKindCode }}</span>
+                    <span class="tag tag-status tag-status-{{ .StatusCode }}">{{ call $.StatusName .StatusCode }}</span>
+                    {{ if .ResponsiblePerson }}
+                        <span class="tag tag-resp">{{ .ResponsiblePerson }}</span>
+                    {{ end }}
+                </div>
+                {{ if .StartConditions }}
+                    <div class="stage-note"><span class="muted">Условия начала:</span> {{ .StartConditions }}</div>
+                {{ end }}
+                {{ if .EndConditions }}
+                    <div class="stage-note"><span class="muted">Условия окончания:</span> {{ .EndConditions }}</div>
+                {{ end }}
+                {{ if .Note }}
+                    <div class="stage-note"><span class="muted">Примечание:</span> {{ .Note }}</div>
+                {{ end }}
+            </td>
+            <td class="num col-money">
+                {{ if eq $.VATMode "with" }}{{ money (addVAT .Cost .VATPercent) }}{{ else }}{{ money .Cost }}{{ end }}
+                <div class="vat-hint">{{ vatHint .VATPercent $.VATMode }}</div>
+            </td>
+            <td class="num col-money">
+                {{ if eq $.VATMode "with" }}{{ money (addVAT .ClosedByActs .VATPercent) }}{{ else }}{{ money .ClosedByActs }}{{ end }}
+                <div class="vat-hint">{{ vatHint .VATPercent $.VATMode }}</div>
+            </td>
+            <td class="num col-money">{{ moneyOrBlur $.User (index $.CostTotals .GUID) }}</td>
+            <td class="num col-money muted">—</td>
             <td>{{ if .CloseDatePlan }}{{ .CloseDatePlan.Format "02.01.2006" }}{{ end }}</td>
-            <td>{{ .ResponsiblePerson }}</td>
-            <td>{{ call $.StatusName .StatusCode }}</td>
             <td class="actions">
                 {{ if or (eq $.User.RoleCode "admin") (eq $.User.RoleCode "rp_chief") (eq $.User.RoleCode "rp") }}
                     <form method="post" action="/contracts/{{ $.Contract.ID }}/stages/{{ .GUID }}/move?dir=up" class="inline">
@@ -82,8 +135,8 @@
                 {{ end }}
                 {{ if or (eq $.User.RoleCode "admin") (eq $.User.RoleCode "rp_chief") }}
                     <form method="post" action="/contracts/{{ $.Contract.ID }}/stages/{{ .GUID }}/delete"
-                        onsubmit="return confirm('Удалить этап «{{ .Name }}»?');" class="inline">
-                        <button type="submit" class="btn btn-sm btn-danger">Удалить</button>
+                          onsubmit="return confirm('Удалить этап «{{ .Name }}»?');" class="inline">
+                        <button type="submit" class="btn btn-sm btn-danger">×</button>
                     </form>
                 {{ end }}
             </td>
@@ -91,6 +144,7 @@
     {{ end }}
     </tbody>
 </table>
+</div>
 {{ else }}
 <p class="empty">Этапов пока нет. Добавь первый.</p>
 {{ end }}

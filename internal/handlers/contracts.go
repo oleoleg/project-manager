@@ -151,15 +151,17 @@ func (h *ContractHandler) Show(w http.ResponseWriter, r *http.Request) {
 	data["ShowAll"] = showAll
 	data["ShowCosts"] = showCosts
 
-	// Готовим единый список этапов с учётом showAll.
-	// Он используется и для проблемных, и для расширенной таблицы.
+	// Полный список этапов — используется и для VatSingle/VatMixed,
+	// и для подготовки problems/allStages.
+	allStagesForVAT, _ := h.stageSvc.List(r.Context(), c.ID)
+
+	// Единый список этапов для отображения, с учётом showAll.
 	var srcStages []models.Stage
 	if showAll {
-		srcStages, _ = h.stageSvc.List(r.Context(), c.ID)
+		srcStages = allStagesForVAT
 	} else {
 		// только «в работе» (все, кроме закрытых и гарантии)
-		all, _ := h.stageSvc.List(r.Context(), c.ID)
-		for _, s := range all {
+		for _, s := range allStagesForVAT {
 			if s.StatusCode == 3 || s.StatusCode == 5 {
 				continue
 			}
@@ -213,6 +215,28 @@ func (h *ContractHandler) Show(w http.ResponseWriter, r *http.Request) {
 
 	data["Problems"] = problems
 	data["AllStages"] = allStages
+
+	// Определяем единую ставку НДС по всем этапам договора.
+	// Если все этапы имеют одинаковую ставку — показываем её в карточке-итоге.
+	// Если разные — «смешанный НДС». Если этапов нет — НДС не начисляется.
+	var vatSingle float64
+	var vatMixed bool
+	seen := map[float64]bool{}
+	for _, s := range allStagesForVAT {
+		seen[s.VATPercent] = true
+	}
+	switch len(seen) {
+	case 0:
+		vatSingle = 0
+	case 1:
+		for k := range seen {
+			vatSingle = k
+		}
+	default:
+		vatMixed = true
+	}
+	data["VatSingle"] = vatSingle
+	data["VatMixed"] = vatMixed
 
 	h.render(w, "contracts_show.html", data)
 }

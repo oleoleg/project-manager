@@ -45,21 +45,30 @@
 <div class="totals">
     <div class="total-card"><span>Стоимость договора</span>
         <strong>
-            {{ if eq $vatMode "with" }}{{ money .Totals.TotalCostVAT }}{{ else }}{{ money .Totals.TotalCost }}{{ end }}
+            {{ if eq .VATMode "with" }}{{ money .Totals.TotalCostVAT }}{{ else }}{{ money .Totals.TotalCost }}{{ end }}
         </strong>
+        <div class="vat-hint">
+            {{ if .VatMixed }}смешанный НДС{{ else }}{{ vatHint .VatSingle .VATMode }}{{ end }}
+        </div>
     </div>
     <div class="total-card"><span>Закрыто</span>
         <strong>
-            {{ if eq $vatMode "with" }}{{ money .Totals.TotalClosedVAT }}{{ else }}{{ money .Totals.TotalClosed }}{{ end }}
+            {{ if eq .VATMode "with" }}{{ money .Totals.TotalClosedVAT }}{{ else }}{{ money .Totals.TotalClosed }}{{ end }}
         </strong>
+        <div class="vat-hint">
+            {{ if .VatMixed }}смешанный НДС{{ else }}{{ vatHint .VatSingle .VATMode }}{{ end }}
+        </div>
     </div>
     <div class="total-card"><span>Остаток</span>
         <strong>
-            {{ if eq $vatMode "with" }}{{ money .Totals.TotalRemainingVAT }}{{ else }}{{ money .Totals.TotalRemaining }}{{ end }}
+            {{ if eq .VATMode "with" }}{{ money .Totals.TotalRemainingVAT }}{{ else }}{{ money .Totals.TotalRemaining }}{{ end }}
         </strong>
+        <div class="vat-hint">
+            {{ if .VatMixed }}смешанный НДС{{ else }}{{ vatHint .VatSingle .VATMode }}{{ end }}
+        </div>
     </div>
     <div class="total-card"><span>Затраты</span>
-        <strong>{{ money .Totals.TotalExpenses }}</strong>
+        <strong>{{ moneyOrBlur .User .Totals.TotalExpenses }}</strong>
     </div>
     <div class="total-card"><span>Этапов</span><strong>{{ .Totals.Count }}</strong></div>
 </div>
@@ -134,7 +143,7 @@
                                 {{ money .Closed }}
                             {{ end }}
                         </td>
-                        <td class="num col-money">{{ money .Expenses }}</td>
+                        <td class="num col-money">{{ moneyOrBlur $.User .Expenses }}</td>
                     </tr>
                 {{ end }}
                 </tbody>

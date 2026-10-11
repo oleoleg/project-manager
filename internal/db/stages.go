@@ -236,7 +236,14 @@ func (r *StageRepo) Totals(ctx context.Context, contractID string) (StageTotals,
 			FROM stages WHERE contract_id = $1
 		),
 		costs AS (
-			SELECT COALESCE(SUM(sc.cost), 0) AS total_expenses
+			SELECT COALESCE(SUM(
+				sc.fot_plan
+				+ sc.travel_expenses
+				+ sc.equipment_cost
+				+ sc.subcontract
+				+ sc.commission
+				+ sc.other_expenses
+			), 0) AS total_expenses
 			FROM stage_costs sc
 			JOIN stages st ON st.guid = sc.stage_guid
 			WHERE st.contract_id = $1
@@ -372,7 +379,15 @@ func (r *StageRepo) ProblemStages(ctx context.Context, contractID string) ([]Pro
 // StageCostTotals — сумма затрат по каждому этапу.
 func (r *StageRepo) StageCostTotals(ctx context.Context, contractID string) (map[string]float64, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT sc.stage_guid, COALESCE(SUM(sc.cost), 0)
+		SELECT sc.stage_guid,
+		       COALESCE(SUM(
+		           sc.fot_plan
+		           + sc.travel_expenses
+		           + sc.equipment_cost
+		           + sc.subcontract
+		           + sc.commission
+		           + sc.other_expenses
+		       ), 0)
 		FROM stage_costs sc
 		JOIN stages s ON s.guid = sc.stage_guid
 		WHERE s.contract_id = $1

@@ -27,5 +27,16 @@
     </div>
 </form>
 
+<form method="post" action="/settings/privacy" class="form" style="margin-top: 20px; max-width: 520px;">
+    <label class="checkbox-row">
+        <input type="checkbox" name="hide_financials" {{ if .User.HideFinancials }}checked{{ end }}>
+        Скрывать финансовые показатели
+    </label>
+    <small class="hint">Все суммы (кроме количества) будут показаны в виде «пиксельной» плашки.</small>
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Сохранить</button>
+    </div>
+</form>
+
 {{ template "layout_footer" . }}
 {{ end }}
