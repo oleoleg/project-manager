@@ -30,15 +30,14 @@ type Config struct {
 // Load читает .env (если есть) и переменные окружения.
 // Приоритет: реальные env > .env > дефолт.
 func Load() (*Config, error) {
-	// .env не обязателен — в продакшене переменные придут из окружения
-	// Ищем .env рядом с исполняемым файлом,
-	// чтобы работать и при запуске как служба Windows
-	if exePath, err := os.Executable(); err == nil {
+	// 1. Сначала — рядом с exe (для службы Windows и собранного бинарника).
+	// 2. Затем — в текущей рабочей директории (для `go run` из корня проекта).
+	exePath, err := os.Executable()
+	if err == nil {
 		envPath := filepath.Join(filepath.Dir(exePath), ".env")
 		_ = godotenv.Load(envPath)
-	} else {
-		_ = godotenv.Load()
 	}
+	_ = godotenv.Load() // CWD — сработает, если первого не хватило
 
 	cfg := &Config{
 		AppEnv:        getEnv("APP_ENV", "local"),

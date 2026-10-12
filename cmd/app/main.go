@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"html/template"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -47,11 +48,13 @@ func startHTTPServer() {
 	// =====================================================
 	// 1. Логирование в файл
 	// =====================================================
-	exePath, err := os.Executable()
-	if err != nil {
-		log.Fatalf("os.Executable: %v", err)
+	// baseDir — где искать .env, web/, logs/
+	// 1. Рядом с exe (для службы Windows и собранного бинарника).
+	// 2. В CWD — для `go run` из корня проекта, где exe лежит во временной папке.
+	baseDir := detectBaseDir()
+	if baseDir == "" {
+		log.Fatal("cannot determine base directory: web/templates not found")
 	}
-	baseDir := filepath.Dir(exePath)
 
 	logDir := filepath.Join(baseDir, "logs")
 	if err := os.MkdirAll(logDir, 0755); err != nil {
@@ -65,7 +68,9 @@ func startHTTPServer() {
 	}
 	defer f.Close()
 
-	log.SetOutput(f)
+	// Пишем и в файл, и в консоль — удобно при разработке
+	multi := io.MultiWriter(os.Stdout, f)
+	log.SetOutput(multi)
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
 	log.Println("=== Project Manager starting ===")
@@ -324,6 +329,29 @@ func startHTTPServer() {
 	shCtx, shCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shCancel()
 	_ = srv.Shutdown(shCtx)
+}
+
+// detectBaseDir возвращает папку, где лежат web/ и (опционально) .env.
+// Сначала проверяет рядом с exe — это путь для службы.
+// Если там ничего нет — падает обратно на текущую рабочую директорию,
+// что соответствует запуску через `go run` из корня проекта.
+func detectBaseDir() string {
+	// 1. Рядом с exe
+	if exePath, err := os.Executable(); err == nil {
+		candidate := filepath.Dir(exePath)
+		if _, err := os.Stat(filepath.Join(candidate, "web", "templates")); err == nil {
+			return candidate
+		}
+	}
+
+	// 2. CWD
+	if wd, err := os.Getwd(); err == nil {
+		if _, err := os.Stat(filepath.Join(wd, "web", "templates")); err == nil {
+			return wd
+		}
+	}
+
+	return ""
 }
 
 // ---------------------------------------------------------------
