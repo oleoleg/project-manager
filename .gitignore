@@ -31,3 +31,12 @@ logs/
 # Inno Setup — собранные инсталляторы
 dist/*.exe
 dist/*.bin
+
+
+# Продакшен-конфиг — содержит реальные секреты, не коммитим
+.env.production
+
+# .env.example и .env.production.example — можно коммитить
+!.env.example
+!.env.production.example
+

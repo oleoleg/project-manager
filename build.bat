@@ -44,14 +44,18 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM --- Копируем .env ---
-echo [5/6] Копирование .env...
-if exist .env (
-    copy /Y .env dist\.env > nul
-    echo       .env скопирован
+REM --- Готовим .env для dist ---
+echo [5/6] Подготовка .env для dist...
+if exist .env.production (
+    copy /Y .env.production dist\.env > nul
+    echo       .env.production -^> dist\.env
+) else if exist .env.production.example (
+    copy /Y .env.production.example dist\.env > nul
+    echo       .env.production.example -^> dist\.env (не забудьте отредактировать!)
 ) else (
-    echo [ВНИМАНИЕ] .env не найден в корне проекта.
-    echo            Создайте его из .env.example перед установкой.
+    echo [ОШИБКА] .env.production или .env.production.example не найден.
+    pause
+    exit /b 1
 )
 
 REM --- Копируем web ---
