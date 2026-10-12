@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/joho/godotenv"
@@ -30,7 +31,14 @@ type Config struct {
 // Приоритет: реальные env > .env > дефолт.
 func Load() (*Config, error) {
 	// .env не обязателен — в продакшене переменные придут из окружения
-	_ = godotenv.Load()
+	// Ищем .env рядом с исполняемым файлом,
+	// чтобы работать и при запуске как служба Windows
+	if exePath, err := os.Executable(); err == nil {
+		envPath := filepath.Join(filepath.Dir(exePath), ".env")
+		_ = godotenv.Load(envPath)
+	} else {
+		_ = godotenv.Load()
+	}
 
 	cfg := &Config{
 		AppEnv:        getEnv("APP_ENV", "local"),

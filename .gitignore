@@ -1,4 +1,5 @@
 # Бинарники
+/dist/
 /server
 *.exe
 *.exe~
@@ -26,3 +27,7 @@ Thumbs.db
 # Логи
 *.log
 logs/
+
+# Inno Setup — собранные инсталляторы
+dist/*.exe
+dist/*.bin
