@@ -1,6 +1,9 @@
 @echo off
 chcp 65001 > nul
-setlocal
+setlocal EnableDelayedExpansion
+
+REM --- Всегда работаем из папки, где лежит сам скрипт ---
+cd /d "%~dp0"
 
 echo.
 echo === Сборка Project Manager ===
@@ -13,30 +16,51 @@ if not exist "go.mod" (
     exit /b 1
 )
 
-REM --- Включаем CGO (нужен для systray) ---
-set CGO_ENABLED=1
+REM --- Проверка прав администратора (нужна для остановки службы) ---
+net session >nul 2>&1
+if %errorlevel% neq 0 (
+    echo [ОШИБКА] Скрипт нужно запускать ОТ ИМЕНИ АДМИНИСТРАТОРА.
+    echo.
+    echo Правый клик на build.bat -^> "Запуск от имени администратора".
+    echo.
+    pause
+    exit /b 1
+)
+
+REM --- Останавливаем службу и трей, чтобы освободить файлы ---
+echo [1/7] Остановка службы и трея...
+taskkill /F /IM project-manager-tray.exe >nul 2>&1
+sc stop ProjectManager >nul 2>&1
+timeout /t 3 /nobreak >nul
 
 REM --- Чистим dist ---
-echo [1/6] Очистка dist...
+echo [2/7] Очистка dist...
 if exist dist rmdir /S /Q dist
 mkdir dist
 
-REM --- Собираем бинарник ---
-echo [2/6] Сборка project-manager.exe...
+REM --- Включаем CGO ---
+set CGO_ENABLED=1
+
+REM --- Собираем службу ---
+echo [3/7] Сборка project-manager.exe (служба)...
 go build -ldflags "-H=windowsgui" -o dist\project-manager.exe .\cmd\app
 if errorlevel 1 (
-    echo [ОШИБКА] Сборка не удалась.
+    echo [ОШИБКА] Сборка службы не удалась.
     pause
     exit /b 1
 )
 
 REM --- Собираем трей ---
-echo [3/6] Сборка project-manager-tray.exe (трей)...
+echo [4/7] Сборка project-manager-tray.exe (трей)...
 go build -ldflags "-H=windowsgui" -o dist\project-manager-tray.exe .\cmd\tray
-if errorlevel 1 exit /b 1
+if errorlevel 1 (
+    echo [ОШИБКА] Сборка трея не удалась.
+    pause
+    exit /b 1
+)
 
-REM --- Собираем debug-версию (с консолью) ---
-echo [4/6] Сборка project-manager-debug.exe...
+REM --- Собираем debug-версию ---
+echo [5/7] Сборка project-manager-debug.exe...
 go build -o dist\project-manager-debug.exe .\cmd\app
 if errorlevel 1 (
     echo [ОШИБКА] Сборка debug-версии не удалась.
@@ -45,23 +69,23 @@ if errorlevel 1 (
 )
 
 REM --- Готовим .env для dist ---
-echo [5/6] Подготовка .env для dist...
-if exist .env.production (
-    copy /Y .env.production dist\.env > nul
+echo [6/7] Подготовка .env для dist...
+if exist ".env.production" (
+    copy /Y .env.production dist\.env >nul
     echo       .env.production -^> dist\.env
-) else if exist .env.production.example (
-    copy /Y .env.production.example dist\.env > nul
-    echo       .env.production.example -^> dist\.env (не забудьте отредактировать!)
+) else if exist ".env.production.example" (
+    copy /Y .env.production.example dist\.env >nul
+    echo       .env.production.example -^> dist\.env - не забудьте отредактировать!
 ) else (
-    echo [ОШИБКА] .env.production или .env.production.example не найден.
+    echo [ОШИБКА] Ни .env.production, ни .env.production.example не найдены.
     pause
     exit /b 1
 )
 
 REM --- Копируем web ---
-echo [6/6] Копирование web...
+echo [7/7] Копирование web...
 if exist web (
-    xcopy /E /I /Y /Q web dist\web > nul
+    xcopy /E /I /Y /Q web dist\web >nul
     echo       web скопирован
 ) else (
     echo [ОШИБКА] Папка web не найдена.
@@ -71,9 +95,7 @@ if exist web (
 
 echo.
 echo === Сборка завершена ===
-echo Бинарник: dist\project-manager.exe
-echo.
-dir dist
+echo Бинарники: dist\project-manager.exe, dist\project-manager-tray.exe
 echo.
 
 pause

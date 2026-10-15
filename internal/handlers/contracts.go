@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
@@ -322,6 +323,35 @@ func (h *ContractHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/contracts?flash="+url.QueryEscape("Договор удалён"), http.StatusSeeOther)
 }
 
+// OpenFolder отдаёт страницу, которая открывает папку проекта
+// через проводник Windows. Работает по URL-протоколу pm://,
+// зарегистрированному установщиком.
+func (h *ContractHandler) OpenFolder(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	c, err := h.svc.GetByID(r.Context(), id)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if c.ProjectURL == "" {
+		http.Error(w, "Путь к корню проекта не задан", http.StatusNotFound)
+		return
+	}
+
+	target := "pm://open?path=" + url.QueryEscape(c.ProjectURL)
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprintf(w, `<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8"><title>Открытие папки…</title></head>
+<body>
+<script>
+    window.location.href = %q;
+    setTimeout(function(){ window.close(); }, 500);
+</script>
+<p>Открываем папку… Если ничего не произошло, установите Project Manager на этом компьютере.</p>
+</body></html>`, target)
+}
+
 // ---------- helpers ----------
 
 func (h *ContractHandler) renderFormWithError(w http.ResponseWriter, r *http.Request, c *models.Contract, isNew bool, errMsg string) {
@@ -372,7 +402,7 @@ func parseContractForm(r *http.Request) *models.Contract {
 		StatusCode:            statusCode,
 		CounterpartyID:        strings.TrimSpace(r.FormValue("counterparty_id")),
 		Workshop:              strings.TrimSpace(r.FormValue("workshop")),
-		ProjectURL:            strings.TrimSpace(r.FormValue("project_url")),
+		ProjectURL:            normalizeServerPath(r.FormValue("project_url")),
 		ProcurementCardStatus: nullIfEmpty(r.FormValue("procurement_card_status")),
 		ExtraDetails:          strings.TrimSpace(r.FormValue("extra_details")),
 		FinplanStatus:         nullIfEmpty(r.FormValue("finplan_status")),
@@ -427,4 +457,33 @@ func findTypeName(list []models.ContractTypeRef, code string) string {
 		}
 	}
 	return ""
+}
+
+// normalizeServerPath приводит путь к рабочему виду:
+//   - убирает пробелы по краям
+//   - убирает обрамляющие кавычки "..." (частая ошибка при копировании пути)
+//   - заменяет прямые слэши на обратные (чтобы работал explorer)
+//   - убирает trailing-слэш, кроме случаев, когда это корень диска (C:\) или UNC (\\server\share\)
+func normalizeServerPath(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
+		s = s[1 : len(s)-1]
+	}
+	s = strings.ReplaceAll(s, "/", `\`)
+
+	// trailing-слэш оставляем только если это:
+	//   - корень диска: C:\
+	//   - UNC-корень:   \\server\share\
+	if strings.HasSuffix(s, `\`) {
+		trimmed := strings.TrimRight(s, `\`)
+		// C:\  или  \\server\share\  — оставляем
+		if len(trimmed) == 2 && trimmed[1] == ':' {
+			return trimmed + `\`
+		}
+		if strings.HasPrefix(trimmed, `\\`) && strings.Count(trimmed, `\`) == 3 {
+			return trimmed + `\`
+		}
+		s = trimmed
+	}
+	return s
 }

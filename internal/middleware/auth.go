@@ -24,7 +24,7 @@ func Auth(sm *services.SessionManager, auth *services.AuthService) func(http.Han
 				return
 			}
 			u, err := auth.GetByID(r.Context(), id)
-			if err != nil || !u.IsActive {
+			if err != nil || u == nil || !u.IsActive {
 				// сессия битая — чистим
 				_ = sm.Clear(w, r)
 				next.ServeHTTP(w, r)

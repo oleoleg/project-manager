@@ -25,17 +25,20 @@ if not exist "dist\project-manager.exe" (
     exit /b 1
 )
 
-echo [1/2] Остановка службы...
+echo [1/3] Остановка службы...
 sc stop ProjectManager >nul 2>&1
 timeout /t 2 /nobreak >nul
 
-echo [2/2] Удаление службы...
+echo [2/3] Удаление службы...
 dist\project-manager.exe -remove
 if errorlevel 1 (
     echo [ОШИБКА] Не удалось удалить службу.
     pause
     exit /b 1
 )
+
+echo [3/3] Удаляем из реестра регистрацию URL-протокол pm://...
+reg delete "HKCR\pm" /f >nul 2>&1
 
 echo.
 echo === Служба удалена ===

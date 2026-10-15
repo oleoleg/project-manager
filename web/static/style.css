@@ -713,3 +713,15 @@ th .th-sub {
     font-weight: 400;
 }
 
+.server-path {
+    display: inline-block;
+    background: var(--surface-soft);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: Consolas, "Courier New", monospace;
+    color: var(--text);
+    word-break: break-all;
+    max-width: 100%;
+}
+

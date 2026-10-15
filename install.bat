@@ -46,7 +46,7 @@ if not exist "dist\web\templates" (
 )
 
 REM --- Удаляем старую версию службы, если есть ---
-echo [1/4] Удаление старой службы (если есть)...
+echo [1/6] Удаление старой службы (если есть)...
 sc query ProjectManager >nul 2>&1
 if %errorlevel% equ 0 (
     echo       Останавливаем...
@@ -57,7 +57,7 @@ if %errorlevel% equ 0 (
 )
 
 REM --- Устанавливаем новую ---
-echo [2/4] Установка службы...
+echo [2/6] Установка службы...
 pushd dist
 project-manager.exe -install
 if errorlevel 1 (
@@ -68,13 +68,25 @@ if errorlevel 1 (
 )
 popd
 
+REM --- Даём пользователям права на управление службой ---
+echo [3/6] Настройка прав на службу...
+sc sdset ProjectManager "D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLOCRRC;;;IU)(A;;CCLCSWLOCRRC;;;SU)(A;;RPWPCR;;;AU)" >nul 2>&1
+echo       Готово
+
 REM --- Проверяем статус ---
-echo [3/4] Проверка статуса...
+echo [4/6] Проверка статуса...
 timeout /t 2 /nobreak >nul
 sc query ProjectManager | findstr "STATE"
 
+REM --- Регистрируем URL-протокол pm:// ---
+echo [5/6] Регистрация протокола pm://...
+reg add "HKCR\pm" /ve /t REG_SZ /d "URL:Project Manager Protocol" /f >nul
+reg add "HKCR\pm" /v "URL Protocol" /t REG_SZ /d "" /f >nul
+reg add "HKCR\pm\shell\open\command" /ve /t REG_SZ /d "\"%~dp0dist\project-manager-tray.exe\" \"%%1\"" /f >nul
+
+
 REM --- Убиваем старые треи ---
-echo [4/4] Перезапускаем новый трей
+echo [6/6] Перезапускаем новый трей
 taskkill /F /IM project-manager-tray.exe >nul 2>&1
 timeout /t 1 /nobreak >nul
 

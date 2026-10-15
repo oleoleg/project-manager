@@ -40,3 +40,6 @@ dist/*.bin
 !.env.example
 !.env.production.example
 
+# Конфиг трея — создаётся при первом запуске
+cmd/tray/tray.config.json
+dist/

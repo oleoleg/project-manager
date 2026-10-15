@@ -33,6 +33,9 @@
         </p>
     </div>
     <div class="actions">
+        {{ if $c.ProjectURL }}
+            <a href="/contracts/{{ $c.ID }}/open-folder" class="btn btn-sm" target="_blank" title="Открыть папку проекта в проводнике">📁 Открыть папку</a>
+        {{ end }}
         <div class="vat-toggle">
             <a href="{{ $base }}?vat=without&stages={{ $curStages }}&costs={{ $curCosts }}"
                class="btn btn-sm {{ if ne $vatMode "with" }}active{{ end }}">Без НДС</a>
@@ -237,7 +240,7 @@
                 {{ if .Counterparty }} — {{ .Counterparty.Name }}{{ end }}
             </dd>
             <dt>Цех</dt>               <dd>{{ $c.Workshop }}</dd>
-            <dt>Ссылка на проект</dt>  <dd>{{ if $c.ProjectURL }}<a href="{{ $c.ProjectURL }}" target="_blank">{{ $c.ProjectURL }}</a>{{ end }}</dd>
+            <dt>Путь к корню проекта</dt>  <dd>{{ if $c.ProjectURL }}<code class="server-path">{{ $c.ProjectURL }}</code>{{ else }}<span class="muted">не указан</span>{{ end }}</dd>
             <dt>Карта закупки</dt>     <dd>{{ deref $c.ProcurementCardStatus }}</dd>
             <dt>Доп. реквизиты</dt>    <dd>{{ $c.ExtraDetails }}</dd>
             <dt>Финплан</dt>           <dd>{{ deref $c.FinplanStatus }}</dd>

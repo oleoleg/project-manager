@@ -33,18 +33,25 @@ import (
 // Служба
 // ---------------------------------------------------------------
 
-type program struct{}
+type program struct {
+	stopCh chan struct{}
+}
 
 func (p *program) Start(s service.Service) error {
-	go startHTTPServer()
+	p.stopCh = make(chan struct{})
+	go startHTTPServer(p.stopCh)
 	return nil
 }
 
 func (p *program) Stop(s service.Service) error {
+	log.Println("=== Project Manager stopping ===")
+	if p.stopCh != nil {
+		close(p.stopCh)
+	}
 	return nil
 }
 
-func startHTTPServer() {
+func startHTTPServer(stopCh <-chan struct{}) {
 	// =====================================================
 	// 1. Логирование в файл
 	// =====================================================
@@ -69,8 +76,11 @@ func startHTTPServer() {
 	defer f.Close()
 
 	// Пишем и в файл, и в консоль — удобно при разработке
-	multi := io.MultiWriter(os.Stdout, f)
-	log.SetOutput(multi)
+	var out io.Writer = f
+	if service.Interactive() {
+		out = io.MultiWriter(f, os.Stdout)
+	}
+	log.SetOutput(out)
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
 	log.Println("=== Project Manager starting ===")
@@ -260,6 +270,7 @@ func startHTTPServer() {
 		r.Get("/contracts/new", contractH.New)
 		r.Get("/contracts/{id}", contractH.Show)
 		r.Get("/contracts/{id}/edit", contractH.Edit)
+		r.Get("/contracts/{id}/open-folder", contractH.OpenFolder)
 
 		r.Get("/contracts/{id}/stages", stageH.List)
 		r.Get("/contracts/{id}/stages/new", stageH.New)
@@ -321,14 +332,20 @@ func startHTTPServer() {
 		}
 	}()
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-	<-stop
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 
-	log.Println("shutting down...")
+	select {
+	case <-sigCh:
+		log.Println("signal received, shutting down...")
+	case <-stopCh:
+		log.Println("service stop requested, shutting down...")
+	}
+
 	shCtx, shCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shCancel()
 	_ = srv.Shutdown(shCtx)
+	log.Println("=== Project Manager stopped ===")
 }
 
 // detectBaseDir возвращает папку, где лежат web/ и (опционально) .env.

@@ -23,7 +23,7 @@ func NewContractRepo(pool *pgxpool.Pool) *ContractRepo {
 
 const contractColumns = `
 	id, contract_number, contract_date, work_name, responsible_person, responsible_user_id,
-	status_code, counterparty_id, workshop, project_url,
+	status_code, counterparty_id, workshop, project_url, 
 	procurement_card_status, extra_details, finplan_status, plan_schedule_status,
 	short_name, contract_type, created_at, updated_at
 `
@@ -101,7 +101,7 @@ func (r *ContractRepo) Create(ctx context.Context, c *models.Contract) error {
 		INSERT INTO contracts (
 			id, contract_number, contract_date, work_name, responsible_person,
 			responsible_user_id,
-			status_code, counterparty_id, workshop, project_url,
+			status_code, counterparty_id, workshop, project_url, 
 			procurement_card_status, extra_details, finplan_status, plan_schedule_status,
 			short_name, contract_type
 		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
