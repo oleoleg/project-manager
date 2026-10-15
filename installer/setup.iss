@@ -16,15 +16,12 @@ Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=admin
-ArchitecturesInstallIn64BitMode=x64
+ArchitecturesInstallIn64BitMode=x64compatible
 SetupIconFile=assets\icon.ico
 UninstallDisplayIcon={app}\project-manager-tray.exe
 
 [Languages]
 Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
-
-[Tasks]
-Name: "autostarttray"; Description: "Запускать трей при входе пользователя в систему"; GroupDescription: "Автозагрузка:"
 
 [Files]
 ; Служба
@@ -34,6 +31,17 @@ Source: "..\dist\project-manager-tray.exe";  DestDir: "{app}"; Flags: ignorevers
 ; Статика и шаблоны
 Source: "..\dist\web\*";                     DestDir: "{app}\web"; Flags: ignoreversion recursesubdirs createallsubdirs
 
+[Dirs]
+; Папка для логов — создаём заранее, с правом записи для всех
+Name: "{app}\logs"; Permissions: users-modify
+
+[Registry]
+; Регистрация URL-протокола pm:// — для кнопки «Открыть папку»
+Root: HKCR; Subkey: "pm"; ValueType: string; ValueName: ""; ValueData: "URL:Project Manager Protocol"; Flags: uninsdeletekey
+Root: HKCR; Subkey: "pm"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""; Flags: uninsdeletekey
+Root: HKCR; Subkey: "pm\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\project-manager-tray.exe"" ""%1"""; Flags: uninsdeletekey
+
+ 
 [Run]
 ; 1. Установка службы
 Filename: "{app}\project-manager.exe"; Parameters: "-install"; \
@@ -46,6 +54,10 @@ Filename: "{app}\project-manager-tray.exe"; \
     Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
+Filename: "taskkill.exe"; Parameters: "/F /IM project-manager-tray.exe"; \
+    Flags: runhidden waituntilterminated; \
+    RunOnceId: "KillTray"
+    
 Filename: "{app}\project-manager.exe"; Parameters: "-remove"; \
     Flags: runhidden waituntilterminated; \
     RunOnceId: "RemoveService"
@@ -56,31 +68,48 @@ Type: files;          Name: "{app}\.env"
 
 [Code]
 var
-  ConfigPage: TInputQueryWizardPage;
-  ServicePage: TInputOptionWizardPage;
+  DBPage: TInputQueryWizardPage;
+  HTTPPage: TInputQueryWizardPage;
+  AdminPage: TInputQueryWizardPage;
 
 procedure InitializeWizard();
 begin
-  ConfigPage := CreateInputQueryPage(wpSelectTasks,
+  // --- Страница 1: База данных (5 полей — влезает) ---
+  DBPage := CreateInputQueryPage(wpSelectDir,
     'Подключение к базе данных',
     'Укажите параметры PostgreSQL',
     'Эти данные будут записаны в .env и использованы приложением.');
-  ConfigPage.Add('Адрес сервера БД (host):', False);
-  ConfigPage.Add('Порт БД (по умолчанию 5432):', False);
-  ConfigPage.Add('Пользователь БД:', False);
-  ConfigPage.Add('Пароль БД:', True);
-  ConfigPage.Add('Имя базы данных:', False);
-  ConfigPage.Add('Порт HTTP-сервера:', False);
-  ConfigPage.Add('Логин администратора приложения:', False);
-  ConfigPage.Add('Пароль администратора приложения:', True);
+  DBPage.Add('Адрес сервера БД (host):', False);
+  DBPage.Add('Порт БД:', False);
+  DBPage.Add('Пользователь БД:', False);
+  DBPage.Add('Пароль БД:', True);
+  DBPage.Add('Имя базы данных:', False);
 
-  ConfigPage.Values[0] := 'localhost';
-  ConfigPage.Values[1] := '5432';
-  ConfigPage.Values[2] := 'postgres';
-  ConfigPage.Values[4] := 'project_manager';
-  ConfigPage.Values[5] := '8080';
-  ConfigPage.Values[6] := 'admin';
-  ConfigPage.Values[7] := 'admin123';
+  DBPage.Values[0] := 'localhost';
+  DBPage.Values[1] := '5432';
+  DBPage.Values[2] := 'postgres';
+  DBPage.Values[3] := '';
+  DBPage.Values[4] := 'project_manager';
+
+  // --- Страница 2: HTTP ---
+  HTTPPage := CreateInputQueryPage(DBPage.ID,
+    'HTTP-сервер',
+    'Параметры веб-интерфейса',
+    'Порт, на котором будет открываться веб-интерфейс.');
+  HTTPPage.Add('HTTP-порт:', False);
+
+  HTTPPage.Values[0] := '8080';
+
+  // --- Страница 3: Администратор ---
+  AdminPage := CreateInputQueryPage(HTTPPage.ID,
+    'Администратор приложения',
+    'Логин и пароль первого администратора',
+    'Создаётся один раз, если таблица users пуста.');
+  AdminPage.Add('Логин администратора:', False);
+  AdminPage.Add('Пароль администратора:', True);
+
+  AdminPage.Values[0] := 'admin';
+  AdminPage.Values[1] := 'admin123';
 end;
 
 function GenerateRandomSecret(): String;
@@ -104,16 +133,16 @@ begin
     EnvFile := ExpandConstant('{app}\.env');
     EnvContent :=
       'APP_ENV=production' + #13#10 +
-      'HTTP_PORT=' + ConfigPage.Values[5] + #13#10 +
-      'DB_HOST=' + ConfigPage.Values[0] + #13#10 +
-      'DB_PORT=' + ConfigPage.Values[1] + #13#10 +
-      'DB_USER=' + ConfigPage.Values[2] + #13#10 +
-      'DB_PASSWORD=' + ConfigPage.Values[3] + #13#10 +
-      'DB_NAME=' + ConfigPage.Values[4] + #13#10 +
+      'HTTP_PORT=' + HTTPPage.Values[0] + #13#10 +
+      'DB_HOST=' + DBPage.Values[0] + #13#10 +
+      'DB_PORT=' + DBPage.Values[1] + #13#10 +
+      'DB_USER=' + DBPage.Values[2] + #13#10 +
+      'DB_PASSWORD=' + DBPage.Values[3] + #13#10 +
+      'DB_NAME=' + DBPage.Values[4] + #13#10 +
       'DB_SSLMODE=disable' + #13#10 +
       'SESSION_SECRET=' + GenerateRandomSecret() + #13#10 +
-      'BOOTSTRAP_ADMIN_USERNAME=' + ConfigPage.Values[6] + #13#10 +
-      'BOOTSTRAP_ADMIN_PASSWORD=' + ConfigPage.Values[7] + #13#10 +
+      'BOOTSTRAP_ADMIN_USERNAME=' + AdminPage.Values[0] + #13#10 +
+      'BOOTSTRAP_ADMIN_PASSWORD=' + AdminPage.Values[1] + #13#10 +
       'BOOTSTRAP_ADMIN_FULLNAME=Администратор' + #13#10;
     SaveStringToFile(EnvFile, EnvContent, False);
   end;

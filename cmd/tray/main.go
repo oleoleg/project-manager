@@ -51,8 +51,17 @@ func main() {
 // ---------------- Конфиг ----------------
 
 func configPath() string {
-	exe, _ := os.Executable()
-	return filepath.Join(filepath.Dir(exe), "tray.config.json")
+	// %APPDATA%\ProjectManager\tray.config.json — доступно на запись
+	// без прав администратора. Рядом с exe писать нельзя: exe лежит
+	// в C:\Program Files, куда обычный пользователь не имеет доступа.
+	appData := os.Getenv("APPDATA")
+	if appData == "" {
+		exe, _ := os.Executable()
+		return filepath.Join(filepath.Dir(exe), "tray.config.json")
+	}
+	dir := filepath.Join(appData, "ProjectManager")
+	_ = os.MkdirAll(dir, 0755)
+	return filepath.Join(dir, "tray.config.json")
 }
 
 func loadConfig() {
