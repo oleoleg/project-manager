@@ -269,14 +269,36 @@ func handleProtocolURL(raw string) {
 	if err != nil {
 		return
 	}
-	if u.Host != "open" {
+	switch u.Host {
+	case "open":
+		path := u.Query().Get("path")
+		if path == "" {
+			return
+		}
+		_ = exec.Command("explorer", path).Start()
+	case "pick-file":
+		pickFileAndSavePath()
+	}
+}
+
+// pickFileAndSavePath открывает стандартный Windows-диалог выбора файла,
+// получает полный путь и сохраняет его в %APPDATA%\ProjectManager\picked_path.txt.
+// Форма акта читает этот файл и подставляет путь в поле «Файл акта».
+func pickFileAndSavePath() {
+	path, err := openFileDialog()
+	if err != nil || path == "" {
 		return
 	}
-	path := u.Query().Get("path")
-	if path == "" {
+
+	appData := os.Getenv("APPDATA")
+	if appData == "" {
 		return
 	}
-	_ = exec.Command("explorer", path).Start()
+	dir := filepath.Join(appData, "ProjectManager")
+	_ = os.MkdirAll(dir, 0755)
+
+	out := filepath.Join(dir, "picked_path.txt")
+	_ = os.WriteFile(out, []byte(path), 0644)
 }
 
 func showMessage(text string) {

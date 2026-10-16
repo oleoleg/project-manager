@@ -116,3 +116,7 @@ func (s *StageService) ProblemStages(ctx context.Context, contractID string) ([]
 func (s *StageService) StageCostTotals(ctx context.Context, contractID string) (map[string]float64, error) {
 	return s.repo.StageCostTotals(ctx, contractID)
 }
+
+func (s *StageService) StageActSums(ctx context.Context, contractID string) (map[string]float64, error) {
+	return s.repo.StageActSums(ctx, contractID)
+}

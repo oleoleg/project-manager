@@ -52,7 +52,25 @@
 
     <label>
         Закрыто по актам, руб
-        <input type="text" name="closed_by_acts" class="money-input" value="{{ if $s.ClosedByActs }}{{ printf "%.2f" $s.ClosedByActs }}{{ end }}" inputmode="decimal">
+        <small class="hint">
+            Можно указать вручную или подтянуть из актов (по кнопке справа).
+        </small>
+        <div class="closed-by-acts-row">
+            <input type="text" name="closed_by_acts" id="closed-by-acts-input" class="money-input"
+                   value="{{ if $s.ClosedByActs }}{{ printf "%.2f" $s.ClosedByActs }}{{ end }}"
+                   inputmode="decimal"
+                   {{ if not $s.ClosedByActsManual }}readonly{{ end }}>
+            <button type="button" class="btn lock-btn {{ if $s.ClosedByActsManual }}locked{{ end }}"
+                    id="closed-by-acts-lock"
+                    data-act-sum-url="{{ if not $isNew }}/contracts/{{ .Contract.ID }}/stages/{{ $s.GUID }}/act-sum.json{{ end }}"
+                    title="{{ if $s.ClosedByActsManual }}Сейчас ручной ввод. Нажмите, чтобы подтягивать из актов{{ else }}Сейчас подтяжка из актов. Нажмите для ручного ввода{{ end }}">
+                {{ if $s.ClosedByActsManual }}🔒{{ else }}🔗{{ end }}
+            </button>
+            {{/* Чекбокс: отмечен = ручной ввод. Скрыт — управляется кнопкой. */}}
+            <input type="checkbox" name="closed_by_acts_manual" id="closed-by-acts-manual"
+                   {{ if $s.ClosedByActsManual }}checked{{ end }}
+                   style="display: none;">
+        </div>
     </label>
 
     <label>
@@ -580,6 +598,59 @@
             }
         });
     })();
+
+  // Переключатель режима «Закрыто по актам»
+    (function () {
+        const btn      = document.getElementById('closed-by-acts-lock');
+        const checkbox = document.getElementById('closed-by-acts-manual');
+        const input    = document.getElementById('closed-by-acts-input');
+        if (!btn || !checkbox || !input) return;
+
+        // Берём contractID и stageGUID из формы
+        const form = input.closest('form');
+        const action = form ? form.getAttribute('action') : '';
+        // action вида /contracts/6666/stages/UUID или /contracts/6666/stages (для новых)
+        // Нам нужен только /contracts/{id}/stages/{guid}/act-sum.json
+        // GUID этапа доступен в data-атрибуте — если есть, используем; иначе не запрашиваем.
+
+        btn.addEventListener('click', () => {
+            checkbox.checked = !checkbox.checked;
+
+            if (checkbox.checked) {
+                // Ручной ввод
+                input.readOnly = false;
+                btn.textContent = '🔒';
+                btn.classList.add('locked');
+                btn.title = 'Сейчас ручной ввод. Нажмите, чтобы подтягивать из актов';
+            } else {
+                // Из актов
+                input.readOnly = true;
+                btn.textContent = '🔗';
+                btn.classList.remove('locked');
+                btn.title = 'Сейчас подтяжка из актов. Нажмите для ручного ввода';
+                // Запрашиваем сумму актов и подставляем
+                loadActSum(input);
+            }
+        });
+
+        function loadActSum(input) {
+            // URL берём из data-атрибута у кнопки, если задан.
+            const url = btn.dataset.actSumUrl;
+            if (!url) return;
+            fetch(url)
+                .then(r => r.json())
+                .then(data => {
+                    const sum = data.sum || 0;
+                    if (window.formatMoney) {
+                        input.value = window.formatMoney(String(sum.toFixed(2)));
+                    } else {
+                        input.value = sum.toFixed(2);
+                    }
+                })
+                .catch(() => {});
+        }
+    })();
+
 </script>
 
 {{ template "layout_footer" . }}

@@ -1,0 +1,1 @@
+ALTER TABLE acts DROP COLUMN IF EXISTS distribution_expanded;

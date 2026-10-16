@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -23,6 +24,7 @@ type StageHandler struct {
 	costSvc     *services.StageCostService
 	contractSvc *services.ContractService
 	cpSvc       *services.CounterpartyService
+	actSvc      *services.ActService
 	tmpl        *template.Template
 }
 
@@ -31,9 +33,13 @@ func NewStageHandler(
 	costSvc *services.StageCostService,
 	contractSvc *services.ContractService,
 	cpSvc *services.CounterpartyService,
+	actSvc *services.ActService,
 	tmpl *template.Template,
 ) *StageHandler {
-	return &StageHandler{svc: svc, costSvc: costSvc, contractSvc: contractSvc, cpSvc: cpSvc, tmpl: tmpl}
+	return &StageHandler{
+		svc: svc, costSvc: costSvc, contractSvc: contractSvc,
+		cpSvc: cpSvc, actSvc: actSvc, tmpl: tmpl,
+	}
 }
 
 func (h *StageHandler) commonData(r *http.Request, title string) map[string]any {
@@ -84,6 +90,7 @@ func (h *StageHandler) List(w http.ResponseWriter, r *http.Request) {
 	card, _ := h.svc.GetCard(r.Context(), contractID)
 	cp, _ := h.cpSvc.GetByID(r.Context(), contract.CounterpartyID)
 	costTotals, _ := h.svc.StageCostTotals(r.Context(), contractID)
+	actCounts, _ := h.actSvc.CountByContract(r.Context(), contractID)
 
 	data := h.commonData(r, "Этапы договора "+contractID)
 	data["Contract"] = contract
@@ -97,6 +104,9 @@ func (h *StageHandler) List(w http.ResponseWriter, r *http.Request) {
 	data["WorkKindName"] = func(code string) string { return workKindName(workKinds, code) }
 	data["Flash"] = r.URL.Query().Get("flash")
 	data["CostTotals"] = costTotals
+	data["ActCountByStage"] = actCounts
+	actSums, _ := h.svc.StageActSums(r.Context(), contractID)
+	data["StageActSums"] = actSums
 
 	// Режим НДС: "with" или "without" (по умолчанию "without")
 	vatMode := r.URL.Query().Get("vat")
@@ -350,21 +360,25 @@ func parseStageForm(r *http.Request) (*models.Stage, error) {
 		return nil, fmt.Errorf("Аванс: %w", err)
 	}
 
+	// Режим «Закрыто по актам»: on — ручной ввод, пусто — из актов.
+	closedManual := r.FormValue("closed_by_acts_manual") == "on"
+
 	return &models.Stage{
-		RowOrder:          0,
-		StageNumber:       strings.TrimSpace(r.FormValue("stage_number")),
-		Name:              strings.TrimSpace(r.FormValue("name")),
-		Cost:              cost,
-		ClosedByActs:      closed,
-		VATPercent:        vat,
-		AdvancePercent:    adv,
-		StartConditions:   strings.TrimSpace(r.FormValue("start_conditions")),
-		EndConditions:     strings.TrimSpace(r.FormValue("end_conditions")),
-		CloseDatePlan:     services.ParseDate(r.FormValue("close_date_plan")),
-		ResponsiblePerson: strings.TrimSpace(r.FormValue("responsible_person")),
-		StatusCode:        statusCode,
-		WorkKindCode:      strings.TrimSpace(r.FormValue("work_kind_code")),
-		Note:              strings.TrimSpace(r.FormValue("note")),
+		RowOrder:           0,
+		StageNumber:        strings.TrimSpace(r.FormValue("stage_number")),
+		Name:               strings.TrimSpace(r.FormValue("name")),
+		Cost:               cost,
+		ClosedByActs:       closed,
+		ClosedByActsManual: closedManual,
+		VATPercent:         vat,
+		AdvancePercent:     adv,
+		StartConditions:    strings.TrimSpace(r.FormValue("start_conditions")),
+		EndConditions:      strings.TrimSpace(r.FormValue("end_conditions")),
+		CloseDatePlan:      services.ParseDate(r.FormValue("close_date_plan")),
+		ResponsiblePerson:  strings.TrimSpace(r.FormValue("responsible_person")),
+		StatusCode:         statusCode,
+		WorkKindCode:       strings.TrimSpace(r.FormValue("work_kind_code")),
+		Note:               strings.TrimSpace(r.FormValue("note")),
 	}, nil
 }
 
@@ -477,4 +491,17 @@ func humanizeStageCostError(err error) string {
 		return "Вид работы не может повторяться в одном этапе"
 	}
 	return "Затраты: " + err.Error()
+}
+
+// StageActSumJSON возвращает сумму актов по этапу.
+// Используется в форме этапа при переключении замочка на «из актов».
+func (h *StageHandler) StageActSumJSON(w http.ResponseWriter, r *http.Request) {
+	stageGUID := chi.URLParam(r, "guid")
+	sum, err := h.actSvc.SumByStage(r.Context(), stageGUID)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]float64{"sum": sum})
 }

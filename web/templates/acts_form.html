@@ -1,0 +1,377 @@
+{{ define "acts_form.html" }}
+{{ template "layout_header" . }}
+{{ $a := .Act }}
+{{ $isNew := .IsNew }}
+{{ $stage := .Stage }}
+
+<p class="back-link">
+    <a href="/contracts/{{ .Contract.ID }}/stages">← Назад к этапам</a>
+</p>
+
+<div class="page-header">
+    <h2>{{ if $isNew }}Новый акт{{ else }}Акт: {{ $a.Name }}{{ end }}</h2>
+</div>
+
+<p class="breadcrumb">
+    <a href="/contracts">Договоры</a> →
+    <a href="/contracts/{{ .Contract.ID }}">Договор {{ .Contract.ID }}</a> →
+    <a href="/contracts/{{ .Contract.ID }}/stages">Этапы</a>
+    {{ if $stage }} → {{ $stage.Name }}{{ end }}
+</p>
+
+{{ if .Error }}<div class="error">{{ .Error }}</div>{{ end }}
+
+<form method="post"
+      action="{{ if $isNew }}/contracts/{{ .Contract.ID }}/stages/{{ $stage.GUID }}/acts{{ else }}/contracts/{{ .Contract.ID }}/acts/{{ $a.GUID }}{{ end }}"
+      class="form">
+
+    {{/* === ФАЙЛ — НАВЕРХУ === */}}
+    <label>
+        Файл акта (путь на сервере)
+        <small class="hint">Полный путь к PDF-файлу. «Обзор…» откроет диалог через трей.</small>
+        <div class="file-input-row">
+            <input type="text" name="file_path" id="act-file-path" value="{{ $a.FilePath }}" placeholder="\\server\...\akt.pdf">
+            <button type="button" class="btn" id="btn-pick-file">📂 Обзор…</button>
+            <button type="button" class="btn" id="btn-open-file"
+                    {{ if not $a.FilePath }}disabled{{ end }}>📄 Открыть</button>
+        </div>
+    </label>
+
+    <label>
+        Наименование (номер + дата) *
+        <input type="text" name="name" id="act-name" value="{{ $a.Name }}" required>
+    </label>
+
+    <label>
+        Вид акта *
+        <select name="kind" id="act-kind" required>
+            <option value="">— выберите вид —</option>
+            {{ range .ActKinds }}
+                <option value="{{ .Code }}" {{ if eq .Code $a.Kind }}selected{{ end }}>{{ .Name }}</option>
+            {{ end }}
+        </select>
+    </label>
+
+    <label id="kind-custom-label" class="{{ if eq $a.Kind "custom" }}is-visible{{ end }}">
+        Название своего типа *
+        <input type="text" name="kind_custom" value="{{ $a.KindCustom }}">
+    </label>
+
+    <label>
+        Сумма без НДС, руб *
+        <small class="hint">Указывается <strong>без НДС</strong>. НДС подтянется из этапа.</small>
+        <input type="text" name="amount" class="money-input"
+               value="{{ if $a.Amount }}{{ printf "%.2f" $a.Amount }}{{ end }}">
+    </label>
+
+    <label>
+        Дата подписания
+        <input type="date" name="sign_date"
+               value="{{ if $a.SignDate }}{{ $a.SignDate.Format "2006-01-02" }}{{ end }}">
+    </label>
+
+    <label>
+        Примечание
+        <textarea name="note" rows="2">{{ $a.Note }}</textarea>
+    </label>
+
+    {{/* === Распределение по этапам === */}}
+    <div class="distribution-header">
+        <h3 class="form-section-title" style="margin: 0;">Распределение по этапам</h3>
+        <button type="button" class="toggle-btn" id="distribution-toggle">
+            {{ if $a.DistributionExpanded }}Свернуть{{ else }}Развернуть{{ end }}
+        </button>
+    </div>
+
+    <input type="hidden" name="distribution_expanded" id="distribution-expanded-hidden"
+           value="{{ if $a.DistributionExpanded }}on{{ end }}">
+
+    <div class="distribution-body {{ if not $a.DistributionExpanded }}is-collapsed{{ end }}"
+         id="distribution-body">
+        <p class="hint">
+            Укажите, какие этапы закрывает этот акт и по сколько рублей на каждый.
+            Сумма распределения не должна превышать сумму акта без НДС.
+            Если не разворачивать — вся сумма автоматически привяжется к текущему этапу.
+        </p>
+
+        <table class="links-table" id="links-table">
+            <thead>
+            <tr>
+                <th>Этап</th>
+                <th>Сумма (без НДС)</th>
+                <th></th>
+            </tr>
+            </thead>
+            <tbody id="links-body">
+            {{ if .Links }}
+                {{ range $link := .Links }}
+                <tr class="link-row">
+                    <td>
+                        <select name="stage_guid">
+                            <option value="">— выберите этап —</option>
+                            {{ range $.Stages }}
+                                <option value="{{ .GUID }}" {{ if eq .GUID $link.StageGUID }}selected{{ end }}>
+                                    {{ .StageNumber }} — {{ .Name }}
+                                </option>
+                            {{ end }}
+                        </select>
+                    </td>
+                    <td>
+                        <input type="text" name="link_amount" class="money-input"
+                               value="{{ printf "%.2f" $link.Amount }}">
+                    </td>
+                    <td class="link-actions">
+                        <button type="button" class="btn btn-sm link-fill" title="Заполнить остатком">↩</button>
+                        <button type="button" class="btn btn-sm btn-danger link-remove" title="Удалить">×</button>
+                    </td>
+                </tr>
+                {{ end }}
+            {{ else }}
+                <tr class="link-row">
+                    <td>
+                        <select name="stage_guid">
+                            <option value="">— выберите этап —</option>
+                            {{ range .Stages }}
+                                <option value="{{ .GUID }}" {{ if $.Stage }}{{ if eq .GUID $.Stage.GUID }}selected{{ end }}{{ end }}>
+                                    {{ .StageNumber }} — {{ .Name }}
+                                </option>
+                            {{ end }}
+                        </select>
+                    </td>
+                    <td>
+                        <input type="text" name="link_amount" class="money-input" value="">
+                    </td>
+                    <td class="link-actions">
+                        <button type="button" class="btn btn-sm link-fill" title="Заполнить остатком">↩</button>
+                        <button type="button" class="btn btn-sm btn-danger link-remove" title="Удалить">×</button>
+                    </td>
+                </tr>
+            {{ end }}
+            </tbody>
+        </table>
+
+        <p>
+            <button type="button" class="btn btn-sm" id="link-add">+ Добавить этап</button>
+        </p>
+
+        <div class="warning" id="links-warning" style="display: none;"></div>
+    </div>
+
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Сохранить</button>
+        <a href="/contracts/{{ .Contract.ID }}/stages" class="btn">Отмена</a>
+    </div>
+</form>
+
+<script>
+    // ============ Вид акта: показ своего типа ============
+    (function () {
+        const kind = document.getElementById('act-kind');
+        const label = document.getElementById('kind-custom-label');
+        if (!kind || !label) return;
+        kind.addEventListener('change', () => {
+            label.classList.toggle('is-visible', kind.value === 'custom');
+        });
+    })();
+    
+    // ============ Файл: Обзор + Открыть + автозаполнение наименования ============
+    (function () {
+        const btn  = document.getElementById('btn-pick-file');
+        const openBtn = document.getElementById('btn-open-file');
+        const field = document.getElementById('act-file-path');
+        const name  = document.getElementById('act-name');
+        if (!field) return;
+
+        let pollTimer = null;
+        let pollStartedAt = 0;
+
+        if (btn) {
+            btn.addEventListener('click', () => {
+                window.location.href = 'pm://pick-file';
+                if (pollTimer) clearInterval(pollTimer);
+                pollStartedAt = Date.now();
+                pollTimer = setInterval(checkPickedPath, 800);
+            });
+        }
+
+        function checkPickedPath() {
+            if (Date.now() - pollStartedAt > 60000) {
+                clearInterval(pollTimer);
+                pollTimer = null;
+                return;
+            }
+            fetch('/api/picked-path')
+                .then(r => r.json())
+                .then(data => {
+                    if (data && data.path && data.mtime > pollStartedAt) {
+                        field.value = data.path;
+                        autoFillName(data.path);
+                        if (openBtn) openBtn.disabled = false;
+                        clearInterval(pollTimer);
+                        pollTimer = null;
+                    }
+                })
+                .catch(() => {});
+        }
+
+        function autoFillName(path) {
+            if (!name || !path) return;
+
+            // имя файла без расширения
+            const lastSlash = Math.max(path.lastIndexOf('\\'), path.lastIndexOf('/'));
+            let base = lastSlash >= 0 ? path.slice(lastSlash + 1) : path;
+            const dot = base.lastIndexOf('.');
+            if (dot > 0) base = base.slice(0, dot);
+
+             // Всегда перезаписываем имя файла при выборе нового файла
+            if (name) {
+                name.value = base;
+            }
+
+            // Пытаемся определить вид акта из имени файла
+            if (window.detectActKind) {
+                const detectedKind = window.detectActKind(base);
+                if (detectedKind) {
+                    const kindSelect = document.getElementById('act-kind');
+                    if (kindSelect) {
+                        kindSelect.value = detectedKind;
+                        kindSelect.dispatchEvent(new Event('change'));
+                    }
+                }
+            }
+        }
+
+        if (openBtn) {
+            openBtn.addEventListener('click', () => {
+                const p = field.value.trim();
+                if (!p) return;
+                window.location.href = 'pm://open?path=' + encodeURIComponent(p);
+            });
+        }
+    })();
+
+    // ============ Разворачивание блока "Распределение по этапам" ============
+     (function () {
+        const btn    = document.getElementById('distribution-toggle');
+        const body   = document.getElementById('distribution-body');
+        const hidden = document.getElementById('distribution-expanded-hidden');
+        if (!btn || !body || !hidden) return;
+
+        btn.addEventListener('click', () => {
+            const collapsed = body.classList.contains('is-collapsed');
+            if (collapsed) {
+                body.classList.remove('is-collapsed');
+                hidden.value = 'on';
+                btn.textContent = 'Свернуть';
+            } else {
+                body.classList.add('is-collapsed');
+                hidden.value = '';
+                btn.textContent = 'Развернуть';
+            }
+        });
+    })();
+
+     // ============ Распределение по этапам ============
+    (function () {
+        const body = document.getElementById('links-body');
+        const addBtn = document.getElementById('link-add');
+        const warn = document.getElementById('links-warning');
+        if (!body || !addBtn) return;
+
+        const templateRow = body.querySelector('.link-row');
+        if (!templateRow) return;
+
+        const amountInput = document.querySelector('input[name="amount"]');
+
+        function parseNum(s) {
+            if (!s) return 0;
+            s = String(s).replace(/\s/g, '').replace(',', '.');
+            const v = parseFloat(s);
+            return isNaN(v) ? 0 : v;
+        }
+
+        function makeRow() {
+            const row = templateRow.cloneNode(true);
+            row.querySelector('select').value = '';
+            row.querySelector('input[name="link_amount"]').value = '';
+            return row;
+        }
+
+        addBtn.addEventListener('click', () => {
+            const row = makeRow();
+            body.appendChild(row);
+            if (window.attachMoneyInput) {
+                row.querySelectorAll('input.money-input').forEach(window.attachMoneyInput);
+            }
+            recalc();
+        });
+
+        // Клик по любой кнопке внутри строки
+        body.addEventListener('click', (e) => {
+            // Удаление строки
+            if (e.target.classList.contains('link-remove')) {
+                const rows = body.querySelectorAll('.link-row');
+                if (rows.length > 1) {
+                    e.target.closest('tr').remove();
+                    recalc();
+                } else {
+                    alert('Должна остаться хотя бы одна строка.');
+                }
+                return;
+            }
+
+            // Заполнение остатком конкретной строки
+            if (e.target.classList.contains('link-fill')) {
+                const row = e.target.closest('tr');
+                const input = row.querySelector('input[name="link_amount"]');
+                const actAmount = parseNum(amountInput ? amountInput.value : 0);
+
+                let total = 0;
+                body.querySelectorAll('.link-row').forEach((r) => {
+                    total += parseNum(r.querySelector('input[name="link_amount"]').value);
+                });
+
+                // Остаток с учётом текущего значения этой строки
+                const rowCurrent = parseNum(input.value);
+                const remaining = actAmount - (total - rowCurrent);
+                if (remaining <= 0) return;
+
+                input.value = remaining.toFixed(2);
+                if (window.formatMoney) input.value = window.formatMoney(input.value);
+                recalc();
+                return;
+            }
+        });
+
+        body.addEventListener('input', recalc);
+        body.addEventListener('change', recalc);
+        if (amountInput) amountInput.addEventListener('input', recalc);
+
+        function recalc() {
+            if (!warn) return;
+            const actAmount = parseNum(amountInput ? amountInput.value : 0);
+
+            let total = 0;
+            body.querySelectorAll('.link-row').forEach((r) => {
+                total += parseNum(r.querySelector('input[name="link_amount"]').value);
+            });
+
+            if (total > actAmount + 0.01) {
+                warn.textContent = 'Сумма распределения (' + total.toFixed(2) +
+                    ' ₽) превышает сумму акта (' + actAmount.toFixed(2) + ' ₽).';
+                warn.style.display = 'block';
+            } else if (actAmount > 0 && total < actAmount - 0.01) {
+                warn.textContent = 'Остаток нераспределённой суммы: ' +
+                    (actAmount - total).toFixed(2) + ' ₽';
+                warn.style.display = 'block';
+            } else {
+                warn.style.display = 'none';
+            }
+        }
+
+        recalc();
+    })();
+</script>
+
+{{ template "layout_footer" . }}
+{{ end }}

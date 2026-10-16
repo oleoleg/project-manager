@@ -34,7 +34,7 @@
     </div>
     <div class="actions">
         {{ if $c.ProjectURL }}
-            <a href="/contracts/{{ $c.ID }}/open-folder" class="btn btn-sm" target="_blank" title="Открыть папку проекта в проводнике">📁 Открыть папку</a>
+            <a href="pm://open?path={{ $c.ProjectURL | urlquery }}" class="btn btn-sm" title="Открыть папку проекта в проводнике">📁 Открыть папку</a>
         {{ end }}
         <div class="vat-toggle">
             <a href="{{ $base }}?vat=without&stages={{ $curStages }}&costs={{ $curCosts }}"

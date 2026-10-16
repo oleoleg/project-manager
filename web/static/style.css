@@ -725,3 +725,352 @@ th .th-sub {
     max-width: 100%;
 }
 
+/* Форма акта — строка выбора файла */
+.file-input-row {
+    display: flex;
+    gap: 8px;
+}
+.file-input-row input[type="text"] {
+    flex: 1;
+}
+.file-input-row .btn {
+    white-space: nowrap;
+}
+
+/* Скрытые по умолчанию поля формы акта — раскрываются через JS или сервер */
+#kind-custom-label,
+#att-kind-custom-label,
+#parent-label {
+    display: none;
+}
+#kind-custom-label.is-visible,
+#att-kind-custom-label.is-visible,
+#parent-label.is-visible {
+    display: flex;
+}
+
+/* Модальное окно */
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+/* Атрибут hidden должен всегда побеждать display: flex */
+#acts-modal[hidden] {
+    display: none !important;
+}
+.modal {
+    background: var(--surface);
+    border-radius: 10px;
+    box-shadow: var(--shadow-lg);
+    width: 100%;
+    max-width: 900px;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 20px;
+    background: var(--surface-alt);
+    border-bottom: 1px solid var(--border-soft);
+}
+.modal-header h3 {
+    font-size: 16px;
+    margin: 0;
+}
+.modal-close {
+    background: transparent;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: var(--text-muted);
+    padding: 0 8px;
+    line-height: 1;
+}
+.modal-close:hover { color: var(--text); }
+.modal-body {
+    padding: 16px 20px;
+    overflow-y: auto;
+}
+.modal-actions {
+    margin-top: 12px;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+.acts-table th, .acts-table td { padding: 8px 10px; font-size: 13px; }
+.acts-table .actions { text-align: right; white-space: nowrap; }
+
+
+/* Информационные (дочерние) акты в модалке */
+.acts-table tr.act-child td {
+    background: var(--surface-alt);
+    color: var(--text-mid);
+    font-size: 12px;
+}
+.acts-table tr.act-child td:first-child {
+    padding-left: 30px;
+}
+
+/* Инфо-плашка в форме приложения */
+.info-box {
+    background: var(--surface-alt);
+    border-left: 3px solid var(--accent);
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--text-mid);
+    margin-bottom: 14px;
+}
+
+/* Дерево актов и приложений */
+.acts-table tr.act-main td {
+    border-bottom: 1px solid var(--border-soft);
+}
+.acts-table tr.act-child td {
+    background: var(--surface-alt);
+    color: var(--text-mid);
+    font-size: 12px;
+    border-bottom: 1px dashed var(--border-soft);
+}
+.acts-table tr.act-child-add td {
+    background: transparent;
+    padding: 6px 10px;
+}
+.tree-mark {
+    font-family: Consolas, "Courier New", monospace;
+    color: var(--text-soft);
+    margin-right: 4px;
+}
+
+/* Иконка цепочки в списке этапов */
+.chain-icon {
+    display: inline-block;
+    margin-left: 4px;
+    font-size: 12px;
+    line-height: 1;
+    user-select: none;
+}
+.chain-on {
+    color: var(--accent);
+    /* яркая, заметная */
+}
+
+.closed-by-acts-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+.closed-by-acts-row input[type="text"] {
+    flex: 1;
+}
+.closed-by-acts-row .lock-btn {
+    position: static;
+    transform: none;
+    padding: 6px 10px;
+    font-size: 16px;
+    opacity: 0.5;
+}
+.closed-by-acts-row .lock-btn:hover { opacity: 1; }
+.closed-by-acts-row .lock-btn.locked { opacity: 1; }
+
+/* Таблица распределения по этапам в форме акта */
+.links-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--surface);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-top: 10px;
+}
+.links-table th,
+.links-table td {
+    padding: 6px 10px;
+    text-align: left;
+    font-size: 13px;
+    border-bottom: 1px solid var(--border-soft);
+}
+.links-table th {
+    background: var(--surface-alt);
+    font-weight: 600;
+    color: var(--text-mid);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+.links-table select,
+.links-table input {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 13px;
+    background: var(--surface);
+    color: var(--text);
+}
+.links-table td:nth-child(2) { width: 160px; }
+.links-table td.link-actions {
+    width: 80px;
+    white-space: nowrap;
+    text-align: right;
+}
+.links-table td.link-actions .btn {
+    margin-left: 2px;
+}
+.link-fill {
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+.link-fill:hover {
+    background: var(--accent);
+    color: #fff;
+}
+
+.distribution-body.is-collapsed {
+    display: none;
+}
+
+/* Шапка модалки актов */
+.acts-modal-summary {
+    display: flex;
+    gap: 24px;
+    align-items: center;
+    background: var(--surface-alt);
+    padding: 10px 14px;
+    border-radius: 8px;
+    margin-bottom: 14px;
+}
+.summary-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.summary-item.summary-toggle {
+    margin-left: auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+}
+.summary-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-muted);
+}
+.summary-item strong {
+    font-size: 16px;
+    color: var(--text);
+}
+
+/* Шапка модалки актов */
+.modal-header .modal-title-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    flex: 1;
+}
+.modal-header .modal-title-row h3 {
+    font-size: 16px;
+    margin: 0;
+}
+.modal-header .modal-summary-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: 20px;
+}
+.modal-header .modal-summary-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: 20px;
+    margin-right: 8px;
+    flex-shrink: 0;
+}
+.modal-header .modal-summary-row .summary-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+.modal-header .modal-summary-row input {
+    width: 150px;
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 14px;
+    background: var(--surface);
+    color: var(--text);
+    text-align: right;
+}
+.modal-header .modal-summary-row input:focus {
+    border-color: var(--accent);
+    outline: none;
+}
+.modal-header .modal-summary-row input.is-auto {
+    background: var(--surface-soft);
+    color: var(--text-muted);
+    cursor: not-allowed;
+}
+.modal-header .modal-summary-row .lock-btn {
+    position: static;
+    transform: none;
+    padding: 4px 8px;
+    font-size: 14px;
+    opacity: 0.5;
+    background: var(--btn-soft-bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    line-height: 1;
+}
+.modal-header .modal-summary-row .lock-btn:hover {
+    background: var(--btn-soft-hover);
+    opacity: 1;
+}
+.modal-header .modal-summary-row .lock-btn.locked {
+    opacity: 1;
+    background: var(--accent-soft);
+    border-color: var(--accent);
+}
+.modal-header .modal-summary-row .summary-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-muted);
+}
+
+#acts-modal-save {
+    padding: 4px 10px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    font-weight: bold;
+}
+#acts-modal-save:hover {
+    background: var(--accent);
+    color: #fff;
+}
+
+#acts-modal-save[disabled] {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.chain-manual {
+    color: var(--text-muted);
+    opacity: 0.7;
+}

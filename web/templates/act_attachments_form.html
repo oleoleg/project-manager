@@ -1,0 +1,158 @@
+{{ define "act_attachments_form.html" }}
+{{ template "layout_header" . }}
+{{ $a := .Attachment }}
+{{ $isNew := .IsNew }}
+{{ $act := .Act }}
+
+<p class="back-link">
+    <a href="/contracts/{{ .Contract.ID }}/stages">← Назад к этапам</a>
+</p>
+
+<div class="page-header">
+    <h2>{{ if $isNew }}Новое приложение{{ else }}Приложение: {{ $a.Name }}{{ end }}</h2>
+</div>
+
+<p class="breadcrumb">
+    <a href="/contracts">Договоры</a> →
+    <a href="/contracts/{{ .Contract.ID }}">Договор {{ .Contract.ID }}</a> →
+    <a href="/contracts/{{ .Contract.ID }}/stages">Этапы</a>
+</p>
+
+{{ if .Error }}<div class="error">{{ .Error }}</div>{{ end }}
+
+<div class="info-box">
+    Приложение к акту: <strong>{{ $act.Name }}</strong>
+    (сумма {{ printf "%.2f" $act.Amount }} ₽ без НДС)
+</div>
+
+<form method="post"
+      action="{{ if $isNew }}/contracts/{{ .Contract.ID }}/acts/{{ $act.GUID }}/attachments{{ else }}/contracts/{{ .Contract.ID }}/attachments/{{ $a.GUID }}{{ end }}"
+      class="form">
+
+    <label>
+        Файл приложения (путь на сервере)
+        <div class="file-input-row">
+            <input type="text" name="file_path" id="att-file-path" value="{{ $a.FilePath }}" placeholder="\\server\...\file.pdf">
+            <button type="button" class="btn" id="btn-pick-file">📂 Обзор…</button>
+            <button type="button" class="btn" id="btn-open-file"
+                    {{ if not $a.FilePath }}disabled{{ end }}>📄 Открыть</button>
+        </div>
+    </label>
+
+    <label>
+        Наименование (номер + дата) *
+        <input type="text" name="name" id="att-name" value="{{ $a.Name }}" required>
+    </label>
+
+    <label>
+        Вид приложения *
+        <select name="kind" id="att-kind" required>
+            <option value="">— выберите вид —</option>
+            {{ range .ActKinds }}
+                <option value="{{ .Code }}" {{ if eq .Code $a.Kind }}selected{{ end }}>{{ .Name }}</option>
+            {{ end }}
+        </select>
+    </label>
+
+    <label id="att-kind-custom-label" class="{{ if eq $a.Kind "custom" }}is-visible{{ end }}">
+        Название своего типа *
+        <input type="text" name="kind_custom" value="{{ $a.KindCustom }}">
+    </label>
+
+    <label>
+        Примечание
+        <textarea name="note" rows="2">{{ $a.Note }}</textarea>
+    </label>
+
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Сохранить</button>
+        <a href="/contracts/{{ .Contract.ID }}/stages" class="btn">Отмена</a>
+    </div>
+</form>
+
+<script>
+    // Вид приложения: показ своего типа
+    (function () {
+        const kind = document.getElementById('att-kind');
+        const label = document.getElementById('att-kind-custom-label');
+        if (!kind || !label) return;
+        kind.addEventListener('change', () => {
+            label.classList.toggle('is-visible', kind.value === 'custom');
+        });
+    })();
+
+    // Файл: Обзор + Открыть + автозаполнение наименования
+    (function () {
+        const btn = document.getElementById('btn-pick-file');
+        const openBtn = document.getElementById('btn-open-file');
+        const field = document.getElementById('att-file-path');
+        const name = document.getElementById('att-name');
+        if (!field) return;
+
+        let pollTimer = null;
+        let pollStartedAt = 0;
+
+        if (btn) {
+            btn.addEventListener('click', () => {
+                window.location.href = 'pm://pick-file';
+                if (pollTimer) clearInterval(pollTimer);
+                pollStartedAt = Date.now();
+                pollTimer = setInterval(checkPickedPath, 800);
+            });
+        }
+
+        function checkPickedPath() {
+            if (Date.now() - pollStartedAt > 60000) {
+                clearInterval(pollTimer);
+                pollTimer = null;
+                return;
+            }
+            fetch('/api/picked-path')
+                .then(r => r.json())
+                .then(data => {
+                    if (data && data.path && data.mtime > pollStartedAt) {
+                        field.value = data.path;
+                        autoFillName(data.path);
+                        if (openBtn) openBtn.disabled = false;
+                        clearInterval(pollTimer);
+                        pollTimer = null;
+                    }
+                })
+                .catch(() => {});
+        }
+
+        function autoFillName(path) {
+            if (!name || !path) return;
+
+            const lastSlash = Math.max(path.lastIndexOf('\\'), path.lastIndexOf('/'));
+            let base = lastSlash >= 0 ? path.slice(lastSlash + 1) : path;
+            const dot = base.lastIndexOf('.');
+            if (dot > 0) base = base.slice(0, dot);
+
+            if (name) name.value = base;
+
+            // Определяем вид приложения из имени файла
+            if (window.detectActKind) {
+                const detectedKind = window.detectActKind(base);
+                if (detectedKind) {
+                    const kindSelect = document.getElementById('att-kind');
+                    if (kindSelect) {
+                        kindSelect.value = detectedKind;
+                        kindSelect.dispatchEvent(new Event('change'));
+                    }
+                }
+            }
+        }
+
+        if (openBtn) {
+            openBtn.addEventListener('click', () => {
+                const p = field.value.trim();
+                if (!p) return;
+                window.location.href = 'pm://open?path=' + encodeURIComponent(p);
+            });
+        }
+    })();
+</script>
+
+{{ template "layout_footer" . }}
+{{ end }}

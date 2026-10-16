@@ -23,7 +23,7 @@ func NewStageRepo(pool *pgxpool.Pool) *StageRepo {
 }
 
 const stageColumns = `
-	guid, contract_id, row_order, stage_number, name, cost, closed_by_acts,
+	guid, contract_id, row_order, stage_number, name, cost, closed_by_acts, closed_by_acts_manual,
 	vat_percent, advance_percent, start_conditions, end_conditions,
 	close_date_plan, responsible_person, status_code, work_kind_code, note,
 	created_at, updated_at
@@ -32,6 +32,7 @@ const stageColumns = `
 func scanStage(row pgx.Row, s *models.Stage) error {
 	return row.Scan(
 		&s.GUID, &s.ContractID, &s.RowOrder, &s.StageNumber, &s.Name, &s.Cost, &s.ClosedByActs,
+		&s.ClosedByActsManual,
 		&s.VATPercent, &s.AdvancePercent, &s.StartConditions, &s.EndConditions,
 		&s.CloseDatePlan, &s.ResponsiblePerson, &s.StatusCode, &s.WorkKindCode, &s.Note,
 		&s.CreatedAt, &s.UpdatedAt,
@@ -95,15 +96,38 @@ func (r *StageRepo) Create(ctx context.Context, s *models.Stage) error {
 func (r *StageRepo) Update(ctx context.Context, s *models.Stage) error {
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE stages SET
-			stage_number = $2, name = $3, cost = $4, closed_by_acts = $5,
-			vat_percent = $6, advance_percent = $7, start_conditions = $8, end_conditions = $9,
-			close_date_plan = $10, responsible_person = $11, status_code = $12,
-			work_kind_code = $13, note = $14, updated_at = NOW()
+			stage_number = $2,
+			name = $3,
+			cost = $4,
+			closed_by_acts = $5,
+			closed_by_acts_manual = $6,
+			vat_percent = $7,
+			advance_percent = $8,
+			start_conditions = $9,
+			end_conditions = $10,
+			close_date_plan = $11,
+			responsible_person = $12,
+			status_code = $13,
+			work_kind_code = $14,
+			note = $15,
+			updated_at = NOW()
 		WHERE guid = $1
 	`,
-		s.GUID, s.StageNumber, s.Name, s.Cost, s.ClosedByActs,
-		s.VATPercent, s.AdvancePercent, s.StartConditions, s.EndConditions,
-		s.CloseDatePlan, s.ResponsiblePerson, s.StatusCode, s.WorkKindCode, s.Note,
+		s.GUID,
+		s.StageNumber,
+		s.Name,
+		s.Cost,
+		s.ClosedByActs,
+		s.ClosedByActsManual,
+		s.VATPercent,
+		s.AdvancePercent,
+		s.StartConditions,
+		s.EndConditions,
+		s.CloseDatePlan,
+		s.ResponsiblePerson,
+		s.StatusCode,
+		s.WorkKindCode,
+		s.Note,
 	)
 	if err != nil {
 		return fmt.Errorf("update stage: %w", err)
@@ -421,4 +445,31 @@ func (r *StageRepo) NormalizeOrder(ctx context.Context, contractID string) error
 		FROM ordered o WHERE s.guid = o.guid
 	`, contractID)
 	return err
+}
+
+// StageActSums — сумма актов по этапам: map stageGUID → сумма (без НДС).
+// Используется для проверки, что closed_by_acts подтверждён актами.
+func (r *StageRepo) StageActSums(ctx context.Context, contractID string) (map[string]float64, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT ast.stage_guid, COALESCE(SUM(ast.amount), 0)
+		FROM act_stages ast
+		JOIN stages s ON s.guid = ast.stage_guid
+		WHERE s.contract_id = $1
+		GROUP BY ast.stage_guid
+	`, contractID)
+	if err != nil {
+		return nil, fmt.Errorf("stage act sums: %w", err)
+	}
+	defer rows.Close()
+
+	res := make(map[string]float64)
+	for rows.Next() {
+		var guid string
+		var sum float64
+		if err := rows.Scan(&guid, &sum); err != nil {
+			return nil, err
+		}
+		res[guid] = sum
+	}
+	return res, rows.Err()
 }

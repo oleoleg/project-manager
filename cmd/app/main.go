@@ -201,6 +201,7 @@ func startHTTPServer(stopCh <-chan struct{}) {
 	contractRepo := db.NewContractRepo(pool)
 	stageRepo := db.NewStageRepo(pool)
 	stageCostRepo := db.NewStageCostRepo(pool)
+	actRepo := db.NewActRepo(pool)
 
 	// =====================================================
 	// 6. Сервисы
@@ -212,6 +213,7 @@ func startHTTPServer(stopCh <-chan struct{}) {
 	contractSvc := services.NewContractService(contractRepo)
 	stageSvc := services.NewStageService(stageRepo)
 	stageCostSvc := services.NewStageCostService(stageCostRepo)
+	actSvc := services.NewActService(actRepo, stageRepo)
 
 	// =====================================================
 	// 7. Хендлеры
@@ -222,8 +224,9 @@ func startHTTPServer(stopCh <-chan struct{}) {
 	settingsH := handlers.NewSettingsHandler(userSvc, tmpl)
 	counterpartyH := handlers.NewCounterpartyHandler(counterpartySvc, tmpl)
 	contractH := handlers.NewContractHandler(contractSvc, counterpartySvc, stageSvc, tmpl)
-	stageH := handlers.NewStageHandler(stageSvc, stageCostSvc, contractSvc, counterpartySvc, tmpl)
+	stageH := handlers.NewStageHandler(stageSvc, stageCostSvc, contractSvc, counterpartySvc, actSvc, tmpl)
 	adminUserH := handlers.NewAdminUserHandler(userSvc, tmpl)
+	actH := handlers.NewActHandler(actSvc, stageSvc, contractSvc, tmpl)
 
 	// =====================================================
 	// 8. Роутер
@@ -276,10 +279,34 @@ func startHTTPServer(stopCh <-chan struct{}) {
 		r.Get("/contracts/{id}/stages/new", stageH.New)
 		r.Get("/contracts/{id}/stages/{guid}/edit", stageH.Edit)
 
+		// Акты этапа (JSON API для модального окна)
+		r.Get("/contracts/{id}/stages/{guid}/acts.json", actH.ListJSON)
+		r.Get("/contracts/{id}/stages/{guid}/acts/sum.json", actH.SumJSON)
+		r.Get("/contracts/{id}/stages/{guid}/act-sum.json", stageH.StageActSumJSON)
+
+		// Формы создания/редактирования акта
+		r.Get("/contracts/{id}/stages/{guid}/acts/new", actH.NewForm)
+		r.Get("/contracts/{id}/acts/{actGuid}/edit", actH.EditForm)
+		r.Get("/contracts/{id}/acts/{actGuid}/open", actH.OpenFile)
+
+		// Приложения акта
+		r.Get("/contracts/{id}/acts/{actGuid}/attachments/new", actH.NewAttachmentForm)
+		r.Get("/contracts/{id}/attachments/{attGuid}/open", actH.OpenAttachment)
+		r.Get("/contracts/{id}/attachments/{attGuid}/edit", actH.EditAttachmentForm)
+		r.Get("/api/picked-path", actH.PickedPath)
+
 		r.Group(func(r chi.Router) {
 			r.Use(mw.RequireRole("admin", "rp_chief", "director", "rp"))
 			r.Post("/counterparties", counterpartyH.Create)
 			r.Post("/counterparties/{id}", counterpartyH.Update)
+			r.Post("/contracts/{id}/stages/{guid}/acts", actH.Create)
+			r.Post("/contracts/{id}/stages/{guid}/acts/toggle-manual", actH.ToggleStageManual)
+			r.Post("/contracts/{id}/stages/{guid}/acts/set-closed", actH.SetClosed)
+			r.Post("/contracts/{id}/acts/{actGuid}", actH.Update)
+			r.Post("/contracts/{id}/acts/{actGuid}/delete", actH.Delete)
+			r.Post("/contracts/{id}/acts/{actGuid}/attachments", actH.CreateAttachment)
+			r.Post("/contracts/{id}/attachments/{attGuid}", actH.UpdateAttachment)
+			r.Post("/contracts/{id}/attachments/{attGuid}/delete", actH.DeleteAttachment)
 		})
 
 		r.Group(func(r chi.Router) {

@@ -1,0 +1,3 @@
+ALTER TABLE stages DROP COLUMN IF EXISTS closed_by_acts_manual;
+DROP TABLE IF EXISTS act_stages;
+DROP TABLE IF EXISTS acts;
