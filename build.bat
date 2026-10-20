@@ -20,21 +20,26 @@ REM --- Проверка прав администратора (нужна дл�
 net session >nul 2>&1
 if %errorlevel% neq 0 (
     echo [ОШИБКА] Скрипт нужно запускать ОТ ИМЕНИ АДМИНИСТРАТОРА.
-    echo.
-    echo Правый клик на build.bat -^> "Запуск от имени администратора".
-    echo.
     pause
     exit /b 1
 )
 
-REM --- Останавливаем службу и трей, чтобы освободить файлы ---
-echo [1/7] Остановка службы и трея...
+REM --- Останавливаем службу, трей и агент, чтобы освободить файлы ---
+echo [1/9] Остановка службы, трея и агента...
 taskkill /F /IM project-manager-tray.exe >nul 2>&1
+taskkill /F /IM pm-agent.exe >nul 2>&1
+taskkill /F /IM pm-agent-debug.exe >nul 2>&1
+taskkill /F /IM project-manager.exe >nul 2>&1
+taskkill /F /IM project-manager-debug.exe >nul 2>&1
 sc stop ProjectManager >nul 2>&1
 timeout /t 3 /nobreak >nul
 
+REM --- Чистим кэш Go ---
+echo [2/9] Очистка кэша Go...
+go clean -cache
+
 REM --- Чистим dist ---
-echo [2/7] Очистка dist...
+echo [3/9] Очистка dist...
 if exist dist rmdir /S /Q dist
 mkdir dist
 
@@ -42,26 +47,35 @@ REM --- Включаем CGO ---
 set CGO_ENABLED=1
 
 REM --- Собираем службу ---
-echo [3/7] Сборка project-manager.exe (служба)...
-go build -ldflags "-H=windowsgui" -o dist\project-manager.exe .\cmd\app
+echo [4/9] Сборка project-manager.exe (служба)...
+go build -a -ldflags "-H=windowsgui" -o dist\project-manager.exe .\cmd\app
 if errorlevel 1 (
     echo [ОШИБКА] Сборка службы не удалась.
     pause
     exit /b 1
 )
 
-REM --- Собираем трей ---
-echo [4/7] Сборка project-manager-tray.exe (трей)...
-go build -ldflags "-H=windowsgui" -o dist\project-manager-tray.exe .\cmd\tray
+REM --- Собираем трей (Админ) ---
+echo [5/9] Сборка project-manager-tray.exe (трей)...
+go build -a -ldflags "-H=windowsgui" -o dist\project-manager-tray.exe .\cmd\tray
 if errorlevel 1 (
     echo [ОШИБКА] Сборка трея не удалась.
     pause
     exit /b 1
 )
 
+REM --- Собираем Агент (Клиент) ---
+echo [6/9] Сборка pm-agent.exe (агент)...
+go build -a -ldflags "-H=windowsgui" -o dist\pm-agent.exe .\cmd\agent
+if errorlevel 1 (
+    echo [ОШИБКА] Сборка агента не удалась.
+    pause
+    exit /b 1
+)
+
 REM --- Собираем debug-версию ---
-echo [5/7] Сборка project-manager-debug.exe...
-go build -o dist\project-manager-debug.exe .\cmd\app
+echo [7/9] Сборка project-manager-debug.exe...
+go build -a -o dist\project-manager-debug.exe .\cmd\app
 if errorlevel 1 (
     echo [ОШИБКА] Сборка debug-версии не удалась.
     pause
@@ -69,13 +83,11 @@ if errorlevel 1 (
 )
 
 REM --- Готовим .env для dist ---
-echo [6/7] Подготовка .env для dist...
+echo [8/9] Подготовка .env для dist...
 if exist ".env.production" (
     copy /Y .env.production dist\.env >nul
-    echo       .env.production -^> dist\.env
 ) else if exist ".env.production.example" (
     copy /Y .env.production.example dist\.env >nul
-    echo       .env.production.example -^> dist\.env - не забудьте отредактировать!
 ) else (
     echo [ОШИБКА] Ни .env.production, ни .env.production.example не найдены.
     pause
@@ -83,10 +95,9 @@ if exist ".env.production" (
 )
 
 REM --- Копируем web ---
-echo [7/7] Копирование web...
+echo [9/9] Копирование web...
 if exist web (
     xcopy /E /I /Y /Q web dist\web >nul
-    echo       web скопирован
 ) else (
     echo [ОШИБКА] Папка web не найдена.
     pause
@@ -95,7 +106,7 @@ if exist web (
 
 echo.
 echo === Сборка завершена ===
-echo Бинарники: dist\project-manager.exe, dist\project-manager-tray.exe
+echo Бинарники лежат в папке dist\
 echo.
 
 pause

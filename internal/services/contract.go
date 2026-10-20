@@ -30,14 +30,19 @@ func NewContractService(repo *db.ContractRepo) *ContractService {
 	return &ContractService{repo: repo}
 }
 
+var ErrContractProjectURLRequired = errors.New("путь к корню проекта обязателен")
+
 func (s *ContractService) Validate(c *models.Contract) error {
 	c.ID = strings.TrimSpace(c.ID)
 	c.ContractNumber = strings.TrimSpace(c.ContractNumber)
+	c.ProjectURL = strings.TrimSpace(c.ProjectURL)
 
 	if !contractIDRe.MatchString(c.ID) {
 		return ErrContractIDFormat
 	}
-	// номер договора — необязателен на старте
+	if c.ProjectURL == "" {
+		return ErrContractProjectURLRequired
+	}
 	if c.CounterpartyID == "" {
 		return ErrContractCounterparty
 	}

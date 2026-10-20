@@ -187,7 +187,7 @@
 
         if (btn) {
             btn.addEventListener('click', () => {
-                window.location.href = 'pm://pick-file';
+                window.location.href = 'pm-agent://pick-file';
                 if (pollTimer) clearInterval(pollTimer);
                 pollStartedAt = Date.now();
                 pollTimer = setInterval(checkPickedPath, 800);
@@ -245,7 +245,7 @@
             openBtn.addEventListener('click', () => {
                 const p = field.value.trim();
                 if (!p) return;
-                window.location.href = 'pm://open?path=' + encodeURIComponent(p);
+                window.location.href = 'pm-agent://open?path=' + encodeURIComponent(p);
             });
         }
     })();

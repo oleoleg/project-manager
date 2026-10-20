@@ -38,5 +38,22 @@
     </div>
 </form>
 
+<form method="post" action="/settings/check-path" class="form" style="margin-top: 20px; max-width: 520px;">
+    <label class="checkbox-row">
+        <input type="checkbox" name="check_contract_path" {{ if .User.CheckContractPath }}checked{{ end }}>
+        Проверять наличие папки проекта при открытии договора
+    </label>
+    <small class="hint">
+        Если включено — при открытии карточки договора система проверит,
+        существует ли указанный путь к корню проекта, и покажет предупреждение,
+        если папка не найдена.
+        <br><strong>Не работает для сетевых путей (\\server\share):</strong>
+        служба работает под системной учёткой и не видит пользовательские сетевые шары.
+    </small>
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Сохранить</button>
+    </div>
+</form>
+
 {{ template "layout_footer" . }}
 {{ end }}

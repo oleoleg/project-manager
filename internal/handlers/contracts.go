@@ -422,6 +422,8 @@ func humanizeContractError(err error) string {
 		return "Выберите тип договора"
 	case errors.Is(err, services.ErrContractExists):
 		return "Договор с таким ID уже существует"
+	case errors.Is(err, services.ErrContractProjectURLRequired):
+		return "Укажите путь к корню проекта"
 	}
 
 	var pgErr *pgconn.PgError

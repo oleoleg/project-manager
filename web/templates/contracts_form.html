@@ -3,15 +3,14 @@
 {{ $c := .Contract }}
 {{ $isNew := .IsNew }}
 
+<p class="back-link">
+    <a href="{{ if $isNew }}/contracts{{ else }}/contracts/{{ $c.ID }}{{ end }}">← Назад</a>
+</p>
+
 <div class="page-header">
-    <p class="back-link">
-        <a href="{{ if $isNew }}/contracts/{{ .Contract.ID }}/stages{{ else }}/contracts/{{ .Contract.ID }}/stages{{ end }}">← Назад</a>
-    </p>
     <h2>{{ if $isNew }}Новый договор{{ else }}Договор {{ $c.ID }}{{ end }}</h2>
 </div>
-<p class="back-link">
-    <a href="{{ if $isNew }}/contracts/{{ .Contract.ID }}/stages{{ else }}/contracts/{{ .Contract.ID }}/stages{{ end }}">← Назад</a>
-</p>
+
 {{ if .Error }}<div class="error">{{ .Error }}</div>{{ end }}
 
 <form method="post" action="{{ if $isNew }}/contracts{{ else }}/contracts/{{ $c.ID }}{{ end }}" class="form">
@@ -91,14 +90,18 @@
     </label>
 
     <label>
-        Путь к корню проекта
+        Путь к корню проекта *
         <small class="hint">
             Папка проекта — корень, от которого строятся все подпапки (ТКП, Договор, Реализация).
             Пример UNC: <code>\\Work\otr\workplace\0000 ЗАКАЗЧИК\0000 ПРОЕКТ</code>.<br>
             Пример локального: <code>D:\Projects\4288 Реконструкция СЖА</code>.
         </small>
-        <input type="text" name="project_url" value="{{ $c.ProjectURL }}"
-            placeholder="\\Work\otr\workplace\...\0000 ПРОЕКТ">
+        <div class="file-input-row">
+            <input type="text" name="project_url" id="contract-project-url"
+                   value="{{ $c.ProjectURL }}"
+                   placeholder="\\Work\otr\workplace\...\0000 ПРОЕКТ" required>
+            <button type="button" class="btn" id="btn-pick-dir">📁 Обзор…</button>
+        </div>
     </label>
 
     <label>
@@ -147,6 +150,58 @@
     </div>
 
 </form>
+
+
+<script>
+    // Выбор папки проекта через pm-agent://pick-dir
+    (function () {
+        const btn = document.getElementById('btn-pick-dir');
+        const field = document.getElementById('contract-project-url');
+        if (!btn || !field) return;
+
+        let pollTimer = null;
+        let pollStartedAt = 0;
+
+        btn.addEventListener('click', (e) => {
+            e.preventDefault(); // Предотвращаем стандартное поведение
+
+            // Создаем невидимую ссылку и кликаем по ней (браузеры это любят больше)
+            const a = document.createElement('a');
+            a.href = 'pm-agent://pick-dir';
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+
+            if (pollTimer) clearInterval(pollTimer);
+            pollStartedAt = Date.now();
+            
+            // Опрашиваем сервер каждые 500 мс
+            pollTimer = setInterval(checkPickedPath, 1000);
+        });
+
+        function checkPickedPath() {
+            // Ждем максимум 2 минуты
+            if (Date.now() - pollStartedAt > 120000) {
+                clearInterval(pollTimer);
+                pollTimer = null;
+                return;
+            }
+
+            fetch('/api/picked-path?t=' + Date.now())
+                .then(r => r.json())
+                .then(data => {
+                    // Если пришел путь и он новее, чем начало клика
+                    if (data && data.path && data.mtime > pollStartedAt) {
+                        field.value = data.path;
+                        clearInterval(pollTimer);
+                        pollTimer = null;
+                    }
+                })
+                .catch(() => {});
+        }
+    })();
+</script>
 
 {{ template "layout_footer" . }}
 {{ end }}

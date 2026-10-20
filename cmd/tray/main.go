@@ -4,7 +4,6 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -35,25 +34,16 @@ type Config struct {
 }
 
 func main() {
-	if len(os.Args) > 1 && strings.HasPrefix(os.Args[1], "pm://") {
-		handleProtocolURL(os.Args[1])
-		return
-	}
+	// Убрали обработку pm:// — этим теперь занимается Агент
 
 	loadConfig()
-
-	// Применяем автостарт по текущему значению конфига
 	applyAutostart(cfg.Autostart)
-
 	systray.Run(onReady, onExit)
 }
 
 // ---------------- Конфиг ----------------
 
 func configPath() string {
-	// %APPDATA%\ProjectManager\tray.config.json — доступно на запись
-	// без прав администратора. Рядом с exe писать нельзя: exe лежит
-	// в C:\Program Files, куда обычный пользователь не имеет доступа.
 	appData := os.Getenv("APPDATA")
 	if appData == "" {
 		exe, _ := os.Executable()
@@ -75,17 +65,14 @@ func loadConfig() {
 
 	data, err := os.ReadFile(cfgPath)
 	if err != nil {
-		// Файла нет — создадим с дефолтами
 		saveConfig()
 		return
 	}
 
 	if err := json.Unmarshal(data, &cfg); err != nil {
-		// Битый JSON — оставляем дефолты
 		return
 	}
 
-	// Санитарные ограничения
 	if cfg.MonitorIntervalSec < 2 {
 		cfg.MonitorIntervalSec = 2
 	}
@@ -98,7 +85,6 @@ func saveConfig() {
 
 // ---------------- Автостарт ----------------
 
-// applyAutostart включает/выключает запись трея в автозагрузку пользователя.
 func applyAutostart(enable bool) {
 	exe, _ := os.Executable()
 	key := `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
@@ -130,8 +116,8 @@ func isServiceRunning() bool {
 
 func onReady() {
 	systray.SetIcon(iconBytes)
-	systray.SetTitle("Project Manager")
-	systray.SetTooltip("Project Manager")
+	systray.SetTitle("Project Manager Tray")
+	systray.SetTooltip("Управление службой Project Manager")
 
 	mOpen := systray.AddMenuItem("Открыть в браузере", "")
 	mOpen.Click(func() { openBrowser("http://localhost:8080") })
@@ -161,8 +147,6 @@ func onReady() {
 
 	mSettings := systray.AddMenuItem("⚙ Настройки", "Открыть файл tray.config.json")
 	mSettings.Click(func() {
-		// Открываем JSON в Блокноте. Пользователь правит, сохраняет.
-		// Затем — «Применить настройки».
 		_ = exec.Command("notepad.exe", cfgPath).Start()
 	})
 
@@ -263,43 +247,6 @@ func runSC(action string) {
 }
 
 // ---------------- Вспомогательные ----------------
-
-func handleProtocolURL(raw string) {
-	u, err := url.Parse(raw)
-	if err != nil {
-		return
-	}
-	switch u.Host {
-	case "open":
-		path := u.Query().Get("path")
-		if path == "" {
-			return
-		}
-		_ = exec.Command("explorer", path).Start()
-	case "pick-file":
-		pickFileAndSavePath()
-	}
-}
-
-// pickFileAndSavePath открывает стандартный Windows-диалог выбора файла,
-// получает полный путь и сохраняет его в %APPDATA%\ProjectManager\picked_path.txt.
-// Форма акта читает этот файл и подставляет путь в поле «Файл акта».
-func pickFileAndSavePath() {
-	path, err := openFileDialog()
-	if err != nil || path == "" {
-		return
-	}
-
-	appData := os.Getenv("APPDATA")
-	if appData == "" {
-		return
-	}
-	dir := filepath.Join(appData, "ProjectManager")
-	_ = os.MkdirAll(dir, 0755)
-
-	out := filepath.Join(dir, "picked_path.txt")
-	_ = os.WriteFile(out, []byte(path), 0644)
-}
 
 func showMessage(text string) {
 	tmp := filepath.Join(os.TempDir(), "pm-error.txt")

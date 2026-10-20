@@ -53,8 +53,8 @@
             <td>{{ .ContractNumber }}</td>
             <td>{{ if .ContractDate }}{{ .ContractDate.Format "02.01.2006" }}{{ end }}</td>
             <td>{{ .WorkName }}</td>
-            <td>{{ .CounterpartyID }}</td>
-            <td>{{ .StatusCode }}</td>
+            <td>{{ .CounterpartyID }} — {{ counterpartyName $.Counterparties .CounterpartyID }}</td>
+            <td>{{ .StatusCode }} — {{ statusName $.Statuses .StatusCode }}</td>
             <td class="actions">
                 <a href="/contracts/{{ .ID }}" class="btn btn-sm">Открыть</a>
                 <a href="/contracts/{{ .ID }}/stages" class="btn btn-sm">Этапы</a>

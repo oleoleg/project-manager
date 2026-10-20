@@ -3,24 +3,27 @@ module github.com/oleoleg/project-manager
 go 1.27.1
 
 require (
+	github.com/energye/systray v1.0.3
 	github.com/go-chi/chi/v5 v5.3.2
 	github.com/golang-migrate/migrate/v4 v4.20.1
 	github.com/gorilla/sessions v1.4.0
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/joho/godotenv v1.5.1
+	github.com/kardianos/service v1.3.0
+	github.com/leaanthony/go-common-file-dialog v1.0.3
 	golang.org/x/crypto v0.57.0
 )
 
 require (
-	github.com/energye/systray v1.0.3 // indirect
+	github.com/go-ole/go-ole v1.2.4 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/securecookie v1.1.2 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
-	github.com/kardianos/service v1.3.0 // indirect
 	github.com/lib/pq v1.10.9 // indirect
 	golang.org/x/sync v0.23.0 // indirect
-	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
 )

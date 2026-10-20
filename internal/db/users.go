@@ -23,13 +23,13 @@ func NewUserRepo(pool *pgxpool.Pool) *UserRepo {
 
 func (r *UserRepo) GetByUsername(ctx context.Context, username string) (*models.User, error) {
 	row := r.pool.QueryRow(ctx, `
-		SELECT id, username, full_name, password_hash, role_code, is_active, theme, hide_financials, created_at, updated_at
+		SELECT id, username, full_name, password_hash, role_code, is_active, theme, hide_financials, check_contract_path, created_at, updated_at
 		FROM users
 		WHERE username = $1
 	`, username)
 
 	var u models.User
-	err := row.Scan(&u.ID, &u.Username, &u.FullName, &u.PasswordHash, &u.RoleCode, &u.IsActive, &u.Theme, &u.HideFinancials, &u.CreatedAt, &u.UpdatedAt)
+	err := row.Scan(&u.ID, &u.Username, &u.FullName, &u.PasswordHash, &u.RoleCode, &u.IsActive, &u.Theme, &u.HideFinancials, &u.CheckContractPath, &u.CreatedAt, &u.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrUserNotFound
 	}
@@ -41,13 +41,13 @@ func (r *UserRepo) GetByUsername(ctx context.Context, username string) (*models.
 
 func (r *UserRepo) GetByID(ctx context.Context, id int64) (*models.User, error) {
 	row := r.pool.QueryRow(ctx, `
-		SELECT id, username, full_name, password_hash, role_code, is_active, theme, hide_financials, created_at, updated_at
+		SELECT id, username, full_name, password_hash, role_code, is_active, theme, hide_financials, check_contract_path, created_at, updated_at
 		FROM users
 		WHERE id = $1
 	`, id)
 
 	var u models.User
-	err := row.Scan(&u.ID, &u.Username, &u.FullName, &u.PasswordHash, &u.RoleCode, &u.IsActive, &u.Theme, &u.HideFinancials, &u.CreatedAt, &u.UpdatedAt)
+	err := row.Scan(&u.ID, &u.Username, &u.FullName, &u.PasswordHash, &u.RoleCode, &u.IsActive, &u.Theme, &u.HideFinancials, &u.CheckContractPath, &u.CreatedAt, &u.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrUserNotFound
 	}
@@ -91,7 +91,7 @@ func (r *UserRepo) UpdateTheme(ctx context.Context, userID int64, theme string) 
 
 func (r *UserRepo) List(ctx context.Context) ([]models.User, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, username, full_name, password_hash, role_code, is_active, theme, hide_financials, created_at, updated_at
+		SELECT id, username, full_name, password_hash, role_code, is_active, theme, hide_financials, check_contract_path, created_at, updated_at
 		FROM users
 		ORDER BY is_active DESC, role_code, username
 	`)
@@ -105,7 +105,7 @@ func (r *UserRepo) List(ctx context.Context) ([]models.User, error) {
 		var u models.User
 		if err := rows.Scan(
 			&u.ID, &u.Username, &u.FullName, &u.PasswordHash,
-			&u.RoleCode, &u.IsActive, &u.Theme, &u.HideFinancials,
+			&u.RoleCode, &u.IsActive, &u.Theme, &u.HideFinancials, &u.CheckContractPath,
 			&u.CreatedAt, &u.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan user: %w", err)
@@ -181,5 +181,12 @@ func (r *UserRepo) UpdateHideFinancials(ctx context.Context, userID int64, hide 
 	_, err := r.pool.Exec(ctx, `
 		UPDATE users SET hide_financials = $2, updated_at = NOW() WHERE id = $1
 	`, userID, hide)
+	return err
+}
+
+func (r *UserRepo) UpdateCheckContractPath(ctx context.Context, userID int64, check bool) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE users SET check_contract_path = $2, updated_at = NOW() WHERE id = $1
+	`, userID, check)
 	return err
 }

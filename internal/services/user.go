@@ -133,3 +133,7 @@ func (s *UserService) ToggleActive(ctx context.Context, userID, currentUserID in
 func (s *UserService) SetHideFinancials(ctx context.Context, userID int64, hide bool) error {
 	return s.repo.UpdateHideFinancials(ctx, userID, hide)
 }
+
+func (s *UserService) SetCheckContractPath(ctx context.Context, userID int64, check bool) error {
+	return s.repo.UpdateCheckContractPath(ctx, userID, check)
+}

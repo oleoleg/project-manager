@@ -94,7 +94,7 @@
 
         if (btn) {
             btn.addEventListener('click', () => {
-                window.location.href = 'pm://pick-file';
+                window.location.href = 'pm-agent://pick-file'; // ИСПРАВЛЕНО
                 if (pollTimer) clearInterval(pollTimer);
                 pollStartedAt = Date.now();
                 pollTimer = setInterval(checkPickedPath, 800);
@@ -131,7 +131,6 @@
 
             if (name) name.value = base;
 
-            // Определяем вид приложения из имени файла
             if (window.detectActKind) {
                 const detectedKind = window.detectActKind(base);
                 if (detectedKind) {
@@ -148,7 +147,7 @@
             openBtn.addEventListener('click', () => {
                 const p = field.value.trim();
                 if (!p) return;
-                window.location.href = 'pm://open?path=' + encodeURIComponent(p);
+                window.location.href = 'pm-agent://open?path=' + encodeURIComponent(p); // ИСПРАВЛЕНО
             });
         }
     })();

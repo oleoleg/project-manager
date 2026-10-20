@@ -88,3 +88,19 @@ func (h *SettingsHandler) SavePrivacy(w http.ResponseWriter, r *http.Request) {
 	}
 	http.Redirect(w, r, "/settings?flash="+url.QueryEscape("Сохранено"), http.StatusSeeOther)
 }
+
+func (h *SettingsHandler) SaveCheckPath(w http.ResponseWriter, r *http.Request) {
+	u := middleware.UserFromContext(r.Context())
+	if u == nil {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	_ = r.ParseForm()
+	check := r.FormValue("check_contract_path") == "on"
+	if err := h.userSvc.SetCheckContractPath(r.Context(), u.ID, check); err != nil {
+		log.Printf("save check path: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/settings?flash="+url.QueryEscape("Сохранено"), http.StatusSeeOther)
+}

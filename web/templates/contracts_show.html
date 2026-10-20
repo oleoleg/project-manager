@@ -34,7 +34,7 @@
     </div>
     <div class="actions">
         {{ if $c.ProjectURL }}
-            <a href="pm://open?path={{ $c.ProjectURL | urlquery }}" class="btn btn-sm" title="Открыть папку проекта в проводнике">📁 Открыть папку</a>
+            <a href="pm-agent://open?path={{ $c.ProjectURL | urlquery }}" class="btn btn-sm" title="Открыть папку проекта в проводнике">📁 Открыть папку</a>
         {{ end }}
         <div class="vat-toggle">
             <a href="{{ $base }}?vat=without&stages={{ $curStages }}&costs={{ $curCosts }}"
@@ -263,6 +263,8 @@
 {{ end }}
 
 <p><a href="/contracts">← К списку</a></p>
+
+
 
 {{ template "layout_footer" . }}
 {{ end }}

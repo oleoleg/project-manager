@@ -181,6 +181,22 @@ func startHTTPServer(stopCh <-chan struct{}) {
 			}
 			return false
 		},
+		"statusName": func(list []models.ContractStatusRef, code int16) string {
+			for _, s := range list {
+				if s.Code == code {
+					return s.Name
+				}
+			}
+			return fmt.Sprintf("%d", code)
+		},
+		"counterpartyName": func(list []models.Counterparty, id string) string {
+			for _, c := range list {
+				if c.ID == id {
+					return c.Name
+				}
+			}
+			return id
+		},
 	})
 
 	parsed, err := tmpl.ParseGlob(filepath.Join(baseDir, "web", "templates", "*.html"))
@@ -263,6 +279,7 @@ func startHTTPServer(stopCh <-chan struct{}) {
 		r.Get("/settings", settingsH.Index)
 		r.Post("/settings/theme", settingsH.SaveTheme)
 		r.Post("/settings/privacy", settingsH.SavePrivacy)
+		r.Post("/settings/check-path", settingsH.SaveCheckPath)
 
 		r.Get("/counterparties", counterpartyH.List)
 		r.Get("/counterparties/new", counterpartyH.New)
@@ -324,7 +341,6 @@ func startHTTPServer(stopCh <-chan struct{}) {
 
 		r.Group(func(r chi.Router) {
 			r.Use(mw.RequireRole("admin", "rp_chief"))
-			r.Post("/counterparties/{id}/delete", counterpartyH.Delete)
 			r.Post("/contracts/{id}/delete", contractH.Delete)
 			r.Post("/contracts/{id}/stages/{guid}/delete", stageH.Delete)
 		})
@@ -338,6 +354,7 @@ func startHTTPServer(stopCh <-chan struct{}) {
 			r.Post("/admin/users/{id}", adminUserH.Update)
 			r.Post("/admin/users/{id}/password", adminUserH.ChangePassword)
 			r.Post("/admin/users/{id}/toggle", adminUserH.ToggleActive)
+			r.Post("/counterparties/{id}/delete", counterpartyH.Delete)
 		})
 	})
 

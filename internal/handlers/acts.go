@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -465,14 +466,15 @@ func (h *ActHandler) OpenAttachment(w http.ResponseWriter, r *http.Request) {
 
 // ======================= Helpers =======================
 
-// renderPmOpen отдаёт HTML со скриптом, открывающим папку или файл через pm://.
+// renderPmOpen отдаёт HTML со скриптом, открывающим папку или файл через pm-agent://.
 func (h *ActHandler) renderPmOpen(w http.ResponseWriter, path string) {
-	target := "pm://open?path=" + path
+	target := "pm-agent://open?path=" + url.QueryEscape(path)
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write([]byte(`<!DOCTYPE html><html><body>
 <script>
     window.location.href = ` + strconv.Quote(target) + `;
-    setTimeout(function(){ window.close(); }, 500);
+	setTimeout(function(){ window.close(); }, 500);
 </script>
 </body></html>`))
 }

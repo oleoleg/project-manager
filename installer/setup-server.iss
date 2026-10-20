@@ -1,17 +1,16 @@
 ; ============================================================
-; Project Manager — инсталлятор
+; Project Manager — инсталлятор СЕРВЕРА (Служба + Трей + Агент)
 ; ============================================================
 
 [Setup]
-AppName=Project Manager
+AppName=Project Manager Server
 AppVersion=1.0.0
 AppPublisher=Your Company
-AppPublisherURL=https://example.com
 DefaultDirName={autopf}\Project Manager
 DefaultGroupName=Project Manager
 DisableProgramGroupPage=yes
 OutputDir=..\dist
-OutputBaseFilename=ProjectManager-Setup
+OutputBaseFilename=ProjectManager-Server-Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -28,6 +27,8 @@ Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
 Source: "..\dist\project-manager.exe";       DestDir: "{app}"; Flags: ignoreversion
 ; Трей
 Source: "..\dist\project-manager-tray.exe";  DestDir: "{app}"; Flags: ignoreversion
+; Агент (нужен локально для открытия папок)
+Source: "..\dist\pm-agent.exe";              DestDir: "{app}"; Flags: ignoreversion
 ; Статика и шаблоны
 Source: "..\dist\web\*";                     DestDir: "{app}\web"; Flags: ignoreversion recursesubdirs createallsubdirs
 
@@ -36,27 +37,34 @@ Source: "..\dist\web\*";                     DestDir: "{app}\web"; Flags: ignore
 Name: "{app}\logs"; Permissions: users-modify
 
 [Registry]
-; Регистрация URL-протокола pm:// — для кнопки «Открыть папку»
-Root: HKCR; Subkey: "pm"; ValueType: string; ValueName: ""; ValueData: "URL:Project Manager Protocol"; Flags: uninsdeletekey
-Root: HKCR; Subkey: "pm"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""; Flags: uninsdeletekey
-Root: HKCR; Subkey: "pm\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\project-manager-tray.exe"" ""%1"""; Flags: uninsdeletekey
+; Регистрация URL-протокола pm-agent://
+Root: HKCR; Subkey: "pm-agent"; ValueType: string; ValueName: ""; ValueData: "URL:Project Manager Agent Protocol"; Flags: uninsdeletekey
+Root: HKCR; Subkey: "pm-agent"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""; Flags: uninsdeletekey
+Root: HKCR; Subkey: "pm-agent\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\pm-agent.exe"" ""%1"""; Flags: uninsdeletekey
 
- 
 [Run]
 ; 1. Установка службы
 Filename: "{app}\project-manager.exe"; Parameters: "-install"; \
     StatusMsg: "Установка службы..."; \
     Flags: runhidden waituntilterminated
 
-; 2. Запуск трея
+; 2. Запуск Агента (чтобы кнопки открытия папок работали)
+Filename: "{app}\pm-agent.exe"; \
+    Flags: nowait runhidden
+
+; 3. Запуск трея
 Filename: "{app}\project-manager-tray.exe"; \
-    Description: "Запустить Project Manager"; \
+    Description: "Запустить Project Manager Server"; \
     Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
 Filename: "taskkill.exe"; Parameters: "/F /IM project-manager-tray.exe"; \
     Flags: runhidden waituntilterminated; \
     RunOnceId: "KillTray"
+    
+Filename: "taskkill.exe"; Parameters: "/F /IM pm-agent.exe"; \
+    Flags: runhidden waituntilterminated; \
+    RunOnceId: "KillAgent"
     
 Filename: "{app}\project-manager.exe"; Parameters: "-remove"; \
     Flags: runhidden waituntilterminated; \
@@ -74,7 +82,7 @@ var
 
 procedure InitializeWizard();
 begin
-  // --- Страница 1: База данных (5 полей — влезает) ---
+  // --- Страница 1: База данных ---
   DBPage := CreateInputQueryPage(wpSelectDir,
     'Подключение к базе данных',
     'Укажите параметры PostgreSQL',
