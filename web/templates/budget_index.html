@@ -14,6 +14,7 @@
         <h2>Бюджет договора № {{ $c.ID }}</h2>
     </div>
     <div class="actions">
+        <a href="/contracts/{{ $c.ID }}/budget/fact" class="btn" style="background-color: #17a2b8; color: white; border-color: #17a2b8;">💸 Перейти в Факт</a>
         <a href="/contracts/{{ $c.ID }}/budget?edit=1" class="btn btn-primary">➕ Создать новый план</a>
     </div>
 </div>
@@ -38,7 +39,7 @@
     </div>
     
     {{ if .Snapshot }}
-    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+    <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
         {{ if not .Snapshot.IsActive }}
         <form method="post" action="/contracts/{{ $c.ID }}/budget/snapshots/{{ .Snapshot.ID }}/activate">
             <button type="submit" class="btn btn-sm btn-success" style="background-color: #28a745; border-color: #28a745;">Сделать активным</button>
@@ -47,11 +48,18 @@
         <span class="tag tag-status" style="background: #28a745; color: white; padding: 5px 10px; border-radius: 4px; font-weight: bold; display: flex; align-items: center;">Активный план</span>
         {{ end }}
         
+        <!-- Блок утверждения -->
         {{ if .Snapshot.ApprovedAt }}
             <span class="tag tag-status" style="background: #17a2b8; color: white; padding: 5px 10px; border-radius: 4px; display: flex; align-items: center;">✅ Утвержден: {{ .Snapshot.ApproverName }} ({{ .Snapshot.ApprovedAt.Format "02.01.2006" }})</span>
+            
+            {{ if or (eq .User.RoleCode "admin") (eq .User.RoleCode "rp_chief") (eq .User.RoleCode "director") }}
+                <form method="post" action="/contracts/{{ $c.ID }}/budget/snapshots/{{ .Snapshot.ID }}/unapprove" onsubmit="return confirm('Отозвать утверждение с этого плана?');">
+                    <button type="submit" class="btn btn-sm" style="background: #6c757d; color: white; border-color: #6c757d;">Отозвать утверждение</button>
+                </form>
+            {{ end }}
         {{ else }}
             {{ if or (eq .User.RoleCode "admin") (eq .User.RoleCode "rp_chief") (eq .User.RoleCode "director") }}
-                <form method="post" action="/contracts/{{ $c.ID }}/budget/snapshots/{{ .Snapshot.ID }}/approve">
+                <form method="post" action="/contracts/{{ $c.ID }}/budget/snapshots/{{ .Snapshot.ID }}/approve" onsubmit="return confirm('Утвердить этот план? Предыдущий утвержденный план (если есть) будет отозван.');">
                     <button type="submit" class="btn btn-sm" style="background: #17a2b8; color: white; border-color: #17a2b8;">Утвердить руководством</button>
                 </form>
             {{ end }}

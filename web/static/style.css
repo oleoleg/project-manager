@@ -3,7 +3,7 @@
    ===================================================== */
 :root,
 html[data-theme="light"] {
-    --bg: #f5f6fa;
+    --bg: #e5e7eb;
     --surface: #ffffff;
     --surface-alt: #fafbfc;
     --surface-soft: #f1f2f6;
@@ -1073,4 +1073,80 @@ th .th-sub {
 .chain-manual {
     color: var(--text-muted);
     opacity: 0.7;
+}
+
+/* =====================================================
+   Бюджет: ФинФакт
+   ===================================================== */
+
+/* Строка, которая подтверждена (залита зеленым) */
+.fact-row.confirmed td {
+    background-color: var(--flash-bg) !important; /* Используем цвет флеша из твоей темы */
+}
+
+/* Измененная вручную сумма (желтый цвет текста) */
+input.fact-input.manual-edit {
+    color: var(--header-warn, #e6b800) !important; 
+    font-weight: bold;
+}
+
+/* Поля ввода в таблице фактов */
+.fact-input {
+    width: 100%;
+    padding: 4px 6px;
+    font-size: 12px !important;
+    border: 1px solid var(--border); /* Рамка видна и на белом, и на темном фоне */
+    border-radius: 4px;
+    background: var(--surface-soft); /* Чуть серый фон, чтобы выделялся на белой карточке */
+    color: var(--text);
+    box-sizing: border-box;
+    font-family: inherit;
+    min-height: 30px;
+}
+
+
+.fact-input:focus {
+    border-color: var(--accent);
+    background: var(--surface);
+    outline: none;
+}
+
+/* Заблокированное поле (если подтверждено) */
+.fact-input[readonly] {
+    background: transparent;
+    border-color: transparent;
+    color: var(--text-muted);
+    padding-left: 0;
+}
+
+.plan-hint {
+    font-size: 10px;
+    color: var(--text-soft);
+    margin-top: 2px;
+    white-space: nowrap;
+}
+
+ 
+textarea.fact-input {
+    line-height: 1.2;
+    overflow: hidden;
+    display: block;
+    resize: vertical;
+}
+
+.plan-hint {
+    font-size: 11px;
+    color: var(--text-soft);
+    margin-top: 2px;
+}
+
+/* Выравнивание по вертикали */
+#fact-table td {
+    vertical-align: middle;
+    padding: 4px 6px;
+}
+
+/* Зеленая заливка для подтвержденных строк */
+.fact-row.confirmed td {
+    background-color: var(--flash-bg) !important;
 }

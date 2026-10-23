@@ -1,0 +1,291 @@
+{{ define "budget_fact.html" }}
+{{ template "layout_header" . }}
+{{ $c := .Contract }}
+
+<p class="back-link">
+    <a href="/contracts/{{ $c.ID }}">← К договору</a>
+</p>
+
+<div class="page-header">
+    <div class="contract-title">
+        <h2>Бюджет ФАКТ договора № {{ $c.ID }}</h2>
+    </div>
+    <div class="actions">
+        <a href="/contracts/{{ $c.ID }}/budget" class="btn">← К Плану</a>
+        
+        {{ if not .FactLines }}
+            {{ if .HasActivePlan }}
+                <form method="post" action="/contracts/{{ $c.ID }}/budget/fact/generate" style="display:inline;" onsubmit="return confirm('Сформировать факт на основе активного плана?');">
+                    <button type="submit" class="btn btn-primary">⚙ Сформировать Факт</button>
+                </form>
+            {{ else }}
+                <span class="tag" style="background: #dc3545; color: white; padding: 5px 10px; border-radius: 4px;">Нет активного плана</span>
+            {{ end }}
+        {{ else }}
+            <button type="submit" form="fact-form" class="btn btn-primary">💾 Сохранить изменения</button>
+        {{ end }}
+    </div>
+</div>
+
+{{ if .Flash }}<div class="info-box" style="background-color: #e6f4ea; color: #1e8e3e; margin-bottom: 15px;">{{ .Flash }}</div>{{ end }}
+
+{{ if .Warnings }}
+    {{ range .Warnings }}
+        <div class="error" style="margin-bottom: 15px; padding: 12px; border-left: 4px solid #c0392b; background: var(--error-bg); color: var(--error-text); border-radius: 4px;">
+            ⚠️ {{ . }}
+        </div>
+    {{ end }}
+{{ end }}
+
+{{ if .FactLines }}
+    <div class="filter-bar" style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center;">
+        <label class="inline-checkbox" style="cursor: pointer;">
+            <input type="checkbox" id="show-salary" onchange="toggleSalaryRows()">
+            Показать ЗП и Накладные
+        </label>
+    </div>
+
+    <form id="fact-form" method="post" action="/contracts/{{ $c.ID }}/budget/fact/save-form">
+        <div class="table-scroll">
+        <table class="data-table" id="fact-table">
+            <thead>
+            <tr>
+                <th style="width: 130px;">Вид работы</th>
+                <th>Наименование</th>
+                <th style="width: 110px;">Дата оп.</th>
+                <th style="width: 60px;">Отсрочка</th>
+                <th style="width: 110px;">Дата платежа</th>
+                <th class="num" style="width: 130px;">Факт (Приход)</th>
+                <th class="num" style="width: 130px;">Факт (Расход)</th>
+                <th style="width: 60px; text-align: center;">Подтв.</th>
+                <th style="width: 90px; text-align: right;">Действие</th>
+            </tr>
+            </thead>
+            <tbody>
+            {{ $allTypes := list "Платежи по договору" "Закупка по договору" "Зарплата сотрудникам" "Накладные" "Командировки" "Субподрядчики" "Комиссия" "Другое (расходы)" }}
+            
+            {{ range $type := $allTypes }}
+                {{ $typeLines := index $.GroupedLines $type }}
+                {{ $isSalary := or (eq $type "Зарплата сотрудникам") (eq $type "Накладные") }}
+                {{ $isPayment := eq $type "Платежи по договору" }}
+                
+                <!-- Заголовок группы -->
+                <tr class="group-header-row {{ if $isSalary }}salary-row{{ end }}" {{ if $isSalary }}style="display: none;"{{ end }}>
+                    <td colspan="9" style="background: var(--surface-alt); font-weight: bold; color: var(--accent); padding: 10px; font-size: 1.1em;">
+                        {{ $type }}
+                        <input type="hidden" class="group-op-type" value="{{ $type }}">
+                    </td>
+                </tr>
+
+                <!-- Строки факта -->
+                {{ range $typeLines }}
+                    <tr class="fact-row {{ if $isSalary }}salary-row{{ end }} {{ if .IsConfirmed }}confirmed{{ end }}" 
+                        {{ if $isSalary }}style="display: none;"{{ end }}>
+                        
+                        <td>
+                            <span class="current-workkind">{{ workKindLabel $.WorkKinds .WorkKindCode }}</span>
+                            <select name="work_kind_code[]" class="fact-input" style="display:none;">
+                                {{ range $.WorkKinds }}
+                                    <option value="{{ .Code }}" {{ if eq .Code $.WorkKindCode }}selected{{ end }}>{{ .Name }}</option>
+                                {{ end }}
+                            </select>
+                        </td>
+                        
+                        <input type="hidden" name="fact_id[]" value="{{ .ID }}">
+                        <input type="hidden" name="operation_type[]" value="{{ $type }}">
+
+                        <td>
+                            <textarea name="name[]" class="fact-input" rows="2" style="resize: vertical; height: 100%; min-height: 38px;">{{ .Name }}</textarea>
+                        </td>
+                        
+                        <td><input type="date" name="operation_date[]" value="{{ .OperationDate.Format "2006-01-02" }}" class="fact-input" onchange="updatePayDate(this)" {{ if .IsConfirmed }}readonly{{ end }}></td>
+                        <td><input type="number" name="delay_days[]" value="{{ .DelayDays }}" class="fact-input" onchange="updatePayDate(this)" {{ if .IsConfirmed }}readonly{{ end }}></td>
+                        <td><input type="date" name="payment_date[]" value="{{ .PaymentDate.Format "2006-01-02" }}" class="fact-input" readonly></td>
+                        
+                        <td class="num">
+                            {{ if $isPayment }}
+                                <input type="text" name="fact_income[]" class="fact-input money-input" value="{{ if gt .FactIncome 0.0 }}{{ printf "%.2f" .FactIncome }}{{ end }}" {{ if .IsConfirmed }}readonly{{ end }}>
+                                <div class="plan-hint">План: {{ if gt .PlanIncome 0.0 }}{{ money .PlanIncome }}{{ end }}</div>
+                            {{ else }}
+                                <input type="hidden" name="fact_income[]" value="0">
+                                <span class="muted">—</span>
+                            {{ end }}
+                        </td>
+
+                        <td class="num">
+                            {{ if not $isPayment }}
+                                <input type="text" name="fact_expense[]" class="fact-input money-input" value="{{ if gt .FactExpense 0.0 }}{{ printf "%.2f" .FactExpense }}{{ end }}" {{ if .IsConfirmed }}readonly{{ end }}>
+                                <div class="plan-hint">План: {{ if gt .PlanExpense 0.0 }}{{ money .PlanExpense }}{{ end }}</div>
+                            {{ else }}
+                                <input type="hidden" name="fact_expense[]" value="0">
+                                <span class="muted">—</span>
+                            {{ end }}
+                        </td>
+
+                        <!-- КВИТИРОВАНО -->
+                        <td style="text-align: center;">
+                            <input type="checkbox" name="is_confirmed[]" value="{{ .ID }}" 
+                                   {{ if or .IsConfirmed $isSalary }}checked{{ end }} 
+                                   {{ if $isSalary }}disabled{{ end }} 
+                                   onchange="toggleRowInputs(this)">
+                        </td>
+
+                        <!-- ДЕЙСТВИЕ -->
+                        <td style="text-align: right; white-space: nowrap;">
+                            {{ if not $isSalary }}
+                                <button type="submit" class="btn btn-sm btn-primary" title="Сохранить строку">💾</button>
+                                <button type="button" class="btn btn-sm btn-danger" onclick="deleteRow(this)" title="Удалить">×</button>
+                            {{ else }}
+                                <span class="muted" style="font-size: 11px;">авто</span>
+                            {{ end }}
+                        </td>
+                    </tr>
+                {{ end }}
+                
+                <!-- Кнопка добавления -->
+                <tr class="group-add-row {{ if $isSalary }}salary-row{{ end }}" {{ if $isSalary }}style="display: none;"{{ end }}>
+                    <td colspan="9" style="padding: 5px 10px;">
+                        <button type="button" class="btn btn-sm" style="opacity: 0.7;" onclick="addNewRow('{{ $type }}', event)">+ Добавить операцию</button>
+                    </td>
+                </tr>
+            {{ end }}
+            </tbody>
+        </table>
+        </div>
+    </form>
+
+    <section class="danger-zone" style="margin-top: 40px;">
+        <h3>Опасная зона</h3>
+        <p class="muted">Действие необратимо. Все ручные правки в факте будут потеряны, а таблица пересоздана на основе активного плана.</p>
+        <form method="post" action="/contracts/{{ $c.ID }}/budget/fact/delete" onsubmit="return confirm('Удалить текущий факт и вернуть базовую версию из плана?');">
+            <button type="submit" class="btn btn-danger">🗑 Сбросить факт по активному плану</button>
+        </form>
+    </section>
+{{ else }}
+    <div class="info-box">
+        <p><strong>Факт ещё не сформирован.</strong></p>
+        <p class="muted">Нажмите кнопку «Сформировать Факт», чтобы создать таблицу на основе утвержденного плана.</p>
+    </div>
+{{ end }}
+
+<script>
+    // Автоматический расчет даты платежа
+    function updatePayDate(element) {
+        const row = element.closest('tr');
+        const opDateInput = row.querySelector('input[name="operation_date[]"]');
+        const delayInput = row.querySelector('input[name="delay_days[]"]');
+        const payDateInput = row.querySelector('input[name="payment_date[]"]');
+
+        if (!opDateInput || !opDateInput.value) return;
+        const delay = parseInt(delayInput.value) || 0;
+        
+        const date = new Date(opDateInput.value);
+        date.setDate(date.getDate() + delay);
+        
+        const yyyy = date.getFullYear();
+        const mm = String(date.getMonth() + 1).padStart(2, '0');
+        const dd = String(date.getDate()).padStart(2, '0');
+        
+        if (payDateInput) payDateInput.value = `${yyyy}-${mm}-${dd}`;
+    }
+
+    function toggleRowInputs(checkbox) {
+        const row = checkbox.closest('tr');
+        const inputs = row.querySelectorAll('input.fact-input, textarea.fact-input, input.money-input');
+        
+        inputs.forEach(input => {
+            if (checkbox.checked) {
+                input.setAttribute('readonly', 'readonly');
+            } else {
+                input.removeAttribute('readonly');
+            }
+        });
+    }
+
+    // Удаление строки
+    function deleteRow(btn) {
+        if (!confirm('Удалить эту строку?')) return;
+        const row = btn.closest('tr');
+        row.remove();
+        // Здесь можно было бы сделать fetch-запрос на удаление, 
+        // но для простоты строка просто исчезнет из формы, 
+        // и при сохранении сервер её не увидит.
+    }
+
+    // Добавление новой строки
+    function addNewRow(opType, event) {
+        const btn = event.target;
+        const btnRow = btn.closest('tr');
+        const tbody = document.getElementById('fact-table').querySelector('tbody');
+        const newRow = document.createElement('tr');
+        newRow.className = 'fact-row';
+        
+        const isPayment = opType === 'Платежи по договору';
+        const isSalary = opType === 'Зарплата сотрудникам' || opType === 'Накладные';
+        
+        // Получаем список видов работ из первого селекта на странице
+        let workKindsHTML = '';
+        const firstSelect = document.querySelector('select[name="work_kind_code[]"]');
+        if (firstSelect) {
+            workKindsHTML = firstSelect.innerHTML;
+        }
+
+        newRow.innerHTML = `
+            <td>
+                <select name="work_kind_code[]" class="fact-input">${workKindsHTML}</select>
+            </td>
+            <input type="hidden" name="fact_id[]" value="">
+            <input type="hidden" name="operation_type[]" value="${opType}">
+            <td><textarea name="name[]" class="fact-input" rows="2" placeholder="Новая операция"></textarea></td>
+            <td><input type="date" name="operation_date[]" class="fact-input" onchange="updatePayDate(this)"></td>
+            <td><input type="number" name="delay_days[]" value="0" class="fact-input" onchange="updatePayDate(this)"></td>
+            <td><input type="date" name="payment_date[]" class="fact-input" readonly></td>
+            <td class="num">
+                ${isPayment ? `<input type="text" name="fact_income[]" class="fact-input money-input">` : `<input type="hidden" name="fact_income[]" value="0"><span class="muted">—</span>`}
+            </td>
+            <td class="num">
+                ${!isPayment ? `<input type="text" name="fact_expense[]" class="fact-input money-input">` : `<input type="hidden" name="fact_expense[]" value="0"><span class="muted">—</span>`}
+            </td>
+            <td style="text-align: center;">
+                <input type="checkbox" name="is_confirmed[]" value="" ${isSalary ? 'disabled' : ''} onchange="toggleRowInputs(this)">
+            </td>
+            <td style="text-align: right; white-space: nowrap;">
+                <button type="submit" class="btn btn-sm btn-primary" title="Сохранить">💾</button>
+                <button type="button" class="btn btn-sm btn-danger" onclick="deleteRow(this)" title="Удалить">×</button>
+            </td>
+        `;
+        
+        tbody.insertBefore(newRow, btnRow);
+        
+        if (window.attachMoneyInput) {
+            newRow.querySelectorAll('input.money-input').forEach(window.attachMoneyInput);
+        }
+        
+        const today = new Date().toISOString().split('T')[0];
+        newRow.querySelector('input[name="operation_date[]"]').value = today;
+        updatePayDate(newRow.querySelector('input[name="operation_date[]"]'));
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('input[name="is_confirmed[]"]').forEach(cb => {
+            // Если галочка стоит — блокируем поля
+            if (cb.checked) {
+                toggleRowInputs(cb);
+            }
+        });
+        
+        if (window.attachMoneyInput) {
+            document.querySelectorAll('input.money-input').forEach(window.attachMoneyInput);
+        }
+    });
+
+    function toggleSalaryRows() {
+        const checkbox = document.getElementById('show-salary');
+        document.querySelectorAll('.salary-row').forEach(row => {
+            row.style.display = checkbox.checked ? '' : 'none';
+        });
+    }
+</script>
+
+{{ template "layout_footer" . }}
+{{ end }}

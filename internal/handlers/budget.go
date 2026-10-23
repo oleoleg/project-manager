@@ -2,13 +2,17 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"log"
+	"math"
 	"net/http"
+	"sort"
 	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/oleoleg/project-manager/internal/db"
 	"github.com/oleoleg/project-manager/internal/middleware"
 	"github.com/oleoleg/project-manager/internal/models"
 	"github.com/oleoleg/project-manager/internal/services"
@@ -212,8 +216,20 @@ func (h *BudgetHandler) ApproveSnapshot(w http.ResponseWriter, r *http.Request) 
 	snapshotID := chi.URLParam(r, "snapshotID")
 	u := middleware.UserFromContext(r.Context())
 
-	if err := h.svc.ApproveSnapshot(r.Context(), snapshotID, u.ID); err != nil {
+	if err := h.svc.ApproveSnapshot(r.Context(), contractID, snapshotID, u.ID); err != nil {
 		log.Printf("approve snapshot: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/contracts/"+contractID+"/budget?snapshot="+snapshotID, http.StatusSeeOther)
+}
+
+func (h *BudgetHandler) UnapproveSnapshot(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "id")
+	snapshotID := chi.URLParam(r, "snapshotID")
+
+	if err := h.svc.UnapproveSnapshot(r.Context(), snapshotID); err != nil {
+		log.Printf("unapprove snapshot: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
@@ -281,4 +297,200 @@ func (h *BudgetHandler) GetSummaryChart(w http.ResponseWriter, r *http.Request) 
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
+}
+
+// FactIndex отображает страницу ФинФакта.
+func (h *BudgetHandler) FactIndex(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "id")
+	contract, _ := h.contractSvc.GetByID(r.Context(), contractID)
+
+	// Получаем строки факта (уже отсортированные по группам)
+	lines, err := h.svc.GetFactLines(r.Context(), contractID)
+	if err != nil {
+		log.Printf("get fact lines: %v", err)
+		lines = nil
+	}
+
+	// Группируем строки для шаблона: map[ТипОперации][]Строки
+	groupedLines := make(map[string][]models.BudgetFactLine)
+	var groupOrder []string
+
+	// Задаем жесткий порядок групп
+	orderMap := map[string]int{
+		"Платежи по договору": 1, "Закупка по договору": 2, "Зарплата сотрудникам": 3,
+		"Накладные": 4, "Командировки": 5, "Субподрядчики": 6, "Комиссия": 7, "Другое (расходы)": 8,
+	}
+
+	for _, l := range lines {
+		if _, exists := groupedLines[l.OperationType]; !exists {
+			groupOrder = append(groupOrder, l.OperationType)
+		}
+		groupedLines[l.OperationType] = append(groupedLines[l.OperationType], l)
+	}
+
+	// Сортируем порядок групп
+	sort.Slice(groupOrder, func(i, j int) bool {
+		return orderMap[groupOrder[i]] < orderMap[groupOrder[j]]
+	})
+
+	// ... (проверка предупреждений и активного плана оставляем как было)
+	checkData, _ := h.svc.GetFactCheckData(r.Context(), contractID)
+	var factPayments float64
+	for _, l := range lines {
+		if l.OperationType == "Платежи по договору" {
+			factPayments += l.FactIncome
+		}
+	}
+
+	warnings := []string{}
+	if math.Abs(factPayments-checkData["total_acts"]) > 1.0 && factPayments > 0 {
+		warnings = append(warnings, fmt.Sprintf("Внимание: Сумма платежей по факту (%.2f ₽) не сходится с суммой закрытых актов в договоре (%.2f ₽).", factPayments, checkData["total_acts"]))
+	}
+
+	activePlan, _, _ := h.svc.GetLatestPlan(r.Context(), contractID)
+	hasActivePlan := activePlan != nil && activePlan.IsActive
+	workKinds, _ := h.stageSvc.WorkKinds(r.Context())
+
+	data := map[string]any{
+		"Title":         "ФинФакт договора",
+		"User":          middleware.UserFromContext(r.Context()),
+		"Contract":      contract,
+		"FactLines":     lines,
+		"GroupedLines":  groupedLines, // Передаем сгруппированные строки
+		"GroupOrder":    groupOrder,   // Передаем порядок групп
+		"HasActivePlan": hasActivePlan,
+		"WorkKinds":     workKinds,
+		"Flash":         r.URL.Query().Get("flash"),
+		"Warnings":      warnings,
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	h.tmpl.ExecuteTemplate(w, "budget_fact.html", data)
+}
+
+// FactGenerate создает факт на основе активного плана.
+func (h *BudgetHandler) FactGenerate(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "id")
+
+	if err := h.svc.GenerateFactFromPlan(r.Context(), contractID); err != nil {
+		log.Printf("generate fact: %v", err)
+		http.Error(w, "Ошибка генерации факта: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, "/contracts/"+contractID+"/budget/fact?flash=Факт+успешно+сформирован", http.StatusSeeOther)
+}
+
+// FactDelete удаляет все фактические данные.
+func (h *BudgetHandler) FactDelete(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "id")
+
+	if err := h.svc.DeleteFact(r.Context(), contractID); err != nil {
+		log.Printf("delete fact: %v", err)
+		http.Error(w, "Ошибка удаления факта", http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, "/contracts/"+contractID+"/budget/fact?flash=Факт+удален", http.StatusSeeOther)
+}
+
+// FactUpdate сохраняет изменения в конкретной строке факта.
+func (h *BudgetHandler) FactUpdate(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "id")
+	factID := chi.URLParam(r, "factID")
+	_ = r.ParseForm()
+
+	factIncome, _ := strconv.ParseFloat(r.FormValue("fact_income"), 64)
+	factExpense, _ := strconv.ParseFloat(r.FormValue("fact_expense"), 64)
+	isConfirmed := r.FormValue("is_confirmed") == "on"
+
+	if err := h.svc.UpdateFactLine(r.Context(), factID, factIncome, factExpense, isConfirmed); err != nil {
+		log.Printf("update fact line: %v", err)
+		http.Error(w, "Ошибка сохранения", http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, "/contracts/"+contractID+"/budget/fact", http.StatusSeeOther)
+}
+
+func (h *BudgetHandler) FactSaveBatch(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "id")
+	log.Printf("ПОЛУЧЕН ЗАПРОС НА СОХРАНЕНИЕ ФАКТА ДЛЯ %s", contractID)
+
+	var payload struct {
+		Lines []struct {
+			ID           string  `json:"id"`
+			FactIncome   float64 `json:"fact_income"`
+			FactExpense  float64 `json:"fact_expense"`
+			IsConfirmed  bool    `json:"is_confirmed"`
+			IsManualEdit bool    `json:"is_manual_edit"`
+		} `json:"lines"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		log.Printf("ОШИБКА ДЕКОДИРОВАНИЯ JSON: %v", err)
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("ПОЛУЧЕНО СТРОК: %d", len(payload.Lines))
+
+	var updates []db.FactUpdateData
+	for _, l := range payload.Lines {
+		updates = append(updates, db.FactUpdateData{
+			ID:           l.ID,
+			FactIncome:   l.FactIncome,
+			FactExpense:  l.FactExpense,
+			IsConfirmed:  l.IsConfirmed,
+			IsManualEdit: l.IsManualEdit,
+		})
+	}
+
+	if err := h.svc.UpdateFactLinesBatch(r.Context(), updates); err != nil {
+		log.Printf("ОШИБКА БД ПРИ СОХРАНЕНИИ: %v", err)
+		http.Error(w, "Error", http.StatusInternalServerError)
+		return
+	}
+
+	log.Println("УСПЕШНО СОХРАНЕНО")
+	// Отдаем JSON, а не редирект, чтобы JS мог это обработать
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"status":"ok"}`))
+}
+
+func (h *BudgetHandler) FactSaveForm(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "id")
+	_ = r.ParseForm()
+
+	ids := r.Form["fact_id[]"]
+	names := r.Form["name[]"]
+	opDates := r.Form["operation_date[]"]
+	delayDays := r.Form["delay_days[]"]
+	payDates := r.Form["payment_date[]"]
+	incIncomes := r.Form["fact_income[]"]
+	incExpenses := r.Form["fact_expense[]"]
+	confirms := r.Form["is_confirmed[]"]
+	workKindCodes := r.Form["work_kind_code[]"]
+	opTypes := r.Form["operation_type[]"]
+
+	// Защита от несовпадения длины массивов (частая причина 500)
+	if len(names) != len(ids) || len(opDates) != len(ids) {
+		log.Printf("ОШИБКА ВАЛИДАЦИИ ФОРМЫ: ids=%d, names=%d, opDates=%d", len(ids), len(names), len(opDates))
+		http.Error(w, "Ошибка: несовпадение полей формы", http.StatusBadRequest)
+		return
+	}
+
+	err := h.svc.BatchUpdateFactLines(
+		r.Context(), contractID,
+		ids, names, workKindCodes, opTypes,
+		opDates, delayDays, payDates, incIncomes, incExpenses, confirms,
+	)
+	if err != nil {
+		log.Printf("ОШИБКА МАССОВОГО ОБНОВЛЕНИЯ: %v", err)
+		http.Error(w, "Ошибка сохранения: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, "/contracts/"+contractID+"/budget/fact?flash=Изменения+сохранены", http.StatusSeeOther)
 }

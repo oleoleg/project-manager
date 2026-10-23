@@ -21,14 +21,15 @@ import (
 )
 
 type ContractHandler struct {
-	svc      *services.ContractService
-	cpSvc    *services.CounterpartyService
-	stageSvc *services.StageService
-	tmpl     *template.Template
+	svc       *services.ContractService
+	cpSvc     *services.CounterpartyService
+	stageSvc  *services.StageService
+	budgetSvc *services.BudgetService
+	tmpl      *template.Template
 }
 
-func NewContractHandler(svc *services.ContractService, cpSvc *services.CounterpartyService, stageSvc *services.StageService, tmpl *template.Template) *ContractHandler {
-	return &ContractHandler{svc: svc, cpSvc: cpSvc, stageSvc: stageSvc, tmpl: tmpl}
+func NewContractHandler(svc *services.ContractService, cpSvc *services.CounterpartyService, stageSvc *services.StageService, budgetSvc *services.BudgetService, tmpl *template.Template) *ContractHandler {
+	return &ContractHandler{svc: svc, cpSvc: cpSvc, stageSvc: stageSvc, budgetSvc: budgetSvc, tmpl: tmpl}
 }
 
 func (h *ContractHandler) commonData(r *http.Request, title string) map[string]any {
@@ -112,6 +113,10 @@ func (h *ContractHandler) Show(w http.ResponseWriter, r *http.Request) {
 	stageStatuses, _ := h.stageSvc.Statuses(r.Context())
 	assignees, _ := h.svc.ListAssignees(r.Context(), c.ID)
 	costTotals, _ := h.stageSvc.StageCostTotals(r.Context(), c.ID)
+	planExpenses, isPlanApproved, _ := h.budgetSvc.GetActivePlanTotals(r.Context(), c.ID)
+	// Получаем сумму факта (общую и подтвержденную)
+	factTotal, _ := h.budgetSvc.GetFactTotal(r.Context(), c.ID)
+	factConfirmed, _ := h.budgetSvc.GetFactConfirmedTotal(r.Context(), c.ID)
 
 	data := h.commonData(r, "Договор "+c.ID)
 	data["Contract"] = c
@@ -132,6 +137,10 @@ func (h *ContractHandler) Show(w http.ResponseWriter, r *http.Request) {
 	}
 	data["Today"] = time.Now()
 	data["CostTotals"] = costTotals
+	data["PlanExpenses"] = planExpenses
+	data["IsPlanApproved"] = isPlanApproved
+	data["FactExpenses"] = factTotal
+	data["FactExpensesConfirmed"] = factConfirmed
 
 	var responsible *models.User
 	if c.ResponsibleUserID != nil {

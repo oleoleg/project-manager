@@ -36,7 +36,8 @@
         {{ if $c.ProjectURL }}
             <a href="pm-agent://open?path={{ $c.ProjectURL | urlquery }}" class="btn btn-sm" title="Открыть папку проекта в проводнике">📁 Открыть папку</a>
         {{ end }}
-        <a href="/contracts/{{ $c.ID }}/budget" class="btn btn-sm" style="background-color: #e6b800; border-color: #e6b800; color: #000;">💰 Бюджет</a>
+        <a href="/contracts/{{ $c.ID }}/budget?tab=plan" class="btn btn-sm" style="background-color: #e6b800; border-color: #e6b800; color: #000;">💰 Бюджет План</a>
+        <a href="/contracts/{{ $c.ID }}/budget/fact" class="btn btn-sm" style="background-color: #e6b800; border-color: #e6b800; color: #000;">💸 Бюджет Факт</a>
         <div class="vat-toggle">
             <a href="{{ $base }}?vat=without&stages={{ $curStages }}&costs={{ $curCosts }}"
                class="btn btn-sm {{ if ne $vatMode "with" }}active{{ end }}">Без НДС</a>
@@ -71,10 +72,32 @@
             {{ if .VatMixed }}смешанный НДС{{ else }}{{ vatHint .VatSingle .VATMode }}{{ end }}
         </div>
     </div>
-    <div class="total-card"><span>Затраты</span>
-        <strong>{{ moneyOrBlur .User .Totals.TotalExpenses }}</strong>
+    <div class="total-card"><span>Затраты (План)</span>
+        <strong>
+            {{ if gt .PlanExpenses 0.0 }}
+                {{ moneyOrBlur .User .PlanExpenses }}
+                {{ if .IsPlanApproved }}
+                    <span title="Утвержденный план" style="color: #17a2b8;">🖋️</span>
+                {{ end }}
+            {{ else }}
+                —
+            {{ end }}
+        </strong>
     </div>
-    <div class="total-card"><span>Этапов</span><strong>{{ .Totals.Count }}</strong></div>
+    <div class="total-card"><span>Затраты (Факт)</span>
+        <strong>
+            {{ if gt .FactExpenses 0.0 }}
+                {{ moneyOrBlur .User .FactExpenses }}
+                {{ if gt .FactExpensesConfirmed 0.0 }}
+                    <div style="font-size: 0.75em; color: #888; margin-top: 4px;">
+                        в т.ч. подтв.: {{ money .FactExpensesConfirmed }}
+                    </div>
+                {{ end }}
+            {{ else }}
+                —
+            {{ end }}
+        </strong>
+    </div>
 </div>
 
 <section class="collapsible" id="section-stages">

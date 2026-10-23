@@ -312,6 +312,66 @@ func (s *BudgetService) SetActiveSnapshot(ctx context.Context, contractID, snaps
 	return s.repo.SetActiveSnapshot(ctx, contractID, snapshotID)
 }
 
-func (s *BudgetService) ApproveSnapshot(ctx context.Context, snapshotID string, userID int64) error {
-	return s.repo.ApproveSnapshot(ctx, snapshotID, userID)
+func (s *BudgetService) ApproveSnapshot(ctx context.Context, contractID string, snapshotID string, userID int64) error {
+	return s.repo.ApproveSnapshot(ctx, contractID, snapshotID, userID)
+}
+
+func (s *BudgetService) UnapproveSnapshot(ctx context.Context, snapshotID string) error {
+	return s.repo.UnapproveSnapshot(ctx, snapshotID)
+}
+
+func (s *BudgetService) GetActivePlanTotals(ctx context.Context, contractID string) (float64, bool, error) {
+	return s.repo.GetActivePlanTotals(ctx, contractID)
+}
+
+// GenerateFactFromPlan генерирует фактические строки на основе активного плана.
+func (s *BudgetService) GenerateFactFromPlan(ctx context.Context, contractID string) error {
+	return s.repo.GenerateFactFromPlan(ctx, contractID)
+}
+
+// GetFactLines получает фактические строки договора.
+func (s *BudgetService) GetFactLines(ctx context.Context, contractID string) ([]models.BudgetFactLine, error) {
+	return s.repo.GetFactLines(ctx, contractID)
+}
+
+// UpdateFactLine обновляет конкретную фактическую строку.
+func (s *BudgetService) UpdateFactLine(ctx context.Context, id string, factIncome, factExpense float64, isConfirmed bool) error {
+	return s.repo.UpdateFactLine(ctx, id, factIncome, factExpense, isConfirmed)
+}
+
+// DeleteFact полностью удаляет факт по договору.
+func (s *BudgetService) DeleteFact(ctx context.Context, contractID string) error {
+	return s.repo.DeleteFact(ctx, contractID)
+}
+
+func (s *BudgetService) GetFactTotal(ctx context.Context, contractID string) (float64, error) {
+	return s.repo.GetFactTotal(ctx, contractID)
+}
+
+func (s *BudgetService) GetFactConfirmedTotal(ctx context.Context, contractID string) (float64, error) {
+	return s.repo.GetFactConfirmedTotal(ctx, contractID)
+}
+
+func (s *BudgetService) GetFactCheckData(ctx context.Context, contractID string) (map[string]float64, error) {
+	return s.repo.GetFactCheckData(ctx, contractID)
+}
+
+func (s *BudgetService) UpdateFactLinesBatch(ctx context.Context, updates []db.FactUpdateData) error {
+	return s.repo.UpdateFactLinesBatch(ctx, updates)
+}
+
+func (s *BudgetService) BatchUpdateFactLines(
+	ctx context.Context,
+	contractID string,
+	ids, names, workKindCodes, opTypes []string,
+	opDates, delayDays, payDates []string,
+	incIncomes, incExpenses, confirms []string,
+) error {
+	return s.repo.BatchUpdateFactLines(
+		ctx,
+		contractID,
+		ids, names, workKindCodes, opTypes,
+		opDates, delayDays, payDates,
+		incIncomes, incExpenses, confirms,
+	)
 }

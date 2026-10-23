@@ -200,6 +200,18 @@ func startHTTPServer(stopCh <-chan struct{}) {
 		"add": func(a, b float64) float64 {
 			return a + b
 		},
+		"list": func(items ...string) []string {
+			return items
+		},
+		"filterByType": func(lines []models.BudgetFactLine, t string) []models.BudgetFactLine {
+			var res []models.BudgetFactLine
+			for _, l := range lines {
+				if l.OperationType == t {
+					res = append(res, l)
+				}
+			}
+			return res
+		},
 	})
 
 	parsed, err := tmpl.ParseGlob(filepath.Join(baseDir, "web", "templates", "*.html"))
@@ -244,7 +256,7 @@ func startHTTPServer(stopCh <-chan struct{}) {
 	dashH := handlers.NewDashboardHandler(tmpl)
 	settingsH := handlers.NewSettingsHandler(userSvc, tmpl)
 	counterpartyH := handlers.NewCounterpartyHandler(counterpartySvc, tmpl)
-	contractH := handlers.NewContractHandler(contractSvc, counterpartySvc, stageSvc, tmpl)
+	contractH := handlers.NewContractHandler(contractSvc, counterpartySvc, stageSvc, budgetSvc, tmpl)
 	stageH := handlers.NewStageHandler(stageSvc, stageCostSvc, contractSvc, counterpartySvc, actSvc, tmpl)
 	adminUserH := handlers.NewAdminUserHandler(userSvc, tmpl)
 	actH := handlers.NewActHandler(actSvc, stageSvc, contractSvc, tmpl)
@@ -331,13 +343,22 @@ func startHTTPServer(stopCh <-chan struct{}) {
 			r.Post("/contracts/{id}/attachments/{attGuid}", actH.UpdateAttachment)
 			r.Post("/contracts/{id}/attachments/{attGuid}/delete", actH.DeleteAttachment)
 
-			// Бюджет
+			// Бюджет (План)
 			r.Get("/contracts/{id}/budget", budgetH.Index)
 			r.Post("/contracts/{id}/budget/generate", budgetH.Generate)
 			r.Post("/contracts/{id}/budget/settings", budgetH.SaveSettings)
 			r.Post("/contracts/{id}/budget/snapshots/{snapshotID}/delete", budgetH.DeleteSnapshot)
 			r.Post("/contracts/{id}/budget/snapshots/{snapshotID}/activate", budgetH.ActivateSnapshot)
 			r.Get("/contracts/{id}/budget/charts.json", budgetH.GetSummaryChart)
+
+			// Бюджет (Факт)
+			r.Get("/contracts/{id}/budget/fact", budgetH.FactIndex)
+			r.Post("/contracts/{id}/budget/fact/generate", budgetH.FactGenerate)
+			r.Post("/contracts/{id}/budget/fact/delete", budgetH.FactDelete)
+			r.Post("/contracts/{id}/budget/fact/{factID}/update", budgetH.FactUpdate)
+			//r.Post("/contracts/{id}/budget/fact/save", budgetH.FactSaveBatch)
+			r.Post("/contracts/{id}/budget/fact/save-form", budgetH.FactSaveForm)
+
 		})
 
 		r.Group(func(r chi.Router) {
@@ -362,6 +383,7 @@ func startHTTPServer(stopCh <-chan struct{}) {
 		r.Group(func(r chi.Router) {
 			r.Use(mw.RequireRole("admin", "rp_chief", "director"))
 			r.Post("/contracts/{id}/budget/snapshots/{snapshotID}/approve", budgetH.ApproveSnapshot)
+			r.Post("/contracts/{id}/budget/snapshots/{snapshotID}/unapprove", budgetH.UnapproveSnapshot)
 		})
 
 		r.Group(func(r chi.Router) {
