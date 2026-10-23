@@ -337,7 +337,8 @@ func (h *BudgetHandler) FactIndex(w http.ResponseWriter, r *http.Request) {
 	checkData, _ := h.svc.GetFactCheckData(r.Context(), contractID)
 	var factPayments float64
 	for _, l := range lines {
-		if l.OperationType == "Платежи по договору" {
+		// Сравниваем только подтвержденный факт с актами
+		if l.OperationType == "Платежи по договору" && l.IsConfirmed {
 			factPayments += l.FactIncome
 		}
 	}
@@ -470,21 +471,38 @@ func (h *BudgetHandler) FactSaveForm(w http.ResponseWriter, r *http.Request) {
 	payDates := r.Form["payment_date[]"]
 	incIncomes := r.Form["fact_income[]"]
 	incExpenses := r.Form["fact_expense[]"]
-	confirms := r.Form["is_confirmed[]"]
 	workKindCodes := r.Form["work_kind_code[]"]
 	opTypes := r.Form["operation_type[]"]
 
-	// Защита от несовпадения длины массивов (частая причина 500)
-	if len(names) != len(ids) || len(opDates) != len(ids) {
-		log.Printf("ОШИБКА ВАЛИДАЦИИ ФОРМЫ: ids=%d, names=%d, opDates=%d", len(ids), len(names), len(opDates))
-		http.Error(w, "Ошибка: несовпадение полей формы", http.StatusBadRequest)
-		return
+	// Гарантируем, что все массивы одной длины (по количеству fact_id)
+	n := len(ids)
+
+	pad := func(arr []string) []string {
+		if len(arr) >= n {
+			return arr[:n]
+		}
+		out := make([]string, n)
+		copy(out, arr)
+		return out
+	}
+
+	// Чекбоксы — отдельная логика: они приходят только отмеченными
+	confirmedSet := make(map[string]bool)
+	for _, id := range r.Form["is_confirmed[]"] {
+		confirmedSet[id] = true
+	}
+	confirms := make([]string, n)
+	for i, id := range ids {
+		if confirmedSet[id] {
+			confirms[i] = id
+		}
 	}
 
 	err := h.svc.BatchUpdateFactLines(
 		r.Context(), contractID,
-		ids, names, workKindCodes, opTypes,
-		opDates, delayDays, payDates, incIncomes, incExpenses, confirms,
+		ids, pad(names), pad(workKindCodes), pad(opTypes),
+		pad(opDates), pad(delayDays), pad(payDates),
+		pad(incIncomes), pad(incExpenses), confirms,
 	)
 	if err != nil {
 		log.Printf("ОШИБКА МАССОВОГО ОБНОВЛЕНИЯ: %v", err)

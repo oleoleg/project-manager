@@ -677,7 +677,9 @@ func (r *BudgetRepo) BatchUpdateFactLines(
 
 	confirmMap := make(map[string]bool)
 	for _, id := range confirms {
-		confirmMap[id] = true
+		if id != "" {
+			confirmMap[id] = true
+		}
 	}
 
 	getStr := func(arr []string, i int) string {
@@ -714,6 +716,17 @@ func (r *BudgetRepo) BatchUpdateFactLines(
 		delay, _ := strconv.Atoi(delayStr)
 		inc, _ := strconv.ParseFloat(strings.ReplaceAll(incStr, " ", ""), 64)
 		exp, _ := strconv.ParseFloat(strings.ReplaceAll(expStr, " ", ""), 64)
+
+		// Если код не пришёл из формы — не затираем, берём из БД
+		if workKind == "" && id != "" {
+			_ = tx.QueryRow(ctx,
+				`SELECT work_kind_code FROM budget_fact_lines WHERE id = $1`, id,
+			).Scan(&workKind)
+		}
+		// Если и в БД пусто — дефолт
+		if workKind == "" {
+			workKind = "complex"
+		}
 
 		if id == "" {
 			// НОВАЯ СТРОКА (INSERT)

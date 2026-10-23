@@ -45,6 +45,24 @@
         </label>
     </div>
 
+    <div class="totals" id="fact-totals" style="margin-bottom: 20px;">
+        <div class="total-card">
+            <span>Факт (Приход)</span>
+            <strong id="total-fact-income">0,00 ₽</strong>
+            <div id="confirmed-fact-income" style="font-size: 0.85em; color: #888; margin-top: 5px;">Подтв.: 0,00 ₽</div>
+        </div>
+        <div class="total-card">
+            <span>Факт (Расход)</span>
+            <strong id="total-fact-expense">0,00 ₽</strong>
+            <div id="confirmed-fact-expense" style="font-size: 0.85em; color: #888; margin-top: 5px;">Подтв.: 0,00 ₽</div>
+        </div>
+        <div class="total-card">
+            <span>Баланс</span>
+            <strong id="total-fact-balance">0,00 ₽</strong>
+            <div id="confirmed-fact-balance" style="font-size: 0.85em; color: #888; margin-top: 5px;">Подтв.: 0,00 ₽</div>
+        </div>
+    </div>
+
     <form id="fact-form" method="post" action="/contracts/{{ $c.ID }}/budget/fact/save-form">
         <div class="table-scroll">
         <table class="data-table" id="fact-table">
@@ -70,11 +88,14 @@
                 {{ $isPayment := eq $type "Платежи по договору" }}
                 
                 <!-- Заголовок группы -->
-                <tr class="group-header-row {{ if $isSalary }}salary-row{{ end }}" {{ if $isSalary }}style="display: none;"{{ end }}>
-                    <td colspan="9" style="background: var(--surface-alt); font-weight: bold; color: var(--accent); padding: 10px; font-size: 1.1em;">
+                <tr class="group-header-row {{ if $isSalary }}salary-row{{ end }}" {{ if $isSalary }}style="display: none;"{{ end }} data-type="{{ $type }}">
+                    <td colspan="5" style="background: var(--surface-alt); font-weight: bold; color: var(--accent); padding: 10px; font-size: 1.1em;">
                         {{ $type }}
                         <input type="hidden" class="group-op-type" value="{{ $type }}">
                     </td>
+                    <td class="num group-total-income" style="background: var(--surface-alt); color: var(--accent); font-weight: bold; padding: 10px;">0,00 ₽</td>
+                    <td class="num group-total-expense" style="background: var(--surface-alt); color: var(--accent); font-weight: bold; padding: 10px;">0,00 ₽</td>
+                    <td colspan="2" style="background: var(--surface-alt);"></td>
                 </tr>
 
                 <!-- Строки факта -->
@@ -83,12 +104,17 @@
                         {{ if $isSalary }}style="display: none;"{{ end }}>
                         
                         <td>
-                            <span class="current-workkind">{{ workKindLabel $.WorkKinds .WorkKindCode }}</span>
-                            <select name="work_kind_code[]" class="fact-input" style="display:none;">
-                                {{ range $.WorkKinds }}
-                                    <option value="{{ .Code }}" {{ if eq .Code $.WorkKindCode }}selected{{ end }}>{{ .Name }}</option>
-                                {{ end }}
-                            </select>
+                            <input type="hidden" name="work_kind_code[]" class="workkind-hidden" value="{{ .WorkKindCode }}">
+                            {{ if $isSalary }}
+                                <span style="padding: 5px; display: inline-block;">{{ workKindLabel $.WorkKinds .WorkKindCode }}</span>
+                            {{ else }}
+                                <select class="fact-input workkind-select" onchange="this.previousElementSibling.value = this.value;" {{ if .IsConfirmed }}disabled{{ end }}>
+                                    {{ $line := . }}
+                                    {{ range $.WorkKinds }}
+                                        <option value="{{ .Code }}" {{ if eq .Code $line.WorkKindCode }}selected{{ end }}>{{ .Name }}</option>
+                                    {{ end }}
+                                </select>
+                            {{ end }}
                         </td>
                         
                         <input type="hidden" name="fact_id[]" value="{{ .ID }}">
@@ -143,11 +169,13 @@
                 {{ end }}
                 
                 <!-- Кнопка добавления -->
-                <tr class="group-add-row {{ if $isSalary }}salary-row{{ end }}" {{ if $isSalary }}style="display: none;"{{ end }}>
+                {{ if not $isSalary }}
+                <tr class="group-add-row">
                     <td colspan="9" style="padding: 5px 10px;">
                         <button type="button" class="btn btn-sm" style="opacity: 0.7;" onclick="addNewRow('{{ $type }}', event)">+ Добавить операцию</button>
                     </td>
                 </tr>
+                {{ end }}
             {{ end }}
             </tbody>
         </table>
@@ -191,6 +219,14 @@
 
     function toggleRowInputs(checkbox) {
         const row = checkbox.closest('tr');
+        
+        // Добавляем/убираем класс confirmed для правильного подсчета
+        if (checkbox.checked) {
+            row.classList.add('confirmed');
+        } else {
+            row.classList.remove('confirmed');
+        }
+
         const inputs = row.querySelectorAll('input.fact-input, textarea.fact-input, input.money-input');
         
         inputs.forEach(input => {
@@ -200,6 +236,9 @@
                 input.removeAttribute('readonly');
             }
         });
+        
+        // Пересчитываем итоги
+        recalculateTotals();
     }
 
     // Удаление строки
@@ -210,6 +249,9 @@
         // Здесь можно было бы сделать fetch-запрос на удаление, 
         // но для простоты строка просто исчезнет из формы, 
         // и при сохранении сервер её не увидит.
+        
+        // Первичный пересчет
+        recalculateTotals();
     }
 
     // Добавление новой строки
@@ -225,14 +267,17 @@
         
         // Получаем список видов работ из первого селекта на странице
         let workKindsHTML = '';
-        const firstSelect = document.querySelector('select[name="work_kind_code[]"]');
+        const firstSelect = document.querySelector('.workkind-select');
         if (firstSelect) {
             workKindsHTML = firstSelect.innerHTML;
         }
 
         newRow.innerHTML = `
             <td>
-                <select name="work_kind_code[]" class="fact-input">${workKindsHTML}</select>
+                <input type="hidden" name="work_kind_code[]" class="workkind-hidden" value="complex">
+                <select class="fact-input workkind-select" onchange="this.previousElementSibling.value = this.value;">
+                    ${workKindsHTML}
+                </select>
             </td>
             <input type="hidden" name="fact_id[]" value="">
             <input type="hidden" name="operation_type[]" value="${opType}">
@@ -247,6 +292,7 @@
                 ${!isPayment ? `<input type="text" name="fact_expense[]" class="fact-input money-input">` : `<input type="hidden" name="fact_expense[]" value="0"><span class="muted">—</span>`}
             </td>
             <td style="text-align: center;">
+                <input type="hidden" name="confirmed_id[]" value="">
                 <input type="checkbox" name="is_confirmed[]" value="" ${isSalary ? 'disabled' : ''} onchange="toggleRowInputs(this)">
             </td>
             <td style="text-align: right; white-space: nowrap;">
@@ -264,6 +310,9 @@
         const today = new Date().toISOString().split('T')[0];
         newRow.querySelector('input[name="operation_date[]"]').value = today;
         updatePayDate(newRow.querySelector('input[name="operation_date[]"]'));
+
+        // Первичный пересчет
+        recalculateTotals();
     }
 
     document.addEventListener('DOMContentLoaded', function() {
@@ -277,6 +326,15 @@
         if (window.attachMoneyInput) {
             document.querySelectorAll('input.money-input').forEach(window.attachMoneyInput);
         }
+
+                // Добавляем пересчет при вводе
+        document.querySelectorAll('input[name="fact_income[]"], input[name="fact_expense[]"]').forEach(inp => {
+            inp.addEventListener('input', recalculateTotals);
+        });
+
+        // Первичный пересчет
+        recalculateTotals();
+
     });
 
     function toggleSalaryRows() {
@@ -285,6 +343,94 @@
             row.style.display = checkbox.checked ? '' : 'none';
         });
     }
+
+        function formatMoney(val) {
+        if (!val && val !== 0) return '';
+        const s = Math.abs(val).toFixed(2);
+        const formatted = s.replace(/\B(?=(\d{3})+(?!\d))/g, '\u00A0');
+        return (val < 0 ? '-' : '') + formatted + ' ₽';
+    }
+
+    function parseMoneyText(text) {
+        if (!text) return 0;
+        const clean = text.replace(/[^\d.,-]/g, '').replace(',', '.');
+        const val = parseFloat(clean);
+        return isNaN(val) ? 0 : val;
+    }
+
+    function recalculateTotals() {
+        const table = document.getElementById('fact-table');
+        if (!table) return;
+        
+          let totalIncome = 0;
+        let totalExpense = 0;
+        let confirmedIncome = 0;
+        let confirmedExpense = 0;
+
+        // Считаем суммы по каждой группе
+        const groupHeaders = table.querySelectorAll('.group-header-row');
+        
+        groupHeaders.forEach(header => {
+            const type = header.getAttribute('data-type');
+            if (!type) return;
+            
+            let groupInc = 0;
+            let groupExp = 0;
+            
+            // Ищем строки этой группы
+            const rows = table.querySelectorAll(`tr.fact-row`);
+            rows.forEach(row => {
+                const opTypeInput = row.querySelector('input[name="operation_type[]"]');
+                if (opTypeInput && opTypeInput.value === type) {
+                    const incInput = row.querySelector('input[name="fact_income[]"]');
+                    const expInput = row.querySelector('input[name="fact_expense[]"]');
+                    
+                    const incVal = incInput ? parseMoneyText(incInput.value) : 0;
+                    const expVal = expInput ? parseMoneyText(expInput.value) : 0;
+                    
+                    groupInc += incVal;
+                    groupExp += expVal;
+
+                    // Проверяем, подтверждена ли строка
+                    const isConfirmed = row.classList.contains('confirmed');
+                    if (isConfirmed) {
+                        confirmedIncome += incVal;
+                        confirmedExpense += expVal;
+                    }
+                }
+            });
+
+            // Обновляем заголовок группы
+            const incCell = header.querySelector('.group-total-income');
+            const expCell = header.querySelector('.group-total-expense');
+            if (incCell) incCell.textContent = formatMoney(groupInc);
+            if (expCell) expCell.textContent = formatMoney(groupExp);
+
+            totalIncome += groupInc;
+            totalExpense += groupExp;
+        }); // <--- ЭТА СКОБКА ЗАКРЫВАЕТ ЦИКЛ groupHeaders.forEach
+
+        // Обновляем общий итог
+
+        // Обновляем общий итог
+        const totalIncEl = document.getElementById('total-fact-income');
+        const totalExpEl = document.getElementById('total-fact-expense');
+        const totalBalEl = document.getElementById('total-fact-balance');
+
+        if (totalIncEl) totalIncEl.textContent = formatMoney(totalIncome);
+        if (totalExpEl) totalExpEl.textContent = formatMoney(totalExpense);
+        if (totalBalEl) totalBalEl.textContent = formatMoney(totalIncome - totalExpense);
+
+        // Обновляем подтвержденный итог
+        const confIncEl = document.getElementById('confirmed-fact-income');
+        const confExpEl = document.getElementById('confirmed-fact-expense');
+        const confBalEl = document.getElementById('confirmed-fact-balance');
+
+        if (confIncEl) confIncEl.textContent = 'Подтв.: ' + formatMoney(confirmedIncome);
+        if (confExpEl) confExpEl.textContent = 'Подтв.: ' + formatMoney(confirmedExpense);
+        if (confBalEl) confBalEl.textContent = 'Подтв.: ' + formatMoney(confirmedIncome - confirmedExpense);
+    }
+
 </script>
 
 {{ template "layout_footer" . }}
