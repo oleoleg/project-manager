@@ -1,0 +1,111 @@
+{{ define "budget_new.html" }}
+{{ template "layout_header" . }}
+{{ $c := .Contract }}
+{{ $s := .Settings }}
+
+<div class="page-header" style="margin-bottom: 15px;">
+    <div class="contract-title">
+        <h2>
+            Новая версия ФинПлана: Договор 
+            {{ if $c.ContractNumber }}№ {{ $c.ContractNumber }} от {{ if $c.ContractDate }}{{ $c.ContractDate.Format "02.01.2006" }}{{ else }}—{{ end }}{{ else }}№ не присвоен{{ end }}
+            <span class="contract-id">ID: {{ $c.ID }}</span>
+        </h2>
+        <p class="contract-subtitle">
+            {{ if $c.WorkName }}{{ $c.WorkName }}{{ else }}<span class="muted">наименование не указано</span>{{ end }}
+            {{ if .Counterparty }} &nbsp;·&nbsp; <a href="/counterparties/{{ .Counterparty.ID }}">{{ .Counterparty.Name }}</a>{{ end }}
+        </p>
+    </div>
+    <div class="actions">
+        <a href="/contracts/{{ $c.ID }}/budget" class="btn">← Отмена</a>
+    </div>
+</div>
+
+<div class="breadcrumb" style="margin-bottom: 16px;">
+    <a href="/contracts/{{ $c.ID }}">Договор</a> &rarr; 
+    <a href="/contracts/{{ $c.ID }}/budget">ФинПлан</a> &rarr; 
+    <span style="color: var(--text-soft);">Создание версии</span>
+</div>
+
+<form method="post" action="/contracts/{{ $c.ID }}/budget/generate" id="new-plan-form">
+
+    <!-- Блок настроек (как в старом ФинПлане) -->
+    <section class="collapsible" style="margin-bottom: 20px;">
+        <header class="collapsible-header">
+            <h3>Настройки плана</h3>
+        </header>
+        <div class="collapsible-body">
+            <div class="form" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; max-width: 800px;">
+                <label>Дата старта <input type="date" name="project_start_date" value="{{ $s.ProjectStartDate.Format "2006-01-02" }}" required></label>
+                <label>Дата окончания <input type="date" name="project_end_date" value="{{ if $s.ProjectEndDate }}{{ $s.ProjectEndDate.Format "2006-01-02" }}{{ end }}"></label>
+                <label>Отсрочка (дней) <input type="number" name="payment_delay_days" value="{{ $s.PaymentDelayDays }}"></label>
+                <label>Коэф. накладных <input type="text" name="overhead_rate" value="{{ printf "%.2f" $s.OverheadRate }}"></label>
+                <label>Предоплата оборуд. (%) <input type="text" name="equip_payment_percent" value="{{ printf "%.2f" $s.EquipPaymentPercent }}"></label>
+                <label>Отсрочка оборуд. (дней) <input type="number" name="equip_payment_delay" value="{{ $s.EquipPaymentDelay }}"></label>
+                <label>Комментарий (версия) <input type="text" name="note" placeholder="Например: Доп. соглашение №1" required></label>
+            </div>
+        </div>
+    </section>
+
+    <!-- Таблица затрат (редактируемая) -->
+    <section class="collapsible" style="margin-bottom: 20px;">
+        <header class="collapsible-header">
+            <h3>Затраты этапов</h3>
+        </header>
+        <div class="collapsible-body">
+            <div class="table-scroll">
+                <table class="data-table costs-table" id="costs-table" style="min-width: 1200px;">
+                    <thead>
+                    <tr>
+                        <th style="width: 60px; text-align: center;">Этап</th>
+                        <th>Вид работы</th>
+                        <th class="num">Стоимость</th>
+                        <th class="num">ФОТп</th>
+                        <th class="num">Т/з, дни</th>
+                        <th class="num">Ставка/день</th>
+                        <th class="num">Командир.</th>
+                        <th class="num">Обор. (прод.)</th>
+                        <th class="num">Обор. (себест.)</th>
+                        <th class="num">Субподряд</th>
+                        <th class="num">Комиссия</th>
+                        <th class="num">Другое</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {{ range .Costs }}
+                        {{ $stage := index $.StagesMap .StageGUID }}
+                        <tr class="cost-row">
+                            <td style="text-align: center;">
+                                {{ if $stage }}<span title="{{ $stage.Name }}">{{ $stage.StageNumber }}</span>{{ else }}—{{ end }}
+                                <input type="hidden" name="cost_stage_guid[]" value="{{ .StageGUID }}">
+                            </td>
+                            <td>
+                                <input type="hidden" name="cost_work_kind[]" value="{{ .WorkKindCode }}">
+                                {{ workKindLabel $.WorkKinds .WorkKindCode }}
+                            </td>
+                            <td class="num"><input type="text" name="cost_amount[]" class="money-input" value="{{ if .Cost }}{{ printf "%.2f" .Cost }}{{ end }}"></td>
+                            <td class="num"><input type="text" name="cost_fot_plan[]" class="money-input" value="{{ if .FOTPlan }}{{ printf "%.2f" .FOTPlan }}{{ end }}"></td>
+                            <td class="num"><input type="text" name="cost_labor_days[]" class="money-input" value="{{ if .LaborDays }}{{ printf "%.2f" .LaborDays }}{{ end }}"></td>
+                            <td class="num"><input type="text" name="cost_rate_per_day[]" class="money-input" value="{{ if .RatePerDay }}{{ printf "%.2f" .RatePerDay }}{{ end }}"></td>
+                            <td class="num"><input type="text" name="cost_travel[]" class="money-input" value="{{ if .TravelExpenses }}{{ printf "%.2f" .TravelExpenses }}{{ end }}"></td>
+                            <td class="num"><input type="text" name="cost_equipment_sale[]" class="money-input" value="{{ if .EquipmentSale }}{{ printf "%.2f" .EquipmentSale }}{{ end }}"></td>
+                            <td class="num"><input type="text" name="cost_equipment_cost[]" class="money-input" value="{{ if .EquipmentCost }}{{ printf "%.2f" .EquipmentCost }}{{ end }}"></td>
+                            <td class="num"><input type="text" name="cost_subcontract[]" class="money-input" value="{{ if .Subcontract }}{{ printf "%.2f" .Subcontract }}{{ end }}"></td>
+                            <td class="num"><input type="text" name="cost_commission[]" class="money-input" value="{{ if .Commission }}{{ printf "%.2f" .Commission }}{{ end }}"></td>
+                            <td class="num"><input type="text" name="cost_other[]" class="money-input" value="{{ if .OtherExpenses }}{{ printf "%.2f" .OtherExpenses }}{{ end }}"></td>
+                        </tr>
+                    {{ else }}
+                        <tr><td colspan="12" style="text-align: center;">Нет затрат. Сначала добавьте их в этапах.</td></tr>
+                    {{ end }}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <div class="form-actions" style="margin-top: 20px;">
+        <button type="submit" class="btn btn-primary" style="font-size: 16px; padding: 10px 20px;">⚙ Сформировать план</button>
+    </div>
+</form>
+
+{{ template "layout_footer" . }}
+{{ end }}

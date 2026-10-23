@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -22,12 +23,13 @@ type BudgetHandler struct {
 	svc         *services.BudgetService
 	contractSvc *services.ContractService
 	stageSvc    *services.StageService
+	costSvc     *services.StageCostService
 	cpSvc       *services.CounterpartyService
 	tmpl        *template.Template
 }
 
-func NewBudgetHandler(svc *services.BudgetService, contractSvc *services.ContractService, stageSvc *services.StageService, cpSvc *services.CounterpartyService, tmpl *template.Template) *BudgetHandler {
-	return &BudgetHandler{svc: svc, contractSvc: contractSvc, stageSvc: stageSvc, cpSvc: cpSvc, tmpl: tmpl}
+func NewBudgetHandler(svc *services.BudgetService, contractSvc *services.ContractService, stageSvc *services.StageService, costSvc *services.StageCostService, cpSvc *services.CounterpartyService, tmpl *template.Template) *BudgetHandler {
+	return &BudgetHandler{svc: svc, contractSvc: contractSvc, stageSvc: stageSvc, costSvc: costSvc, cpSvc: cpSvc, tmpl: tmpl}
 }
 
 func (h *BudgetHandler) Index(w http.ResponseWriter, r *http.Request) {
@@ -78,6 +80,22 @@ func (h *BudgetHandler) Index(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Получаем затраты для отображения в третьей вкладке
+	var displayCosts []models.StageCost
+	if activeSnapshot != nil && len(activeSnapshot.StageCostsSnapshot) > 0 {
+		// Если смотрим снимок — берем замороженные затраты
+		_ = json.Unmarshal(activeSnapshot.StageCostsSnapshot, &displayCosts)
+	} else {
+		// Если это новая версия (editMode) или снимков нет — берем актуальные из БД
+		displayCosts, _ = h.costSvc.GetAllCostsForContract(r.Context(), contractID)
+	}
+
+	stages, _ := h.stageSvc.List(r.Context(), contractID)
+	stagesMap := make(map[string]models.Stage)
+	for _, s := range stages {
+		stagesMap[s.GUID] = s
+	}
+
 	workKinds, _ := h.stageSvc.WorkKinds(r.Context())
 	cp, _ := h.cpSvc.GetByID(r.Context(), contract.CounterpartyID)
 
@@ -95,6 +113,8 @@ func (h *BudgetHandler) Index(w http.ResponseWriter, r *http.Request) {
 		"IsReadOnly":   isReadOnly,
 		"EditMode":     editMode,
 		"Counterparty": cp,
+		"Costs":        displayCosts,
+		"StagesMap":    stagesMap,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -179,7 +199,25 @@ func (h *BudgetHandler) Generate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2. Генерируем план
+	// 2. СОХРАНЯЕМ ОТРЕДАКТИРОВАННЫЕ ЗАТРАТЫ В БД
+	costs := parseCostsFromBudgetForm(r)
+
+	// Группируем затраты по этапам, так как репозиторий ожидает сохранение по одному этапу
+	costsByStage := make(map[string][]models.StageCost)
+	for _, c := range costs {
+		costsByStage[c.StageGUID] = append(costsByStage[c.StageGUID], c)
+	}
+
+	// Сохраняем
+	for stageGUID, stageCosts := range costsByStage {
+		if err := h.costSvc.ReplaceForStage(r.Context(), stageGUID, stageCosts); err != nil {
+			log.Printf("save stage costs before generate: %v", err)
+			http.Error(w, "Ошибка сохранения затрат: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// 3. ГЕНЕРИРУЕМ ПЛАН (теперь он возьмет свежие затраты из БД)
 	_, err := h.svc.GeneratePlan(r.Context(), contractID, u.ID, note)
 	if err != nil {
 		log.Printf("generate plan: %v", err)
@@ -523,4 +561,97 @@ func (h *BudgetHandler) FactSaveForm(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.Redirect(w, r, "/contracts/"+contractID+"/budget/fact?flash=Изменения+сохранены", http.StatusSeeOther)
+}
+
+// NewVersion отображает страницу создания новой версии плана
+func (h *BudgetHandler) NewVersion(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "id")
+	contract, _ := h.contractSvc.GetByID(r.Context(), contractID)
+
+	// Получаем текущие настройки (или дефолтные)
+	settings, _, _ := h.svc.GetSettings(r.Context(), contractID)
+
+	// Получаем текущие затраты из БД (эталон)
+	costs, _ := h.costSvc.GetAllCostsForContract(r.Context(), contractID)
+
+	// Получаем этапы и справочники
+	stages, _ := h.stageSvc.List(r.Context(), contractID)
+	stagesMap := make(map[string]models.Stage)
+	for _, s := range stages {
+		stagesMap[s.GUID] = s
+	}
+	workKinds, _ := h.stageSvc.WorkKinds(r.Context())
+	cp, _ := h.cpSvc.GetByID(r.Context(), contract.CounterpartyID)
+
+	data := map[string]any{
+		"Title":        "Новая версия бюджета",
+		"User":         middleware.UserFromContext(r.Context()),
+		"Contract":     contract,
+		"Counterparty": cp,
+		"Settings":     settings,
+		"Costs":        costs,
+		"StagesMap":    stagesMap,
+		"WorkKinds":    workKinds,
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	h.tmpl.ExecuteTemplate(w, "budget_new.html", data)
+}
+
+// parseCostsFromBudgetForm собирает затраты из формы создания новой версии
+func parseCostsFromBudgetForm(r *http.Request) []models.StageCost {
+	_ = r.ParseForm()
+
+	stageGUIDs := r.Form["cost_stage_guid[]"]
+	workKinds := r.Form["cost_work_kind[]"]
+	amounts := r.Form["cost_amount[]"]
+	fotPlans := r.Form["cost_fot_plan[]"]
+	days := r.Form["cost_labor_days[]"]
+	rates := r.Form["cost_rate_per_day[]"]
+	travels := r.Form["cost_travel[]"]
+	eqSales := r.Form["cost_equipment_sale[]"]
+	eqCosts := r.Form["cost_equipment_cost[]"]
+	subs := r.Form["cost_subcontract[]"]
+	comms := r.Form["cost_commission[]"]
+	others := r.Form["cost_other[]"]
+
+	n := len(stageGUIDs)
+	res := make([]models.StageCost, 0, n)
+
+	getStr := func(arr []string, i int) string {
+		if i < len(arr) {
+			return arr[i]
+		}
+		return ""
+	}
+
+	parseMoney := func(s string) float64 {
+		// Убираем пробелы и меняем запятую на точку
+		s = strings.ReplaceAll(s, " ", "")
+		s = strings.ReplaceAll(s, ",", ".")
+		v, _ := strconv.ParseFloat(s, 64)
+		return v
+	}
+
+	for i := 0; i < n; i++ {
+		wc := strings.TrimSpace(getStr(workKinds, i))
+		if wc == "" {
+			continue
+		}
+		res = append(res, models.StageCost{
+			StageGUID:      getStr(stageGUIDs, i),
+			WorkKindCode:   wc,
+			Cost:           parseMoney(getStr(amounts, i)),
+			FOTPlan:        parseMoney(getStr(fotPlans, i)),
+			LaborDays:      parseMoney(getStr(days, i)),
+			RatePerDay:     parseMoney(getStr(rates, i)),
+			TravelExpenses: parseMoney(getStr(travels, i)),
+			EquipmentSale:  parseMoney(getStr(eqSales, i)),
+			EquipmentCost:  parseMoney(getStr(eqCosts, i)),
+			Subcontract:    parseMoney(getStr(subs, i)),
+			Commission:     parseMoney(getStr(comms, i)),
+			OtherExpenses:  parseMoney(getStr(others, i)),
+		})
+	}
+	return res
 }

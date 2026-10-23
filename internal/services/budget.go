@@ -282,7 +282,7 @@ func (s *BudgetService) GeneratePlan(ctx context.Context, contractID string, use
 		}
 	}
 
-	return s.repo.CreateSnapshotWithLines(ctx, contractID, userID, note, settings, lines)
+	return s.repo.CreateSnapshotWithLines(ctx, contractID, userID, note, settings, lines, costs)
 }
 
 func (s *BudgetService) GetAllSnapshots(ctx context.Context, contractID string) ([]models.BudgetPlanSnapshot, error) {

@@ -136,7 +136,7 @@ func (r *BudgetRepo) GetPlanLines(ctx context.Context, snapshotID string) ([]mod
 }
 
 // CreateSnapshotWithLines создает снимок и сохраняет все его строки в транзакции.
-func (r *BudgetRepo) CreateSnapshotWithLines(ctx context.Context, contractID string, userID int64, note string, settings models.BudgetSettings, lines []models.BudgetPlanLine) (string, error) {
+func (r *BudgetRepo) CreateSnapshotWithLines(ctx context.Context, contractID string, userID int64, note string, settings models.BudgetSettings, lines []models.BudgetPlanLine, costs []models.StageCost) (string, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return "", err
@@ -146,10 +146,13 @@ func (r *BudgetRepo) CreateSnapshotWithLines(ctx context.Context, contractID str
 	var snapshotID string
 	settingsJSON, _ := json.Marshal(settings)
 
+	// Сериализуем затраты в JSON
+	costsJSON, _ := json.Marshal(costs)
+
 	err = tx.QueryRow(ctx, `
-		INSERT INTO budget_plan_snapshots (contract_id, created_by, note, settings) 
-		VALUES ($1, $2, $3, $4) RETURNING id
-	`, contractID, userID, note, settingsJSON).Scan(&snapshotID)
+		INSERT INTO budget_plan_snapshots (contract_id, created_by, note, settings, stage_costs_snapshot) 
+		VALUES ($1, $2, $3, $4, $5) RETURNING id
+	`, contractID, userID, note, settingsJSON, costsJSON).Scan(&snapshotID)
 	if err != nil {
 		return "", fmt.Errorf("create snapshot: %w", err)
 	}

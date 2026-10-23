@@ -260,7 +260,7 @@ func startHTTPServer(stopCh <-chan struct{}) {
 	stageH := handlers.NewStageHandler(stageSvc, stageCostSvc, contractSvc, counterpartySvc, actSvc, tmpl)
 	adminUserH := handlers.NewAdminUserHandler(userSvc, tmpl)
 	actH := handlers.NewActHandler(actSvc, stageSvc, contractSvc, tmpl)
-	budgetH := handlers.NewBudgetHandler(budgetSvc, contractSvc, stageSvc, counterpartySvc, tmpl)
+	budgetH := handlers.NewBudgetHandler(budgetSvc, contractSvc, stageSvc, stageCostSvc, counterpartySvc, tmpl)
 
 	// =====================================================
 	// 8. Роутер
@@ -346,6 +346,7 @@ func startHTTPServer(stopCh <-chan struct{}) {
 
 			// Бюджет (План)
 			r.Get("/contracts/{id}/budget", budgetH.Index)
+			r.Get("/contracts/{id}/budget/new", budgetH.NewVersion)
 			r.Post("/contracts/{id}/budget/generate", budgetH.Generate)
 			r.Post("/contracts/{id}/budget/settings", budgetH.SaveSettings)
 			r.Post("/contracts/{id}/budget/snapshots/{snapshotID}/delete", budgetH.DeleteSnapshot)

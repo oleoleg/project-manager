@@ -19,17 +19,18 @@ type BudgetSettings struct {
 
 // BudgetPlanSnapshot — снимок (версия) сгенерированного ФинПлана.
 type BudgetPlanSnapshot struct {
-	ID           string
-	ContractID   string
-	CreatedAt    time.Time
-	CreatedBy    *int64
-	CreatorName  string
-	Note         string
-	IsActive     bool
-	Settings     []byte
-	ApprovedBy   *int64
-	ApprovedAt   *time.Time
-	ApproverName string
+	ID                 string
+	ContractID         string
+	CreatedAt          time.Time
+	CreatedBy          *int64
+	CreatorName        string
+	Note               string
+	IsActive           bool
+	Settings           []byte
+	StageCostsSnapshot []byte
+	ApprovedBy         *int64
+	ApprovedAt         *time.Time
+	ApproverName       string
 }
 
 // BudgetPlanLine — строка сгенерированного ФинПлана.

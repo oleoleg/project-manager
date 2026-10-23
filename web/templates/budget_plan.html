@@ -31,7 +31,7 @@
         </p>
     </div>
     <div class="actions">
-        <a href="/contracts/{{ $c.ID }}/budget?edit=1" class="btn btn-primary">➕ Создать версию</a>
+        <a href="/contracts/{{ $c.ID }}/budget/new" class="btn btn-primary">➕ Создать версию</a>
     </div>
 </div>
 
@@ -98,6 +98,7 @@
 <div class="tabs" style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid #444; padding-bottom: 10px;">
     <button type="button" class="btn tab-btn active" onclick="switchTab('details', this)">Детализация</button>
     <button type="button" class="btn tab-btn" onclick="switchTab('summary', this)">Сводка и графики</button>
+    <button type="button" class="btn tab-btn" onclick="switchTab('costs', this)">Затраты этапов</button>
 </div>
 
 <div id="tab-summary" class="tab-content" style="display: none;">
@@ -149,6 +150,85 @@
             </div>
         </section>
 
+<!-- НОВАЯ ВКЛАДКА: Затраты -->
+<div id="tab-costs" class="tab-content" style="display: none;">
+    {{ if .Snapshot }}
+        <div class="info-box" style="margin-bottom: 20px;">
+            {{ if .EditMode }}
+                <strong>Режим редактирования.</strong> Вы можете изменять суммы затрат. Чтобы они зафиксировались, нажмите «Сформировать план» в настройках.
+            {{ else }}
+                <strong>Просмотр снимка.</strong> Это зафиксированные затраты на момент генерации плана. Чтобы изменить их, создайте новую версию.
+            {{ end }}
+        </div>
+    {{ end }}
+
+    <div class="totals" id="costs-totals" style="margin-bottom: 20px;">
+        <div class="total-card">
+            <span>Сумма ФОТп</span>
+            <strong id="total-fot">0,00 ₽</strong>
+        </div>
+        <div class="total-card">
+            <span>Общие затраты (Себестоимость)</span>
+            <strong id="total-cost">0,00 ₽</strong>
+        </div>
+    </div>
+
+    <div class="table-scroll">
+        <table class="data-table costs-table" id="costs-table" style="min-width: 1200px;">
+            <thead>
+            <tr>
+                <th style="width: 60px; text-align: center;">Этап</th>
+                <th>Вид работы</th>
+                <th class="num">Стоимость работ</th>
+                <th class="num">ФОТп</th>
+                <th class="num">Коэф.</th>
+                <th class="num">Т/з, дни</th>
+                <th class="num">Ставка/день</th>
+                <th class="num">Командир.</th>
+                <th class="num">Обор. (прод.)</th>
+                <th class="num">Обор. (себест.)</th>
+                <th class="num">Субподряд</th>
+                <th class="num">Комиссия</th>
+                <th class="num">Другое</th>
+            </tr>
+            </thead>
+            <tbody>
+            {{ range .Costs }}
+                {{ $stage := index $.StagesMap .StageGUID }}
+                <tr>
+                    <td style="text-align: center;">
+                        {{ if $stage }}
+                            <span title="{{ $stage.Name }}">{{ $stage.StageNumber }}</span>
+                        {{ else }}
+                            —
+                        {{ end }}
+                    </td>
+                    <td>{{ workKindLabel $.WorkKinds .WorkKindCode }}</td>
+                    <td class="num">{{ money .Cost }}</td>
+                    <td class="num">{{ money .FOTPlan }}</td>
+                    <td class="num" style="color: var(--text-muted);">
+                        {{ if gt .Cost 0.0 }}{{ printf "%.2f" (div .FOTPlan .Cost) }}{{ else }}—{{ end }}
+                    </td>
+                    <td class="num">{{ printf "%.0f" .LaborDays }}</td>
+                    <td class="num">{{ money0 .RatePerDay }}</td>
+                    <td class="num">{{ money0 .TravelExpenses }}</td>
+                    <td class="num">{{ money0 .EquipmentSale }}</td>
+                    <td class="num">{{ money0 .EquipmentCost }}</td>
+                    <td class="num">{{ money0 .Subcontract }}</td>
+                    <td class="num">{{ money0 .Commission }}</td>
+                    <td class="num">{{ money0 .OtherExpenses }}</td>
+                </tr>
+            {{ else }}
+                <tr>
+                    <td colspan="13" style="text-align: center; padding: 20px; color: var(--text-muted);">
+                        Нет данных о затратах.
+                    </td>
+                </tr>
+            {{ end }}
+            </tbody>
+        </table>
+    </div>
+</div>
 
 <div id="tab-details" class="tab-content">
     {{ if .Snapshot }}
@@ -376,6 +456,23 @@ function sortTable(field, btnElement) {
 
 // ============ Запуск при загрузке ============
 document.addEventListener('DOMContentLoaded', function() {
+    // Расчет итогов для вкладки затрат
+    let totalFot = 0;
+    let totalCost = 0;
+    document.querySelectorAll('#tab-costs .costs-table tbody tr').forEach(tr => {
+        const cells = tr.querySelectorAll('td');
+        if (cells.length > 5) {
+            const costVal = parseMoneyText(cells[2].textContent);
+            const fotVal = parseMoneyText(cells[3].textContent);
+            totalCost += costVal;
+            totalFot += fotVal;
+        }
+    });
+    const elFot = document.getElementById('total-fot');
+    const elCost = document.getElementById('total-cost');
+    if (elFot) elFot.textContent = formatMoney(totalFot);
+    if (elCost) elCost.textContent = formatMoney(totalCost);
+
     const typeBtn = document.querySelector('.filter-bar button:nth-child(3)');
     if (typeBtn) sortTable('type', typeBtn);
 
@@ -408,6 +505,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
 });
+
 </script>
 
 {{ template "layout_footer" . }}
