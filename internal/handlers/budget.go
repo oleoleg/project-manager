@@ -580,6 +580,32 @@ func (h *BudgetHandler) NewVersion(w http.ResponseWriter, r *http.Request) {
 	for _, s := range stages {
 		stagesMap[s.GUID] = s
 	}
+
+	// Формируем полный список строк для таблицы (включая этапы без затрат)
+	var displayCosts []models.StageCost
+
+	// Сначала добавляем существующие затраты
+	for _, c := range costs {
+		displayCosts = append(displayCosts, c)
+	}
+
+	// Если у этапа нет ни одной строки затрат, добавляем фиктивную пустую строку для него
+	for _, s := range stages {
+		hasCosts := false
+		for _, c := range costs {
+			if c.StageGUID == s.GUID {
+				hasCosts = true
+				break
+			}
+		}
+		if !hasCosts {
+			displayCosts = append(displayCosts, models.StageCost{
+				StageGUID:    s.GUID,
+				WorkKindCode: s.WorkKindCode, // Берем вид работы самого этапа
+			})
+		}
+	}
+
 	workKinds, _ := h.stageSvc.WorkKinds(r.Context())
 	cp, _ := h.cpSvc.GetByID(r.Context(), contract.CounterpartyID)
 
@@ -589,7 +615,7 @@ func (h *BudgetHandler) NewVersion(w http.ResponseWriter, r *http.Request) {
 		"Contract":     contract,
 		"Counterparty": cp,
 		"Settings":     settings,
-		"Costs":        costs,
+		"Costs":        displayCosts,
 		"StagesMap":    stagesMap,
 		"WorkKinds":    workKinds,
 	}

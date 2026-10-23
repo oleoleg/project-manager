@@ -1280,3 +1280,11 @@ textarea.fact-input {
     display: inline-flex;
     align-items: center;
 }
+
+/* Подсветка строк с превышением себестоимости над продажей */
+.cost-row.row-error {
+    background-color: rgba(220, 53, 69, 0.1) !important;
+}
+html[data-theme="dark"] .cost-row.row-error {
+    background-color: rgba(220, 53, 69, 0.2) !important;
+}
