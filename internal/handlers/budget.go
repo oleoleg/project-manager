@@ -22,11 +22,12 @@ type BudgetHandler struct {
 	svc         *services.BudgetService
 	contractSvc *services.ContractService
 	stageSvc    *services.StageService
+	cpSvc       *services.CounterpartyService
 	tmpl        *template.Template
 }
 
-func NewBudgetHandler(svc *services.BudgetService, contractSvc *services.ContractService, stageSvc *services.StageService, tmpl *template.Template) *BudgetHandler {
-	return &BudgetHandler{svc: svc, contractSvc: contractSvc, stageSvc: stageSvc, tmpl: tmpl}
+func NewBudgetHandler(svc *services.BudgetService, contractSvc *services.ContractService, stageSvc *services.StageService, cpSvc *services.CounterpartyService, tmpl *template.Template) *BudgetHandler {
+	return &BudgetHandler{svc: svc, contractSvc: contractSvc, stageSvc: stageSvc, cpSvc: cpSvc, tmpl: tmpl}
 }
 
 func (h *BudgetHandler) Index(w http.ResponseWriter, r *http.Request) {
@@ -78,24 +79,26 @@ func (h *BudgetHandler) Index(w http.ResponseWriter, r *http.Request) {
 	}
 
 	workKinds, _ := h.stageSvc.WorkKinds(r.Context())
+	cp, _ := h.cpSvc.GetByID(r.Context(), contract.CounterpartyID)
 
 	data := map[string]any{
-		"Title":       "Бюджет договора",
-		"User":        middleware.UserFromContext(r.Context()),
-		"Contract":    contract,
-		"Settings":    settings,
-		"HasSettings": hasSettings,
-		"Snapshots":   snapshots,
-		"Snapshot":    activeSnapshot,
-		"PlanLines":   lines,
-		"Flash":       r.URL.Query().Get("flash"),
-		"WorkKinds":   workKinds,
-		"IsReadOnly":  isReadOnly,
-		"EditMode":    editMode,
+		"Title":        "Бюджет договора",
+		"User":         middleware.UserFromContext(r.Context()),
+		"Contract":     contract,
+		"Settings":     settings,
+		"HasSettings":  hasSettings,
+		"Snapshots":    snapshots,
+		"Snapshot":     activeSnapshot,
+		"PlanLines":    lines,
+		"Flash":        r.URL.Query().Get("flash"),
+		"WorkKinds":    workKinds,
+		"IsReadOnly":   isReadOnly,
+		"EditMode":     editMode,
+		"Counterparty": cp,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.tmpl.ExecuteTemplate(w, "budget_index.html", data)
+	h.tmpl.ExecuteTemplate(w, "budget_plan.html", data)
 }
 
 func (h *BudgetHandler) SaveSettings(w http.ResponseWriter, r *http.Request) {
@@ -348,14 +351,23 @@ func (h *BudgetHandler) FactIndex(w http.ResponseWriter, r *http.Request) {
 		warnings = append(warnings, fmt.Sprintf("Внимание: Сумма платежей по факту (%.2f ₽) не сходится с суммой закрытых актов в договоре (%.2f ₽).", factPayments, checkData["total_acts"]))
 	}
 
-	activePlan, _, _ := h.svc.GetLatestPlan(r.Context(), contractID)
-	hasActivePlan := activePlan != nil && activePlan.IsActive
+	// Получаем все снимки и ищем среди них активный
+	snapshots, _ := h.svc.GetAllSnapshots(r.Context(), contractID)
+	hasActivePlan := false
+	for _, snap := range snapshots {
+		if snap.IsActive {
+			hasActivePlan = true
+			break
+		}
+	}
 	workKinds, _ := h.stageSvc.WorkKinds(r.Context())
+	cp, _ := h.cpSvc.GetByID(r.Context(), contract.CounterpartyID)
 
 	data := map[string]any{
 		"Title":         "ФинФакт договора",
 		"User":          middleware.UserFromContext(r.Context()),
 		"Contract":      contract,
+		"Counterparty":  cp,
 		"FactLines":     lines,
 		"GroupedLines":  groupedLines, // Передаем сгруппированные строки
 		"GroupOrder":    groupOrder,   // Передаем порядок групп

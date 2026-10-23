@@ -260,7 +260,7 @@ func startHTTPServer(stopCh <-chan struct{}) {
 	stageH := handlers.NewStageHandler(stageSvc, stageCostSvc, contractSvc, counterpartySvc, actSvc, tmpl)
 	adminUserH := handlers.NewAdminUserHandler(userSvc, tmpl)
 	actH := handlers.NewActHandler(actSvc, stageSvc, contractSvc, tmpl)
-	budgetH := handlers.NewBudgetHandler(budgetSvc, contractSvc, stageSvc, tmpl)
+	budgetH := handlers.NewBudgetHandler(budgetSvc, contractSvc, stageSvc, counterpartySvc, tmpl)
 
 	// =====================================================
 	// 8. Роутер
@@ -311,6 +311,7 @@ func startHTTPServer(stopCh <-chan struct{}) {
 		r.Get("/contracts/{id}/open-folder", contractH.OpenFolder)
 
 		r.Get("/contracts/{id}/stages", stageH.List)
+		r.Get("/contracts/{id}/stages/costs", stageH.CostsIndex)
 		r.Get("/contracts/{id}/stages/new", stageH.New)
 		r.Get("/contracts/{id}/stages/{guid}/edit", stageH.Edit)
 

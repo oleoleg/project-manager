@@ -1,0 +1,1 @@
+ALTER TABLE budget_plan_snapshots ADD COLUMN stage_costs_snapshot JSONB DEFAULT '[]'::jsonb;

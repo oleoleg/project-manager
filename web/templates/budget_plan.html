@@ -1,4 +1,4 @@
-{{ define "budget_index.html" }}
+{{ define "budget_plan.html" }}
 {{ template "layout_header" . }}
 {{ $c := .Contract }}
 {{ $s := .Settings }}
@@ -9,69 +9,92 @@
     <a href="/contracts/{{ $c.ID }}">← К договору</a>
 </p>
 
+
 <div class="page-header">
     <div class="contract-title">
-        <h2>Бюджет договора № {{ $c.ID }}</h2>
+        <h2>
+            Бюджет (ФинПлан): Договор 
+            {{ if $c.ContractNumber }}
+                № {{ $c.ContractNumber }} от {{ if $c.ContractDate }}{{ $c.ContractDate.Format "02.01.2006" }}{{ else }}—{{ end }}
+            {{ else }}
+                № не присвоен
+            {{ end }}
+            <span class="contract-id">ID: {{ $c.ID }}</span>
+        </h2>
+        
+        <p class="contract-subtitle">
+            {{ if $c.WorkName }}{{ $c.WorkName }}{{ else }}<span class="muted">наименование не указано</span>{{ end }}
+            {{ if .Counterparty }}
+                &nbsp;·&nbsp;
+                <a href="/counterparties/{{ .Counterparty.ID }}">{{ .Counterparty.Name }}</a>
+            {{ end }}
+        </p>
     </div>
     <div class="actions">
-        <a href="/contracts/{{ $c.ID }}/budget/fact" class="btn" style="background-color: #17a2b8; color: white; border-color: #17a2b8;">💸 Перейти в Факт</a>
-        <a href="/contracts/{{ $c.ID }}/budget?edit=1" class="btn btn-primary">➕ Создать новый план</a>
+        <a href="/contracts/{{ $c.ID }}/budget?edit=1" class="btn btn-primary">➕ Создать версию</a>
     </div>
 </div>
 
+<div class="breadcrumb" style="margin-bottom: 16px;">
+    <a href="/contracts/{{ $c.ID }}">Договор</a> 
+    &rarr; <a href="/contracts/{{ $c.ID }}/stages">Этапы</a> 
+    &rarr; <a href="/contracts/{{ $c.ID }}/stages/costs">Затраты этапов</a>
+    &rarr; <span style="color: var(--text-soft);">ФинПлан</span>
+    &rarr; <a href="/contracts/{{ $c.ID }}/budget/fact">ФинФакт</a>
+</div>
+
+
 {{ if .Flash }}<div class="info-box" style="background-color: #e6f4ea; color: #1e8e3e; margin-bottom: 15px;">{{ .Flash }}</div>{{ end }}
 
-<div class="card" style="padding: 15px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-    <div>
-        <form method="get" action="/contracts/{{ $c.ID }}/budget" style="display: flex; gap: 10px; align-items: center;">
-            <label>Версия плана:</label>
-            <select name="snapshot" onchange="this.form.submit()" class="btn" style="padding: 5px; max-width: 400px;">
+<!-- Панель управления версиями -->
+<!-- Панель управления версиями -->
+<div class="card budget-toolbar">
+    <div class="budget-toolbar-left">
+        <form method="get" action="/contracts/{{ $c.ID }}/budget">
+            <label class="budget-status-label">Версия:</label>
+            <select name="snapshot" onchange="this.form.submit()" class="btn" style="padding: 6px 10px; max-width: 300px; text-align: left; border: 1px solid var(--border); background: var(--surface); color: var(--text); height: 32px;">
                 {{ range .Snapshots }}
                     <option value="{{ .ID }}" {{ if and $.Snapshot (eq .ID $.Snapshot.ID) }}selected{{ end }}>
-                        {{ if .IsActive }}🟢 [АКТИВНЫЙ] {{ end }}
-                        {{ .CreatedAt.Format "02.01.2006 15:04" }} ({{ .CreatorName }}) — {{ .Note }}
+                        {{ if .IsActive }}🟢 [АКТИВНЫЙ] {{ end }}{{ .CreatedAt.Format "02.01.2006 15:04" }} — {{ .Note }}
                     </option>
                 {{ else }}
                     <option value="">Нет снимков</option>
                 {{ end }}
             </select>
         </form>
-    </div>
-    
-    {{ if .Snapshot }}
-    <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
-        {{ if not .Snapshot.IsActive }}
-        <form method="post" action="/contracts/{{ $c.ID }}/budget/snapshots/{{ .Snapshot.ID }}/activate">
-            <button type="submit" class="btn btn-sm btn-success" style="background-color: #28a745; border-color: #28a745;">Сделать активным</button>
-        </form>
-        {{ else }}
-        <span class="tag tag-status" style="background: #28a745; color: white; padding: 5px 10px; border-radius: 4px; font-weight: bold; display: flex; align-items: center;">Активный план</span>
-        {{ end }}
         
-        <!-- Блок утверждения -->
+        {{ if .Snapshot }}
+            {{ if .Snapshot.IsActive }}
+                <span class="budget-tag budget-tag-active">Активный</span>
+            {{ else }}
+                <form method="post" action="/contracts/{{ $c.ID }}/budget/snapshots/{{ .Snapshot.ID }}/activate">
+                    <button type="submit" class="btn btn-sm btn-success-custom">Сделать активным</button>
+                </form>
+            {{ end }}
+        {{ end }}
+    </div>
+
+    {{ if .Snapshot }}
+    <div class="budget-toolbar-right">
         {{ if .Snapshot.ApprovedAt }}
-            <span class="tag tag-status" style="background: #17a2b8; color: white; padding: 5px 10px; border-radius: 4px; display: flex; align-items: center;">✅ Утвержден: {{ .Snapshot.ApproverName }} ({{ .Snapshot.ApprovedAt.Format "02.01.2006" }})</span>
+            <span class="budget-tag budget-tag-approved">✅ Утв.: {{ .Snapshot.ApproverName }} ({{ .Snapshot.ApprovedAt.Format "02.01.2006" }})</span>
             
             {{ if or (eq .User.RoleCode "admin") (eq .User.RoleCode "rp_chief") (eq .User.RoleCode "director") }}
-                <form method="post" action="/contracts/{{ $c.ID }}/budget/snapshots/{{ .Snapshot.ID }}/unapprove" onsubmit="return confirm('Отозвать утверждение с этого плана?');">
-                    <button type="submit" class="btn btn-sm" style="background: #6c757d; color: white; border-color: #6c757d;">Отозвать утверждение</button>
+                <form method="post" action="/contracts/{{ $c.ID }}/budget/snapshots/{{ .Snapshot.ID }}/unapprove" onsubmit="return confirm('Отозвать утверждение?');">
+                    <button type="submit" class="btn btn-sm btn-revoke-custom">Отозвать утверждение</button>
                 </form>
             {{ end }}
         {{ else }}
             {{ if or (eq .User.RoleCode "admin") (eq .User.RoleCode "rp_chief") (eq .User.RoleCode "director") }}
-                <form method="post" action="/contracts/{{ $c.ID }}/budget/snapshots/{{ .Snapshot.ID }}/approve" onsubmit="return confirm('Утвердить этот план? Предыдущий утвержденный план (если есть) будет отозван.');">
-                    <button type="submit" class="btn btn-sm" style="background: #17a2b8; color: white; border-color: #17a2b8;">Утвердить руководством</button>
+                <form method="post" action="/contracts/{{ $c.ID }}/budget/snapshots/{{ .Snapshot.ID }}/approve" onsubmit="return confirm('Утвердить этот план?');">
+                    <button type="submit" class="btn btn-sm btn-approve-custom">Утвердить</button>
                 </form>
             {{ end }}
         {{ end }}
-        
-        <form method="post" action="/contracts/{{ $c.ID }}/budget/snapshots/{{ .Snapshot.ID }}/delete" onsubmit="return confirm('Удалить этот снимок навсегда?');">
-            <button type="submit" class="btn btn-sm btn-danger">🗑 Удалить версию</button>
-        </form>
     </div>
     {{ end }}
 </div>
-
+ 
 <div class="tabs" style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid #444; padding-bottom: 10px;">
     <button type="button" class="btn tab-btn active" onclick="switchTab('details', this)">Детализация</button>
     <button type="button" class="btn tab-btn" onclick="switchTab('summary', this)">Сводка и графики</button>
@@ -93,6 +116,39 @@
         <p>Нет данных для построения графиков.</p>
     {{ end }}
 </div>
+
+        <section class="collapsible" id="section-settings" style="margin-top: 30px;">
+            <header class="collapsible-header">
+                <h3>Настройки бюджета {{ if not .EditMode }}(Только для чтения){{ end }}</h3>
+                <div class="collapsible-actions">
+                    <button type="button" class="toggle-btn" aria-expanded="{{ if .EditMode }}true{{ else }}false{{ end }}" onclick="toggleSettings()">
+                        {{ if .EditMode }}Свернуть{{ else }}Развернуть{{ end }}
+                    </button>
+                </div>
+            </header>
+            <div class="collapsible-body" id="settings-body" {{ if not .EditMode }}style="display: none;"{{ end }}>
+                <form method="post" action="/contracts/{{ $c.ID }}/budget/generate" class="form" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; max-width: 800px;">
+                    <label>Дата старта <input type="date" name="project_start_date" value="{{ $s.ProjectStartDate.Format "2006-01-02" }}" required {{ if not .EditMode }}disabled{{ end }}></label>
+                    <label>Дата окончания <input type="date" name="project_end_date" value="{{ if $s.ProjectEndDate }}{{ $s.ProjectEndDate.Format "2006-01-02" }}{{ end }}" {{ if not .EditMode }}disabled{{ end }}></label>
+                    <label>Отсрочка (дней) <input type="number" name="payment_delay_days" value="{{ $s.PaymentDelayDays }}" {{ if not .EditMode }}disabled{{ end }}></label>
+                    <label>Коэф. накладных <input type="text" name="overhead_rate" value="{{ printf "%.2f" $s.OverheadRate }}" {{ if not .EditMode }}disabled{{ end }}></label>
+                    <label>Предоплата оборуд. (%) <input type="text" name="equip_payment_percent" value="{{ printf "%.2f" $s.EquipPaymentPercent }}" {{ if not .EditMode }}disabled{{ end }}></label>
+                    <label>Отсрочка оборуд. (дней) <input type="number" name="equip_payment_delay" value="{{ $s.EquipPaymentDelay }}" {{ if not .EditMode }}disabled{{ end }}></label>
+                    
+                    <div class="form-actions" style="grid-column: 1 / -1; display: flex; gap: 10px;">
+                        {{ if .EditMode }}
+                            <button type="submit" class="btn btn-primary" onclick="return askNote(this);">
+                                ⚙ Сформировать план
+                            </button>
+                            <input type="hidden" name="note" class="generate-note-input">
+                        {{ else }}
+                            <small style="color: #888; align-self: center;">Настройки зафиксированы в выбранном снимке плана.</small>
+                        {{ end }}
+                    </div>
+                </form>
+            </div>
+        </section>
+
 
 <div id="tab-details" class="tab-content">
     {{ if .Snapshot }}
@@ -173,37 +229,15 @@
     {{ end }}
 </div>
 
-<section class="collapsible" id="section-settings" style="margin-top: 30px;">
-    <header class="collapsible-header">
-        <h3>Настройки бюджета {{ if not .EditMode }}(Только для чтения){{ end }}</h3>
-        <div class="collapsible-actions">
-            <button type="button" class="toggle-btn" aria-expanded="{{ if .EditMode }}true{{ else }}false{{ end }}" onclick="toggleSettings()">
-                {{ if .EditMode }}Свернуть{{ else }}Развернуть{{ end }}
-            </button>
-        </div>
-    </header>
-   <div class="collapsible-body" id="settings-body" {{ if not .EditMode }}style="display: none;"{{ end }}>
-        <form method="post" action="/contracts/{{ $c.ID }}/budget/generate" class="form" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; max-width: 800px;">
-            <label>Дата старта <input type="date" name="project_start_date" value="{{ $s.ProjectStartDate.Format "2006-01-02" }}" required {{ if not .EditMode }}disabled{{ end }}></label>
-            <label>Дата окончания <input type="date" name="project_end_date" value="{{ if $s.ProjectEndDate }}{{ $s.ProjectEndDate.Format "2006-01-02" }}{{ end }}" {{ if not .EditMode }}disabled{{ end }}></label>
-            <label>Отсрочка (дней) <input type="number" name="payment_delay_days" value="{{ $s.PaymentDelayDays }}" {{ if not .EditMode }}disabled{{ end }}></label>
-            <label>Коэф. накладных <input type="text" name="overhead_rate" value="{{ printf "%.2f" $s.OverheadRate }}" {{ if not .EditMode }}disabled{{ end }}></label>
-            <label>Предоплата оборуд. (%) <input type="text" name="equip_payment_percent" value="{{ printf "%.2f" $s.EquipPaymentPercent }}" {{ if not .EditMode }}disabled{{ end }}></label>
-            <label>Отсрочка оборуд. (дней) <input type="number" name="equip_payment_delay" value="{{ $s.EquipPaymentDelay }}" {{ if not .EditMode }}disabled{{ end }}></label>
-            
-            <div class="form-actions" style="grid-column: 1 / -1; display: flex; gap: 10px;">
-                {{ if .EditMode }}
-                    <button type="submit" class="btn btn-primary" onclick="return askNote(this);">
-                        ⚙ Сформировать план
-                    </button>
-                    <input type="hidden" name="note" class="generate-note-input">
-                {{ else }}
-                    <small style="color: #888; align-self: center;">Настройки зафиксированы в выбранном снимке плана.</small>
-                {{ end }}
-            </div>
-        </form>
-    </div>
+{{ if .Snapshot }}
+<section class="danger-zone" style="margin-top: 40px; margin-bottom: 20px;">
+    <h3>Опасная зона</h3>
+    <p class="muted">Удаление снимка необратимо. Все данные этой версии плана будут потеряны.</p>
+    <form method="post" action="/contracts/{{ $c.ID }}/budget/snapshots/{{ .Snapshot.ID }}/delete" onsubmit="return confirm('Удалить этот снимок навсегда?');">
+        <button type="submit" class="btn btn-danger">🗑 Удалить текущую версию</button>
+    </form>
 </section>
+{{ end }}
 
 <script>
 // ============ Вспомогательные функции ============

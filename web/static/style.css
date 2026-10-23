@@ -1094,7 +1094,7 @@ input.fact-input.manual-edit {
 .fact-input {
     width: 100%;
     padding: 4px 6px;
-    font-size: 12px !important;
+    font-size: 14px !important;
     border: 1px solid var(--border); /* Рамка видна и на белом, и на темном фоне */
     border-radius: 4px;
     background: var(--surface-soft); /* Чуть серый фон, чтобы выделялся на белой карточке */
@@ -1120,7 +1120,7 @@ input.fact-input.manual-edit {
 }
 
 .plan-hint {
-    font-size: 10px;
+    font-size: 12px;
     color: var(--text-soft);
     margin-top: 2px;
     white-space: nowrap;
@@ -1149,4 +1149,134 @@ textarea.fact-input {
 /* Зеленая заливка для подтвержденных строк */
 .fact-row.confirmed td {
     background-color: var(--flash-bg) !important;
+}
+
+/* --- Бюджет: Панели управления --- */
+.budget-toolbar {
+    padding: 10px 15px;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+.budget-toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.budget-toolbar-right {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+.budget-status-label {
+    font-weight: bold;
+    font-size: 14px;
+    color: var(--text-mid);
+}
+.budget-tag {
+    padding: 6px 12px;
+    border-radius: 4px;
+    color: white;
+    font-weight: bold;
+}
+.budget-tag-active { background: #28a745; }
+.budget-tag-approved { background: #17a2b8; }
+.budget-tag-draft { background: #6c757d; }
+
+/* Кнопки со специфичными цветами */
+.btn-fact { background-color: #17a2b8; color: white; border-color: #17a2b8; }
+.btn-fact:hover { background-color: #138496; color: white; }
+.btn-success-custom { background-color: #28a745; border-color: #28a745; padding: 6px 12px; }
+.btn-danger-custom { padding: 6px 12px; }
+.btn-soft { background: var(--btn-soft-bg); color: var(--text); border: 1px solid var(--border); }
+.btn-soft:hover { background: var(--btn-soft-hover); }
+
+/* --- Сводная таблица затрат --- */
+.costs-summary-table {
+    min-width: 1200px;
+}
+.costs-summary-table th, .costs-summary-table td {
+    white-space: nowrap;
+}
+.costs-summary-table .col-stage {
+    width: 60px;
+    text-align: center;
+}
+
+/* --- Панель управления бюджетом (План/Факт) --- */
+.budget-toolbar {
+    padding: 10px 15px;
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.budget-toolbar-left,
+.budget-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.budget-status-label {
+    font-weight: bold;
+    font-size: 13px;
+    color: var(--text-mid);
+}
+
+/* Единый стиль для всех плашек статуса */
+.budget-tag {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: bold;
+    color: white;
+    border: none;
+    line-height: 1.2;
+}
+
+/* Цвета плашек */
+.budget-tag-active { background: #28a745; }
+.budget-tag-approved { background: #17a2b8; }
+.budget-tag-draft { background: #6c757d; }
+
+/* Выравниваем формы внутри панели, чтобы они не добавляли лишних отступов */
+.budget-toolbar form {
+    margin: 0;
+    display: flex;
+}
+
+/* Кнопки в панели управления (приводим к одному размеру с плашками) */
+.budget-toolbar .btn-sm {
+    padding: 6px 12px;
+    font-size: 13px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Кнопки с конкретными цветами */
+.btn-success-custom { background-color: #28a745; color: white; border-color: #28a745; }
+.btn-success-custom:hover { background-color: #218838; color: white; }
+.btn-approve-custom { background-color: #17a2b8; color: white; border-color: #17a2b8; }
+.btn-approve-custom:hover { background-color: #138496; color: white; }
+.btn-revoke-custom { background-color: #6c757d; color: white; border-color: #6c757d; }
+.btn-revoke-custom:hover { background-color: #5a6268; color: white; }
+
+.page-header .actions .btn {
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
 }

@@ -505,3 +505,44 @@ func (h *StageHandler) StageActSumJSON(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]float64{"sum": sum})
 }
+
+// CostsIndex отображает общую таблицу затрат по всем этапам договора.
+func (h *StageHandler) CostsIndex(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "id")
+
+	contract, err := h.contractSvc.GetByID(r.Context(), contractID)
+	if errors.Is(err, db.ErrContractNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		log.Printf("costs index contract: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	costs, err := h.costSvc.GetAllCostsForContract(r.Context(), contractID)
+	if err != nil {
+		log.Printf("costs index list: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	stages, _ := h.svc.List(r.Context(), contractID)
+	workKinds, _ := h.svc.WorkKinds(r.Context())
+
+	// Создаем мапу для быстрого поиска этапа по GUID в шаблоне
+	stagesMap := make(map[string]models.Stage)
+	for _, s := range stages {
+		stagesMap[s.GUID] = s
+	}
+
+	data := h.commonData(r, "Затраты этапов договора "+contractID)
+	data["Contract"] = contract
+	data["Costs"] = costs
+	data["StagesMap"] = stagesMap // Передаем мапу
+	data["WorkKinds"] = workKinds
+	data["Flash"] = r.URL.Query().Get("flash")
+
+	h.render(w, "stage_costs_index.html", data)
+}

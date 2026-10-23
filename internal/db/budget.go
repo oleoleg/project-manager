@@ -203,8 +203,8 @@ func (r *BudgetRepo) GetStagesForPlan(ctx context.Context, contractID string) ([
 
 	costRows, err := r.pool.Query(ctx, `
 		SELECT `+stageCostColumns+` 
-		FROM stage_costs 
-		WHERE stage_guid IN (SELECT guid FROM stages WHERE contract_id = $1)
+		FROM stage_costs sc
+		WHERE sc.stage_guid IN (SELECT guid FROM stages WHERE contract_id = $1)
 	`, contractID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("get stage costs: %w", err)

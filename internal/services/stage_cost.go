@@ -129,3 +129,7 @@ func (s *StageCostService) ReplaceForStage(ctx context.Context, stageGUID string
 	}
 	return s.repo.ReplaceForStage(ctx, stageGUID, costs)
 }
+
+func (s *StageCostService) GetAllCostsForContract(ctx context.Context, contractID string) ([]models.StageCost, error) {
+	return s.repo.GetAllCostsForContract(ctx, contractID)
+}

@@ -1,0 +1,129 @@
+{{ define "stage_costs_index.html" }}
+{{ template "layout_header" . }}
+{{ $c := .Contract }}
+
+<p class="back-link">
+    <a href="/contracts/{{ $c.ID }}/stages">← К этапам</a>
+</p>
+
+<div class="page-header">
+    <div class="contract-title">
+        <h2>Затраты этапов по договору № {{ $c.ID }}</h2>
+    </div>
+    <div class="actions">
+        <a href="/contracts/{{ $c.ID }}/budget" class="btn">← К ФинПлану</a>
+    </div>
+</div>
+
+{{ if .Flash }}<div class="info-box" style="background-color: #e6f4ea; color: #1e8e3e; margin-bottom: 15px;">{{ .Flash }}</div>{{ end }}
+
+<div class="info-box" style="margin-bottom: 20px;">
+    <strong>Внимание:</strong> В этой таблице отображаются все затраты по всем этапам договора. 
+    Для редактирования конкретного этапа нажмите на его номер.
+</div>
+
+<div class="totals" id="fact-totals" style="margin-bottom: 20px;">
+    <div class="total-card">
+        <span>Сумма ФОТп</span>
+        <strong id="total-fot">0,00 ₽</strong>
+    </div>
+    <div class="total-card">
+        <span>Общие затраты (Себестоимость)</span>
+        <strong id="total-cost">0,00 ₽</strong>
+    </div>
+</div>
+
+<div class="table-scroll">
+    <table class="data-table costs-table" style="min-width: 1200px;">
+        <thead>
+        <tr>
+            <th>Этап</th>
+            <th>Вид работы</th>
+            <th class="num">Стоимость работ</th>
+            <th class="num">ФОТп</th>
+            <th class="num">Коэф.</th>
+            <th class="num">Т/з, дни</th>
+            <th class="num">Ставка/день</th>
+            <th class="num">Командир.</th>
+            <th class="num">Обор. (прод.)</th>
+            <th class="num">Обор. (себест.)</th>
+            <th class="num">Субподряд</th>
+            <th class="num">Комиссия</th>
+            <th class="num">Другое</th>
+        </tr>
+        </thead>
+        <tbody>
+        {{ range .Costs }}
+            {{ $stage := index $.StagesMap .StageGUID }}
+            <tr>
+                <td style="text-align: center;">
+                    {{ if $stage }}
+                        <a href="/contracts/{{ $c.ID }}/stages/{{ $stage.GUID }}/edit" title="Редактировать этап">{{ $stage.StageNumber }}</a>
+                    {{ else }}
+                        —
+                    {{ end }}
+                </td>
+                <td>{{ workKindLabel $.WorkKinds .WorkKindCode }}</td>
+                <td class="num">{{ money .Cost }}</td>
+                <td class="num">{{ money .FOTPlan }}</td>
+                <td class="num" style="color: var(--text-muted);">
+                    {{ if gt .Cost 0.0 }}{{ printf "%.2f" (div .FOTPlan .Cost) }}{{ else }}—{{ end }}
+                </td>
+                <td class="num">{{ printf "%.0f" .LaborDays }}</td>
+                <td class="num">{{ money0 .RatePerDay }}</td>
+                <td class="num">{{ money0 .TravelExpenses }}</td>
+                <td class="num">{{ money0 .EquipmentSale }}</td>
+                <td class="num">{{ money0 .EquipmentCost }}</td>
+                <td class="num">{{ money0 .Subcontract }}</td>
+                <td class="num">{{ money0 .Commission }}</td>
+                <td class="num">{{ money0 .OtherExpenses }}</td>
+            </tr>
+        {{ else }}
+            <tr>
+                <td colspan="13" style="text-align: center; padding: 20px; color: var(--text-muted);">
+                    У этого договора пока нет добавленных затрат по этапам.
+                </td>
+            </tr>
+        {{ end }}
+        </tbody>
+    </table>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    let totalFot = 0;
+    let totalCost = 0;
+    
+    // Считаем суммы
+    document.querySelectorAll('.costs-table tbody tr').forEach(tr => {
+        const cells = tr.querySelectorAll('td');
+        if (cells.length > 5) {
+            // Парсим ФОТп (4-я колонка) и Стоимость (3-я колонка)
+            const costVal = parseMoneyText(cells[2].textContent);
+            const fotVal = parseMoneyText(cells[3].textContent);
+            totalCost += costVal;
+            totalFot += fotVal;
+        }
+    });
+
+    function formatMoney(val) {
+        if (!val && val !== 0) return '';
+        const s = Math.abs(val).toFixed(2);
+        const formatted = s.replace(/\B(?=(\d{3})+(?!\d))/g, '\u00A0');
+        return (val < 0 ? '-' : '') + formatted + ' ₽';
+    }
+
+    function parseMoneyText(text) {
+        if (!text) return 0;
+        const clean = text.replace(/[^\d.,-]/g, '').replace(',', '.');
+        const val = parseFloat(clean);
+        return isNaN(val) ? 0 : val;
+    }
+
+    document.getElementById('total-fot').textContent = formatMoney(totalFot);
+    document.getElementById('total-cost').textContent = formatMoney(totalCost);
+});
+</script>
+
+{{ template "layout_footer" . }}
+{{ end }}

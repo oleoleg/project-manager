@@ -8,11 +8,25 @@
 
 <div class="page-header">
     <div class="contract-title">
-        <h2>Бюджет ФАКТ договора № {{ $c.ID }}</h2>
-    </div>
-    <div class="actions">
-        <a href="/contracts/{{ $c.ID }}/budget" class="btn">← К Плану</a>
+        <h2>
+            Бюджет (ФинФакт): Договор 
+            {{ if $c.ContractNumber }}
+                № {{ $c.ContractNumber }} от {{ if $c.ContractDate }}{{ $c.ContractDate.Format "02.01.2006" }}{{ else }}—{{ end }}
+            {{ else }}
+                № не присвоен
+            {{ end }}
+            <span class="contract-id">ID: {{ $c.ID }}</span>
+        </h2>
         
+        <p class="contract-subtitle">
+            {{ if $c.WorkName }}{{ $c.WorkName }}{{ else }}<span class="muted">наименование не указано</span>{{ end }}
+            {{ if .Counterparty }}
+                &nbsp;·&nbsp;
+                <a href="/counterparties/{{ .Counterparty.ID }}">{{ .Counterparty.Name }}</a>
+            {{ end }}
+        </p>
+    </div>
+    <div class="actions" style="display: flex; gap: 8px;">
         {{ if not .FactLines }}
             {{ if .HasActivePlan }}
                 <form method="post" action="/contracts/{{ $c.ID }}/budget/fact/generate" style="display:inline;" onsubmit="return confirm('Сформировать факт на основе активного плана?');">
@@ -26,6 +40,15 @@
         {{ end }}
     </div>
 </div>
+
+<div class="breadcrumb" style="margin-bottom: 16px;">
+    <a href="/contracts/{{ $c.ID }}">Договор</a> 
+    &rarr; <a href="/contracts/{{ $c.ID }}/stages">Этапы</a> 
+    &rarr; <a href="/contracts/{{ $c.ID }}/stages/costs">Затраты этапов</a> 
+    &rarr; <a href="/contracts/{{ $c.ID }}/budget">ФинПлан</a>
+    &rarr; <span style="color: var(--text-soft);">ФинФакт</span>
+</div>
+
 
 {{ if .Flash }}<div class="info-box" style="background-color: #e6f4ea; color: #1e8e3e; margin-bottom: 15px;">{{ .Flash }}</div>{{ end }}
 
