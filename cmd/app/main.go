@@ -197,6 +197,9 @@ func startHTTPServer(stopCh <-chan struct{}) {
 			}
 			return id
 		},
+		"add": func(a, b float64) float64 {
+			return a + b
+		},
 	})
 
 	parsed, err := tmpl.ParseGlob(filepath.Join(baseDir, "web", "templates", "*.html"))
@@ -218,6 +221,7 @@ func startHTTPServer(stopCh <-chan struct{}) {
 	stageRepo := db.NewStageRepo(pool)
 	stageCostRepo := db.NewStageCostRepo(pool)
 	actRepo := db.NewActRepo(pool)
+	budgetRepo := db.NewBudgetRepo(pool)
 
 	// =====================================================
 	// 6. Сервисы
@@ -230,6 +234,7 @@ func startHTTPServer(stopCh <-chan struct{}) {
 	stageSvc := services.NewStageService(stageRepo)
 	stageCostSvc := services.NewStageCostService(stageCostRepo)
 	actSvc := services.NewActService(actRepo, stageRepo)
+	budgetSvc := services.NewBudgetService(budgetRepo)
 
 	// =====================================================
 	// 7. Хендлеры
@@ -243,6 +248,7 @@ func startHTTPServer(stopCh <-chan struct{}) {
 	stageH := handlers.NewStageHandler(stageSvc, stageCostSvc, contractSvc, counterpartySvc, actSvc, tmpl)
 	adminUserH := handlers.NewAdminUserHandler(userSvc, tmpl)
 	actH := handlers.NewActHandler(actSvc, stageSvc, contractSvc, tmpl)
+	budgetH := handlers.NewBudgetHandler(budgetSvc, contractSvc, stageSvc, tmpl)
 
 	// =====================================================
 	// 8. Роутер
@@ -324,6 +330,14 @@ func startHTTPServer(stopCh <-chan struct{}) {
 			r.Post("/contracts/{id}/acts/{actGuid}/attachments", actH.CreateAttachment)
 			r.Post("/contracts/{id}/attachments/{attGuid}", actH.UpdateAttachment)
 			r.Post("/contracts/{id}/attachments/{attGuid}/delete", actH.DeleteAttachment)
+
+			// Бюджет
+			r.Get("/contracts/{id}/budget", budgetH.Index)
+			r.Post("/contracts/{id}/budget/generate", budgetH.Generate)
+			r.Post("/contracts/{id}/budget/settings", budgetH.SaveSettings)
+			r.Post("/contracts/{id}/budget/snapshots/{snapshotID}/delete", budgetH.DeleteSnapshot)
+			r.Post("/contracts/{id}/budget/snapshots/{snapshotID}/activate", budgetH.ActivateSnapshot)
+			r.Get("/contracts/{id}/budget/charts.json", budgetH.GetSummaryChart)
 		})
 
 		r.Group(func(r chi.Router) {
@@ -343,6 +357,11 @@ func startHTTPServer(stopCh <-chan struct{}) {
 			r.Use(mw.RequireRole("admin", "rp_chief"))
 			r.Post("/contracts/{id}/delete", contractH.Delete)
 			r.Post("/contracts/{id}/stages/{guid}/delete", stageH.Delete)
+		})
+
+		r.Group(func(r chi.Router) {
+			r.Use(mw.RequireRole("admin", "rp_chief", "director"))
+			r.Post("/contracts/{id}/budget/snapshots/{snapshotID}/approve", budgetH.ApproveSnapshot)
 		})
 
 		r.Group(func(r chi.Router) {

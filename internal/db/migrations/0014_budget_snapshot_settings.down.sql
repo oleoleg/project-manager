@@ -1,0 +1,1 @@
+ALTER TABLE budget_plan_snapshots DROP COLUMN IF EXISTS settings;

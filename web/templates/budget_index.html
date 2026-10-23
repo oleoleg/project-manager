@@ -1,0 +1,372 @@
+{{ define "budget_index.html" }}
+{{ template "layout_header" . }}
+{{ $c := .Contract }}
+{{ $s := .Settings }}
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<p class="back-link">
+    <a href="/contracts/{{ $c.ID }}">← К договору</a>
+</p>
+
+<div class="page-header">
+    <div class="contract-title">
+        <h2>Бюджет договора № {{ $c.ID }}</h2>
+    </div>
+    <div class="actions">
+        <a href="/contracts/{{ $c.ID }}/budget?edit=1" class="btn btn-primary">➕ Создать новый план</a>
+    </div>
+</div>
+
+{{ if .Flash }}<div class="info-box" style="background-color: #e6f4ea; color: #1e8e3e; margin-bottom: 15px;">{{ .Flash }}</div>{{ end }}
+
+<div class="card" style="padding: 15px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+    <div>
+        <form method="get" action="/contracts/{{ $c.ID }}/budget" style="display: flex; gap: 10px; align-items: center;">
+            <label>Версия плана:</label>
+            <select name="snapshot" onchange="this.form.submit()" class="btn" style="padding: 5px; max-width: 400px;">
+                {{ range .Snapshots }}
+                    <option value="{{ .ID }}" {{ if and $.Snapshot (eq .ID $.Snapshot.ID) }}selected{{ end }}>
+                        {{ if .IsActive }}🟢 [АКТИВНЫЙ] {{ end }}
+                        {{ .CreatedAt.Format "02.01.2006 15:04" }} ({{ .CreatorName }}) — {{ .Note }}
+                    </option>
+                {{ else }}
+                    <option value="">Нет снимков</option>
+                {{ end }}
+            </select>
+        </form>
+    </div>
+    
+    {{ if .Snapshot }}
+    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+        {{ if not .Snapshot.IsActive }}
+        <form method="post" action="/contracts/{{ $c.ID }}/budget/snapshots/{{ .Snapshot.ID }}/activate">
+            <button type="submit" class="btn btn-sm btn-success" style="background-color: #28a745; border-color: #28a745;">Сделать активным</button>
+        </form>
+        {{ else }}
+        <span class="tag tag-status" style="background: #28a745; color: white; padding: 5px 10px; border-radius: 4px; font-weight: bold; display: flex; align-items: center;">Активный план</span>
+        {{ end }}
+        
+        {{ if .Snapshot.ApprovedAt }}
+            <span class="tag tag-status" style="background: #17a2b8; color: white; padding: 5px 10px; border-radius: 4px; display: flex; align-items: center;">✅ Утвержден: {{ .Snapshot.ApproverName }} ({{ .Snapshot.ApprovedAt.Format "02.01.2006" }})</span>
+        {{ else }}
+            {{ if or (eq .User.RoleCode "admin") (eq .User.RoleCode "rp_chief") (eq .User.RoleCode "director") }}
+                <form method="post" action="/contracts/{{ $c.ID }}/budget/snapshots/{{ .Snapshot.ID }}/approve">
+                    <button type="submit" class="btn btn-sm" style="background: #17a2b8; color: white; border-color: #17a2b8;">Утвердить руководством</button>
+                </form>
+            {{ end }}
+        {{ end }}
+        
+        <form method="post" action="/contracts/{{ $c.ID }}/budget/snapshots/{{ .Snapshot.ID }}/delete" onsubmit="return confirm('Удалить этот снимок навсегда?');">
+            <button type="submit" class="btn btn-sm btn-danger">🗑 Удалить версию</button>
+        </form>
+    </div>
+    {{ end }}
+</div>
+
+<div class="tabs" style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid #444; padding-bottom: 10px;">
+    <button type="button" class="btn tab-btn active" onclick="switchTab('details', this)">Детализация</button>
+    <button type="button" class="btn tab-btn" onclick="switchTab('summary', this)">Сводка и графики</button>
+</div>
+
+<div id="tab-summary" class="tab-content" style="display: none;">
+    {{ if .Snapshot }}
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; margin-bottom: 20px;">
+        <div class="card" style="padding: 20px; position: relative; height: 400px;">
+            <h3 style="text-align: center;">Разбивка суммы по затратам</h3>
+            <canvas id="expensesChart" style="max-height: 350px;"></canvas>
+        </div>
+        <div class="card" style="padding: 20px; position: relative; height: 400px;">
+            <h3 style="text-align: center;">Разбивка по Отделам (Видам работ)</h3>
+            <canvas id="departmentsChart" style="max-height: 350px;"></canvas>
+        </div>
+    </div>
+    {{ else }}
+        <p>Нет данных для построения графиков.</p>
+    {{ end }}
+</div>
+
+<div id="tab-details" class="tab-content">
+    {{ if .Snapshot }}
+        <div class="filter-bar" style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+            <span>Сортировать:</span>
+            <button type="button" class="btn btn-sm sort-btn" onclick="sortTable('date', this)">По дате</button>
+            <button type="button" class="btn btn-sm sort-btn" onclick="sortTable('type', this)">По типу операции</button>
+            <button type="button" class="btn btn-sm sort-btn" onclick="sortTable('work', this)">По виду работ</button>
+        </div>
+
+        <div class="totals" id="group-totals" style="margin-bottom: 20px;">
+            <div class="total-card">
+                <span>Поступления (План)</span>
+                <strong id="total-income">0,00 ₽</strong>
+            </div>
+            <div class="total-card">
+                <span>Затраты (План)</span>
+                <strong id="total-expense">0,00 ₽</strong>
+            </div>
+            <div class="total-card">
+                <span>Баланс (План)</span>
+                <strong id="total-balance">0,00 ₽</strong>
+            </div>
+        </div>
+
+        <div class="table-scroll">
+        <table class="data-table" id="plan-table">
+            <thead>
+            <tr>
+                <th>Вид работы</th>
+                <th>Наименование</th>
+                <th>Дата операции</th>
+                <th>Отсрочка</th>
+                <th>Дата платежа</th>
+                <th class="num">Поступление</th>
+                <th class="num">Затраты</th>
+                <th class="num">Баланс</th>
+                <th>Тип операции</th>
+            </tr>
+            </thead>
+            <tbody id="plan-tbody">
+            {{ $totalIncome := 0.0 }}
+            {{ $totalExpense := 0.0 }}
+            {{ $totalBalance := 0.0 }}
+            
+            {{ range .PlanLines }}
+                <tr data-work="{{ .WorkKindCode }}" data-type="{{ .OperationType }}" data-date="{{ .OperationDate.Unix }}">
+                    <td>{{ workKindLabel $.WorkKinds .WorkKindCode }}</td>
+                    <td>{{ .Name }}</td>
+                    <td>{{ .OperationDate.Format "02.01.2006" }}</td>
+                    <td>{{ .DelayDays }}</td>
+                    <td>{{ .PaymentDate.Format "02.01.2006" }}</td>
+                    <td class="num">{{ if gt .Income 0.0 }}{{ money .Income }}{{ end }}</td>
+                    <td class="num">{{ if gt .Expense 0.0 }}{{ money .Expense }}{{ end }}</td>
+                    <td class="num">{{ money .Balance }}</td>
+                    <td>{{ .OperationType }}</td>
+                </tr>
+                {{ $totalIncome = add $totalIncome .Income }}
+                {{ $totalExpense = add $totalExpense .Expense }}
+                {{ $totalBalance = add $totalBalance .Balance }}
+            {{ end }}
+            </tbody>
+            <tfoot>
+                <tr class="row-total">
+                    <td colspan="5"><strong>ИТОГО</strong></td>
+                    <td class="num"><strong>{{ money $totalIncome }}</strong></td>
+                    <td class="num"><strong>{{ money $totalExpense }}</strong></td>
+                    <td class="num"><strong>{{ money $totalBalance }}</strong></td>
+                    <td></td>
+                </tr>
+            </tfoot>
+        </table>
+        </div>
+    {{ else }}
+        <div class="info-box">
+            <p>План ещё не сформирован. Заполните настройки и нажмите «Создать новый план».</p>
+        </div>
+    {{ end }}
+</div>
+
+<section class="collapsible" id="section-settings" style="margin-top: 30px;">
+    <header class="collapsible-header">
+        <h3>Настройки бюджета {{ if not .EditMode }}(Только для чтения){{ end }}</h3>
+        <div class="collapsible-actions">
+            <button type="button" class="toggle-btn" aria-expanded="{{ if .EditMode }}true{{ else }}false{{ end }}" onclick="toggleSettings()">
+                {{ if .EditMode }}Свернуть{{ else }}Развернуть{{ end }}
+            </button>
+        </div>
+    </header>
+   <div class="collapsible-body" id="settings-body" {{ if not .EditMode }}style="display: none;"{{ end }}>
+        <form method="post" action="/contracts/{{ $c.ID }}/budget/generate" class="form" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; max-width: 800px;">
+            <label>Дата старта <input type="date" name="project_start_date" value="{{ $s.ProjectStartDate.Format "2006-01-02" }}" required {{ if not .EditMode }}disabled{{ end }}></label>
+            <label>Дата окончания <input type="date" name="project_end_date" value="{{ if $s.ProjectEndDate }}{{ $s.ProjectEndDate.Format "2006-01-02" }}{{ end }}" {{ if not .EditMode }}disabled{{ end }}></label>
+            <label>Отсрочка (дней) <input type="number" name="payment_delay_days" value="{{ $s.PaymentDelayDays }}" {{ if not .EditMode }}disabled{{ end }}></label>
+            <label>Коэф. накладных <input type="text" name="overhead_rate" value="{{ printf "%.2f" $s.OverheadRate }}" {{ if not .EditMode }}disabled{{ end }}></label>
+            <label>Предоплата оборуд. (%) <input type="text" name="equip_payment_percent" value="{{ printf "%.2f" $s.EquipPaymentPercent }}" {{ if not .EditMode }}disabled{{ end }}></label>
+            <label>Отсрочка оборуд. (дней) <input type="number" name="equip_payment_delay" value="{{ $s.EquipPaymentDelay }}" {{ if not .EditMode }}disabled{{ end }}></label>
+            
+            <div class="form-actions" style="grid-column: 1 / -1; display: flex; gap: 10px;">
+                {{ if .EditMode }}
+                    <button type="submit" class="btn btn-primary" onclick="return askNote(this);">
+                        ⚙ Сформировать план
+                    </button>
+                    <input type="hidden" name="note" class="generate-note-input">
+                {{ else }}
+                    <small style="color: #888; align-self: center;">Настройки зафиксированы в выбранном снимке плана.</small>
+                {{ end }}
+            </div>
+        </form>
+    </div>
+</section>
+
+<script>
+// ============ Вспомогательные функции ============
+function switchTab(tabId, btn) {
+    document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    document.getElementById('tab-' + tabId).style.display = 'block';
+    if (btn) btn.classList.add('active');
+}
+
+function toggleSettings() {
+    const body = document.getElementById('settings-body');
+    const btn = document.querySelector('#section-settings .toggle-btn');
+    if (body.style.display === 'none') {
+        body.style.display = 'block';
+        btn.textContent = 'Свернуть';
+    } else {
+        body.style.display = 'none';
+        btn.textContent = 'Развернуть';
+    }
+}
+
+function askNote(btn) {
+    let note = prompt("Укажите причину генерации нового плана (например: 'Доп. соглашение №1'):");
+    if (note === null) return false;
+    btn.closest('form').querySelector('.generate-note-input').value = note;
+    return true;
+}
+
+function parseMoneyText(text) {
+    if (!text) return 0;
+    const clean = text.replace(/[^\d.,-]/g, '').replace(',', '.');
+    const val = parseFloat(clean);
+    return isNaN(val) ? 0 : val;
+}
+
+function formatMoney(val) {
+    if (!val && val !== 0) return '';
+    const s = Math.abs(val).toFixed(2);
+    const formatted = s.replace(/\B(?=(\d{3})+(?!\d))/g, '\u00A0');
+    return (val < 0 ? '-' : '') + formatted + ' ₽';
+}
+
+// ============ Сортировка и группировка ============
+function sortTable(field, btnElement) {
+    const tbody = document.getElementById('plan-tbody');
+    if (!tbody) return;
+
+    document.querySelectorAll('.filter-bar button').forEach(btn => {
+        btn.style.backgroundColor = '';
+        btn.style.color = '';
+        btn.classList.remove('btn-primary');
+    });
+    if (btnElement) {
+        btnElement.style.backgroundColor = '#337ab7';
+        btnElement.style.color = '#fff';
+        btnElement.classList.add('btn-primary');
+    }
+
+    tbody.querySelectorAll('.group-header-row').forEach(el => el.remove());
+    const allRows = Array.from(tbody.querySelectorAll('tr:not(.group-header-row)'));
+    
+    const typeOrder = {
+        "Платежи по договору": 1, "Закупка по договору": 2, "Зарплата сотрудникам": 3,
+        "Накладные": 4, "Командировки": 5, "Субподрядчики": 6, "Комиссия": 7, "Другое (расходы)": 8
+    };
+    const workOrder = { "pir": 1, "ppo": 2, "smr": 3, "pnr": 4, "sale": 5, "to": 6, "remont": 7, "complex": 8 };
+
+    allRows.sort((a, b) => {
+        if (field === 'date') return parseInt(a.dataset.date) - parseInt(b.dataset.date);
+        if (field === 'type') return (typeOrder[a.dataset.type] || 99) - (typeOrder[b.dataset.type] || 99);
+        if (field === 'work') return (workOrder[a.dataset.work] || 99) - (workOrder[b.dataset.work] || 99);
+        return 0;
+    });
+
+    tbody.innerHTML = '';
+    const months = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
+
+    let currentGroupValue = null;
+    let currentGroupLabel = '';
+    let currentGroupRows = [];
+    let tableIncome = 0;
+    let tableExpense = 0;
+    let tableBalance = 0;
+
+    function flushGroup() {
+        if (currentGroupRows.length === 0) return;
+        let gInc = 0, gExp = 0, gBal = 0;
+        currentGroupRows.forEach(row => {
+            const inc = parseMoneyText(row.cells[5].textContent);
+            const exp = parseMoneyText(row.cells[6].textContent);
+            const bal = parseMoneyText(row.cells[7].textContent);
+            gInc += inc; gExp += exp; gBal += bal;
+            tableIncome += inc; tableExpense += exp; tableBalance += bal;
+        });
+
+        const headerRow = document.createElement('tr');
+        headerRow.className = 'group-header-row';
+        headerRow.innerHTML = `
+            <td colspan="5" style="background-color: #2a2a2a; font-weight: bold; color: #e6b800; padding: 10px; border-top: 2px solid #444; border-bottom: 1px solid #444;">${currentGroupLabel}</td>
+            <td class="num" style="background-color: #2a2a2a; color: #e6b800; font-weight: bold; padding: 10px; border-bottom: 1px solid #444;">${formatMoney(gInc)}</td>
+            <td class="num" style="background-color: #2a2a2a; color: #e6b800; font-weight: bold; padding: 10px; border-bottom: 1px solid #444;">${formatMoney(gExp)}</td>
+            <td class="num" style="background-color: #2a2a2a; color: #e6b800; font-weight: bold; padding: 10px; border-bottom: 1px solid #444;">${formatMoney(gBal)}</td>
+            <td style="background-color: #2a2a2a; border-top: 2px solid #444; border-bottom: 1px solid #444;"></td>
+        `;
+        tbody.appendChild(headerRow);
+        currentGroupRows.forEach(row => tbody.appendChild(row));
+        currentGroupRows = [];
+    }
+
+    allRows.forEach((row) => {
+        let gv = '', gl = '';
+        if (field === 'date') {
+            gv = row.dataset.date; 
+            const d = new Date(parseInt(row.dataset.date) * 1000);
+            gl = `${months[d.getMonth()]} ${d.getFullYear()}`;
+        } else if (field === 'type') {
+            gv = row.dataset.type; gl = row.dataset.type;
+        } else if (field === 'work') {
+            gv = row.dataset.work; gl = row.cells[0].textContent.trim();
+        }
+
+        if (gv !== currentGroupValue) {
+            flushGroup();
+            currentGroupValue = gv;
+            currentGroupLabel = gl;
+        }
+        currentGroupRows.push(row);
+    });
+
+    flushGroup();
+    document.getElementById('total-income').textContent = formatMoney(tableIncome);
+    document.getElementById('total-expense').textContent = formatMoney(tableExpense);
+    document.getElementById('total-balance').textContent = formatMoney(tableBalance);
+}
+
+// ============ Запуск при загрузке ============
+document.addEventListener('DOMContentLoaded', function() {
+    const typeBtn = document.querySelector('.filter-bar button:nth-child(3)');
+    if (typeBtn) sortTable('type', typeBtn);
+
+    const contractID = "{{ $c.ID }}";
+    const snapshotID = "{{ if .Snapshot }}{{ .Snapshot.ID }}{{ end }}";
+    
+    if (!snapshotID) return;
+
+    fetch(`/contracts/${contractID}/budget/charts.json?snapshot=${snapshotID}`)
+        .then(r => r.json())
+        .then(data => {
+            const ctxExp = document.getElementById('expensesChart').getContext('2d');
+            new Chart(ctxExp, {
+                type: 'pie',
+                data: {
+                    labels: data.expenses_chart.labels,
+                    datasets: [{ data: data.expenses_chart.data, backgroundColor: ['#36a2eb', '#ff6384', '#ffce56', '#4bc0c0', '#9966ff', '#ff9f40', '#c9cbcf'] }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+
+            const ctxDept = document.getElementById('departmentsChart').getContext('2d');
+            new Chart(ctxDept, {
+                type: 'pie',
+                data: {
+                    labels: data.departments_chart.labels,
+                    datasets: [{ data: data.departments_chart.data, backgroundColor: ['#36a2eb', '#ff6384', '#ffce56', '#4bc0c0', '#9966ff'] }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+        });
+});
+</script>
+
+{{ template "layout_footer" . }}
+{{ end }}
