@@ -1117,6 +1117,8 @@ input.fact-input.manual-edit {
     border-color: transparent;
     color: var(--text-muted);
     padding-left: 0;
+    cursor: default;
+    box-shadow: none;
 }
 
 .plan-hint {

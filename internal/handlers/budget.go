@@ -612,6 +612,20 @@ func (h *BudgetHandler) FactSaveForm(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/contracts/"+contractID+"/budget/fact?flash=Изменения+сохранены", http.StatusSeeOther)
 }
 
+// FactAutoConfirmAutoRows квитирует ЗП и Накладные, если месяц наступил
+func (h *BudgetHandler) FactAutoConfirmAutoRows(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "id")
+
+	// Просто вызываем метод репозитория (создадим его на следующем шаге)
+	if err := h.svc.AutoConfirmSalaryAndOverhead(r.Context(), contractID); err != nil {
+		log.Printf("auto confirm: %v", err)
+		http.Error(w, "Ошибка автоквитирования: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	http.Redirect(w, r, "/contracts/"+contractID+"/budget/fact?flash=ЗП+и+Накладные+успешно+квитированы", http.StatusSeeOther)
+}
+
 // parseCostsFromBudgetForm собирает затраты из формы создания новой версии
 func parseCostsFromBudgetForm(r *http.Request) []models.StageCost {
 	_ = r.ParseForm()

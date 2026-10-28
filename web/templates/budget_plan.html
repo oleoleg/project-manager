@@ -4,6 +4,8 @@
 {{ $s := .Settings }}
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="/static/table-sort.js"></script>
+
 
 <div class="page-header">
     <div class="contract-title">
@@ -232,9 +234,10 @@
     {{ if .Snapshot }}
         <div class="filter-bar" style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
             <span>Сортировать:</span>
-            <button type="button" class="btn btn-sm sort-btn" onclick="sortTable('date', this)">По дате</button>
-            <button type="button" class="btn btn-sm sort-btn" onclick="sortTable('type', this)">По типу операции</button>
-            <button type="button" class="btn btn-sm sort-btn" onclick="sortTable('work', this)">По виду работ</button>
+            <button type="button" class="btn btn-sm sort-btn" onclick="sortTable('plan-table', 'stage', this, {labelColspan: 3, incIdx: 6, expIdx: 7, balIdx: 8, hasIncome: true, hasExpense: true, hasBalance: true})">По этапам</button>
+            <button type="button" class="btn btn-sm sort-btn" onclick="sortTable('plan-table', 'date', this, {labelColspan: 3, incIdx: 6, expIdx: 7, balIdx: 8, hasIncome: true, hasExpense: true, hasBalance: true})">По дате</button>
+            <button type="button" class="btn btn-sm sort-btn" onclick="sortTable('plan-table', 'type', this, {labelColspan: 3, incIdx: 6, expIdx: 7, balIdx: 8, hasIncome: true, hasExpense: true, hasBalance: true})">По типу операции</button>
+            <button type="button" class="btn btn-sm sort-btn" onclick="sortTable('plan-table', 'work', this, {labelColspan: 3, incIdx: 6, expIdx: 7, balIdx: 8, hasIncome: true, hasExpense: true, hasBalance: true})">По виду работ</button>
         </div>
 
         <div class="totals" id="group-totals" style="margin-bottom: 20px;">
@@ -274,7 +277,7 @@
             {{ $totalBalance := 0.0 }}
             
             {{ range .PlanLines }}
-                <tr data-work="{{ .WorkKindCode }}" data-type="{{ .OperationType }}" data-date="{{ .OperationDate.Unix }}">
+                <tr data-work="{{ .WorkKindCode }}" data-type="{{ .OperationType }}" data-date="{{ .OperationDate.Unix }}" data-stage="{{ .StageNumber }}">
                     <td style="text-align: center; color: var(--text-muted);">{{ .StageNumber }}</td>
                     <td>{{ workKindLabel $.WorkKinds .WorkKindCode }}</td>
                     <td>{{ .Name }}</td>
@@ -293,7 +296,7 @@
             </tbody>
             <tfoot>
                 <tr class="row-total">
-                    <td colspan="5"><strong>ИТОГО</strong></td>
+                    <td colspan="6"><strong>ИТОГО</strong></td>
                     <td class="num"><strong>{{ money $totalIncome }}</strong></td>
                     <td class="num"><strong>{{ money $totalExpense }}</strong></td>
                     <td class="num"><strong>{{ money $totalBalance }}</strong></td>
@@ -346,114 +349,8 @@ function askNote(btn) {
     btn.closest('form').querySelector('.generate-note-input').value = note;
     return true;
 }
-
-function parseMoneyText(text) {
-    if (!text) return 0;
-    const clean = text.replace(/[^\d.,-]/g, '').replace(',', '.');
-    const val = parseFloat(clean);
-    return isNaN(val) ? 0 : val;
-}
-
-function formatMoney(val) {
-    if (!val && val !== 0) return '';
-    const s = Math.abs(val).toFixed(2);
-    const formatted = s.replace(/\B(?=(\d{3})+(?!\d))/g, '\u00A0');
-    return (val < 0 ? '-' : '') + formatted + ' ₽';
-}
-
-// ============ Сортировка и группировка ============
-function sortTable(field, btnElement) {
-    const tbody = document.getElementById('plan-tbody');
-    if (!tbody) return;
-
-    document.querySelectorAll('.filter-bar button').forEach(btn => {
-        btn.style.backgroundColor = '';
-        btn.style.color = '';
-        btn.classList.remove('btn-primary');
-    });
-    if (btnElement) {
-        btnElement.style.backgroundColor = '#337ab7';
-        btnElement.style.color = '#fff';
-        btnElement.classList.add('btn-primary');
-    }
-
-    tbody.querySelectorAll('.group-header-row').forEach(el => el.remove());
-    const allRows = Array.from(tbody.querySelectorAll('tr:not(.group-header-row)'));
-    
-    const typeOrder = {
-        "Платежи по договору": 1, "Закупка по договору": 2, "Зарплата сотрудникам": 3,
-        "Накладные": 4, "Командировки": 5, "Субподрядчики": 6, "Комиссия": 7, "Другое (расходы)": 8
-    };
-    const workOrder = { "pir": 1, "ppo": 2, "smr": 3, "pnr": 4, "sale": 5, "to": 6, "remont": 7, "complex": 8 };
-
-    allRows.sort((a, b) => {
-        if (field === 'date') return parseInt(a.dataset.date) - parseInt(b.dataset.date);
-        if (field === 'type') return (typeOrder[a.dataset.type] || 99) - (typeOrder[b.dataset.type] || 99);
-        if (field === 'work') return (workOrder[a.dataset.work] || 99) - (workOrder[b.dataset.work] || 99);
-        return 0;
-    });
-
-    tbody.innerHTML = '';
-    const months = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
-
-    let currentGroupValue = null;
-    let currentGroupLabel = '';
-    let currentGroupRows = [];
-    let tableIncome = 0;
-    let tableExpense = 0;
-    let tableBalance = 0;
-
-    function flushGroup() {
-        if (currentGroupRows.length === 0) return;
-        let gInc = 0, gExp = 0, gBal = 0;
-        currentGroupRows.forEach(row => {
-            const inc = parseMoneyText(row.cells[5].textContent);
-            const exp = parseMoneyText(row.cells[6].textContent);
-            const bal = parseMoneyText(row.cells[7].textContent);
-            gInc += inc; gExp += exp; gBal += bal;
-            tableIncome += inc; tableExpense += exp; tableBalance += bal;
-        });
-
-        const headerRow = document.createElement('tr');
-        headerRow.className = 'group-header-row';
-        headerRow.innerHTML = `
-            <td colspan="5" style="background-color: #2a2a2a; font-weight: bold; color: #e6b800; padding: 10px; border-top: 2px solid #444; border-bottom: 1px solid #444;">${currentGroupLabel}</td>
-            <td class="num" style="background-color: #2a2a2a; color: #e6b800; font-weight: bold; padding: 10px; border-bottom: 1px solid #444;">${formatMoney(gInc)}</td>
-            <td class="num" style="background-color: #2a2a2a; color: #e6b800; font-weight: bold; padding: 10px; border-bottom: 1px solid #444;">${formatMoney(gExp)}</td>
-            <td class="num" style="background-color: #2a2a2a; color: #e6b800; font-weight: bold; padding: 10px; border-bottom: 1px solid #444;">${formatMoney(gBal)}</td>
-            <td style="background-color: #2a2a2a; border-top: 2px solid #444; border-bottom: 1px solid #444;"></td>
-        `;
-        tbody.appendChild(headerRow);
-        currentGroupRows.forEach(row => tbody.appendChild(row));
-        currentGroupRows = [];
-    }
-
-    allRows.forEach((row) => {
-        let gv = '', gl = '';
-        if (field === 'date') {
-            gv = row.dataset.date; 
-            const d = new Date(parseInt(row.dataset.date) * 1000);
-            gl = `${months[d.getMonth()]} ${d.getFullYear()}`;
-        } else if (field === 'type') {
-            gv = row.dataset.type; gl = row.dataset.type;
-        } else if (field === 'work') {
-            gv = row.dataset.work; gl = row.cells[0].textContent.trim();
-        }
-
-        if (gv !== currentGroupValue) {
-            flushGroup();
-            currentGroupValue = gv;
-            currentGroupLabel = gl;
-        }
-        currentGroupRows.push(row);
-    });
-
-    flushGroup();
-    document.getElementById('total-income').textContent = formatMoney(tableIncome);
-    document.getElementById('total-expense').textContent = formatMoney(tableExpense);
-    document.getElementById('total-balance').textContent = formatMoney(tableBalance);
-}
-
+ 
+ 
 // ============ Запуск при загрузке ============
 document.addEventListener('DOMContentLoaded', function() {
     // Расчет итогов для вкладки затрат
@@ -473,8 +370,19 @@ document.addEventListener('DOMContentLoaded', function() {
     if (elFot) elFot.textContent = formatMoney(totalFot);
     if (elCost) elCost.textContent = formatMoney(totalCost);
 
-    const typeBtn = document.querySelector('.filter-bar button:nth-child(3)');
-    if (typeBtn) sortTable('type', typeBtn);
+    // Найти кнопку "По типу операции" (теперь она третья в списке, но мы найдем её по тексту для надёжности)
+    const typeBtn = Array.from(document.querySelectorAll('.filter-bar button')).find(b => b.textContent.includes('По типу операции'));
+    if (typeBtn) {
+        sortTable('plan-table', 'type', typeBtn, {
+            labelColspan: 3,
+            incIdx: 6,
+            expIdx: 7,
+            balIdx: 8,
+            hasIncome: true,
+            hasExpense: true,
+            hasBalance: true
+        });
+    }
 
     const contractID = "{{ $c.ID }}";
     const snapshotID = "{{ if .Snapshot }}{{ .Snapshot.ID }}{{ end }}";

@@ -931,3 +931,25 @@ func (r *BudgetRepo) GetPlanFactSummary(ctx context.Context, contractID string, 
 	}
 	return res, rows.Err()
 }
+
+// AutoConfirmSalaryAndOverhead квитирует ЗП и Накладные, если их месяц наступил или прошел.
+func (r *BudgetRepo) AutoConfirmSalaryAndOverhead(ctx context.Context, contractID string) error {
+	// Берем начало текущего месяца, чтобы сравнить с датой операции.
+	// Всё, что было в этом месяце или раньше — считаем наступившим.
+	now := time.Now()
+	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+
+	_, err := r.pool.Exec(ctx, `
+		UPDATE budget_fact_lines
+		SET is_confirmed = TRUE, updated_at = NOW()
+		WHERE contract_id = $1 
+		  AND operation_type IN ('Зарплата сотрудникам', 'Накладные')
+		  AND is_confirmed = FALSE
+		  AND operation_date < $2
+	`, contractID, startOfMonth.AddDate(0, 1, 0)) // < startOfMonth.AddDate(0, 1, 0) означает "до начала следующего месяца" (т.е. включая текущий)
+
+	if err != nil {
+		return fmt.Errorf("auto confirm salary/overhead: %w", err)
+	}
+	return nil
+}

@@ -406,3 +406,8 @@ func (s *BudgetService) RestoreFromSnapshot(ctx context.Context, contractID, sna
 func (s *BudgetService) GetPlanFactSummary(ctx context.Context, contractID string, onlyConfirmed bool) ([]db.PlanFactRow, error) {
 	return s.repo.GetPlanFactSummary(ctx, contractID, onlyConfirmed)
 }
+
+// AutoConfirmSalaryAndOverhead квитирует ЗП и Накладные за текущий и прошлые месяцы.
+func (s *BudgetService) AutoConfirmSalaryAndOverhead(ctx context.Context, contractID string) error {
+	return s.repo.AutoConfirmSalaryAndOverhead(ctx, contractID)
+}

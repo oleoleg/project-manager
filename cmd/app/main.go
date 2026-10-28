@@ -361,6 +361,7 @@ func startHTTPServer(stopCh <-chan struct{}) {
 			r.Post("/contracts/{id}/budget/fact/{factID}/update", budgetH.FactUpdate)
 			//r.Post("/contracts/{id}/budget/fact/save", budgetH.FactSaveBatch)
 			r.Post("/contracts/{id}/budget/fact/save-form", budgetH.FactSaveForm)
+			r.Post("/contracts/{id}/budget/fact/auto-confirm", budgetH.FactAutoConfirmAutoRows)
 
 			// Сравнить Бюджет Факт vs План
 			r.Get("/contracts/{id}/budget/compare", budgetH.PlanFactIndex)

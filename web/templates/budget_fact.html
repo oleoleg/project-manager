@@ -2,6 +2,10 @@
 {{ template "layout_header" . }}
 {{ $c := .Contract }}
 
+<script src="/static/table-sort.js"></script>
+<script src="/static/budget-fact.js"></script>
+<script src="/static/budget-fact-actions.js"></script>
+
 <div class="page-header">
    <div class="contract-title">
         <h2>
@@ -33,6 +37,12 @@
     
 
     <div class="actions" style="display: flex; gap: 8px;">
+        {{ if .FactLines }}
+            <form method="post" action="/contracts/{{ $c.ID }}/budget/fact/auto-confirm" style="display:inline;" onsubmit="return confirm('Квитировать ЗП и Накладные за текущий и прошлые месяцы?');">
+                <button type="submit" class="btn btn-success-custom">🔄 Загрузить ЗП</button>
+            </form>
+        {{ end }}
+        
         {{ if not .FactLines }}
             {{ if .HasActivePlan }}
                 <form method="post" action="/contracts/{{ $c.ID }}/budget/fact/generate" style="display:inline;" onsubmit="return confirm('Сформировать факт на основе активного плана?');">
@@ -60,6 +70,13 @@
 
 {{ if .FactLines }}
     <div class="filter-bar" style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center;">
+        <div style="display: flex; gap: 10px; align-items: center; margin-left: 20px;">
+            <span>Сортировать:</span>
+            <button type="button" class="btn btn-sm sort-btn" onclick="sortFactTable('stage', this)">По этапам</button>
+            <button type="button" class="btn btn-sm sort-btn" onclick="sortFactTable('date', this)">По дате</button>
+            <button type="button" class="btn btn-sm sort-btn" onclick="sortFactTable('type', this)">По типу операции</button>
+        </div>
+ 
         <label class="inline-checkbox" style="cursor: pointer;">
             <input type="checkbox" id="show-salary" onchange="toggleSalaryRows()">
             Показать ЗП и Накладные
@@ -123,6 +140,10 @@
                 <!-- Строки факта -->
                 {{ range $typeLines }}
                     <tr class="fact-row {{ if $isSalary }}salary-row{{ end }} {{ if .IsConfirmed }}confirmed{{ end }}" 
+                        data-type="{{ $type }}" 
+                        data-stage="{{ .StageNumber }}" 
+                        data-work="{{ .WorkKindCode }}" 
+                        data-date="{{ .OperationDate.Unix }}" 
                         {{ if $isSalary }}style="display: none;"{{ end }}>
                         
                         <td style="text-align: center; color: var(--text-muted);" title="{{ .StageNumber }} — {{ .StageName }}">
@@ -138,11 +159,11 @@
                         </td>
 
                         <td>
-                            <textarea name="name[]" class="fact-input" rows="2" style="resize: vertical; height: 100%; min-height: 38px;">{{ .Name }}</textarea>
+                            <textarea name="name[]" class="fact-input" rows="2" style="resize: vertical; height: 100%; min-height: 38px;" {{ if or $isSalary .IsConfirmed }}readonly{{ end }}>{{ .Name }}</textarea>
                         </td>
                         
-                        <td><input type="date" name="operation_date[]" value="{{ .OperationDate.Format "2006-01-02" }}" class="fact-input" onchange="updatePayDate(this)" {{ if .IsConfirmed }}readonly{{ end }}></td>
-                        <td><input type="number" name="delay_days[]" value="{{ .DelayDays }}" class="fact-input" onchange="updatePayDate(this)" {{ if .IsConfirmed }}readonly{{ end }}></td>
+                        <td><input type="date" name="operation_date[]" value="{{ .OperationDate.Format "2006-01-02" }}" class="fact-input" onchange="updatePayDate(this)" {{ if or $isSalary .IsConfirmed }}readonly{{ end }}></td>
+                        <td><input type="number" name="delay_days[]" value="{{ .DelayDays }}" class="fact-input" onchange="updatePayDate(this)" {{ if or $isSalary .IsConfirmed }}readonly{{ end }}></td>
                         <td><input type="date" name="payment_date[]" value="{{ .PaymentDate.Format "2006-01-02" }}" class="fact-input" readonly></td>
                         
                         <td class="num">
@@ -157,7 +178,7 @@
 
                         <td class="num">
                             {{ if not $isPayment }}
-                                <input type="text" name="fact_expense[]" class="fact-input money-input" value="{{ if gt .FactExpense 0.0 }}{{ printf "%.2f" .FactExpense }}{{ end }}" {{ if .IsConfirmed }}readonly{{ end }}>
+                                <input type="text" name="fact_expense[]" class="fact-input money-input" value="{{ if gt .FactExpense 0.0 }}{{ printf "%.2f" .FactExpense }}{{ end }}" {{ if or $isSalary .IsConfirmed }}readonly{{ end }}>
                                 <div class="plan-hint">План: {{ if gt .PlanExpense 0.0 }}{{ money .PlanExpense }}{{ end }}</div>
                             {{ else }}
                                 <input type="hidden" name="fact_expense[]" value="0">
@@ -168,9 +189,8 @@
                         <!-- КВИТИРОВАНО -->
                         <td style="text-align: center;">
                             <input type="checkbox" name="is_confirmed[]" value="{{ .ID }}" 
-                                   {{ if or .IsConfirmed $isSalary }}checked{{ end }} 
-                                   {{ if $isSalary }}disabled{{ end }} 
-                                   onchange="toggleRowInputs(this)">
+                                   {{ if .IsConfirmed }}checked{{ end }} 
+                                   {{ if $isSalary }}onclick="return false;" style="cursor: default; opacity: 0.7;"{{ else }}onchange="toggleRowInputs(this)"{{ end }}>
                         </td>
 
                         <!-- ДЕЙСТВИЕ -->
@@ -220,316 +240,8 @@
     {{ end }}
 </div>
 
-<script>
-    // Автоматический расчет даты платежа
-    function updatePayDate(element) {
-        const row = element.closest('tr');
-        const opDateInput = row.querySelector('input[name="operation_date[]"]');
-        const delayInput = row.querySelector('input[name="delay_days[]"]');
-        const payDateInput = row.querySelector('input[name="payment_date[]"]');
-
-        if (!opDateInput || !opDateInput.value) return;
-        const delay = parseInt(delayInput.value) || 0;
-        
-        const date = new Date(opDateInput.value);
-        date.setDate(date.getDate() + delay);
-        
-        const yyyy = date.getFullYear();
-        const mm = String(date.getMonth() + 1).padStart(2, '0');
-        const dd = String(date.getDate()).padStart(2, '0');
-        
-        if (payDateInput) payDateInput.value = `${yyyy}-${mm}-${dd}`;
-    }
-
-    function toggleRowInputs(checkbox) {
-        const row = checkbox.closest('tr');
-        
-        if (checkbox.checked) {
-            row.classList.add('confirmed');
-        } else {
-            row.classList.remove('confirmed');
-        }
-
-        const inputs = row.querySelectorAll('input.fact-input, textarea.fact-input, input.money-input');
-        
-        inputs.forEach(input => {
-            if (checkbox.checked) {
-                input.setAttribute('readonly', 'readonly');
-            } else {
-                input.removeAttribute('readonly');
-            }
-        });
-        
-        recalculateTotals();
-    }
-
-    // Фильтрация видов работ в зависимости от выбранного этапа
-    function filterWorkKinds(selectEl) {
-        const row = selectEl.closest('tr');
-        const hiddenGuid = row.querySelector('input[name="stage_guid[]"]');
-        if (hiddenGuid) hiddenGuid.value = selectEl.value;
-        const workKindSelect = row.querySelector('.workkind-select');
-        if (!workKindSelect) return;
-
-        const stageGUID = selectEl.value;
-        const availableWks = window.stageWorkKinds[stageGUID] || [];
-
-        const currentVal = workKindSelect.value;
-        workKindSelect.innerHTML = '';
-
-        // Если видов работ для этого этапа нет, разрешаем выбрать любой
-        if (availableWks.length === 0) {
-            const allOptions = document.querySelector('.workkind-select') ? document.querySelector('.workkind-select').innerHTML : '';
-            workKindSelect.innerHTML = allOptions;
-        } else {
-            // Перебираем справочник из window.workKinds
-            if (window.workKinds && window.workKinds.length > 0) {
-                window.workKinds.forEach(wk => {
-                    if (availableWks.includes(wk.Code)) {
-                        const opt = document.createElement('option');
-                        opt.value = wk.Code;
-                        opt.textContent = wk.Name;
-                        if (wk.Code === currentVal) opt.selected = true;
-                        workKindSelect.appendChild(opt);
-                    }
-                });
-            }
-            
-            if (!workKindSelect.value && workKindSelect.options.length > 0) {
-                workKindSelect.selectedIndex = 0;
-            }
-        }
-        const hiddenWk = row.querySelector('input[name="work_kind_code[]"]');
-        if (hiddenWk) {
-            hiddenWk.value = workKindSelect.value;
-        }
-                // В самом конце, перед закрывающей скобкой:
-        const wkSelect = row.querySelector('.workkind-select');
-        const wkhidden = row.querySelector('input[name="work_kind_code[]"]');
-        if (wkSelect && wkhidden) {
-            wkhidden.value = wkSelect.value;
-        }
-    }
-
-    function deleteRow(btn) {
-        if (!confirm('Удалить эту строку?')) return;
-        const row = btn.closest('tr');
-        row.remove();
-        recalculateTotals();
-    }
-
-    function addNewRow(opType, event) {
-        const btn = event.target;
-        const btnRow = btn.closest('tr');
-        if (!window.stageOptionsHTML || window.stageOptionsHTML.trim() === '') {
-            alert('Сначала добавьте хотя бы один этап в договор.');
-            return;
-        }
-        const tbody = document.getElementById('fact-table').querySelector('tbody');
-        const newRow = document.createElement('tr');
-        newRow.className = 'fact-row';
-        
-        const isPayment = opType === 'Платежи по договору';
-        const isSalary = opType === 'Зарплата сотрудникам' || opType === 'Накладные';
-        
-        let workKindsHTML = '';
-        const firstSelect = document.querySelector('.workkind-select');
-        if (firstSelect) {
-            workKindsHTML = firstSelect.innerHTML;
-        }
-
-        newRow.innerHTML = `
-            <td style="text-align: center;">
-                <select name="stage_select" class="fact-input stage-select" style="width: 100%; font-size: 12px;" onchange="filterWorkKinds(this)">
-                    ${window.stageOptionsHTML}
-                </select>
-            </td>
-            <td>
-                <input type="hidden" name="fact_id[]" value="">
-                <input type="hidden" name="stage_guid[]" value="">
-                <input type="hidden" name="work_kind_code[]" class="workkind-hidden" value="">
-                <input type="hidden" name="operation_type[]" value="${opType}">
-                <select class="fact-input workkind-select" onchange="this.closest('tr').querySelector('input[name=\'work_kind_code[]\']').value = this.value;">
-                    ${workKindsHTML}
-                </select>
-            </td>
-            <td><textarea name="name[]" class="fact-input" rows="2" placeholder="Новая операция"></textarea></td>
-            <td><input type="date" name="operation_date[]" class="fact-input" onchange="updatePayDate(this)"></td>
-            <td><input type="number" name="delay_days[]" value="0" class="fact-input" onchange="updatePayDate(this)"></td>
-            <td><input type="date" name="payment_date[]" class="fact-input" readonly></td>
-            <td class="num">
-                ${isPayment ? `<input type="text" name="fact_income[]" class="fact-input money-input">` : `<input type="hidden" name="fact_income[]" value="0"><span class="muted">—</span>`}
-            </td>
-            <td class="num">
-                ${!isPayment ? `<input type="text" name="fact_expense[]" class="fact-input money-input">` : `<input type="hidden" name="fact_expense[]" value="0"><span class="muted">—</span>`}
-            </td>
-            <td style="text-align: center;">
-                <input type="hidden" name="confirmed_id[]" value="">
-                <input type="checkbox" name="is_confirmed[]" value="" ${isSalary ? 'disabled' : ''} onchange="toggleRowInputs(this)">
-            </td>
-            <td style="text-align: right; white-space: nowrap;">
-                <button type="submit" class="btn btn-sm btn-primary" title="Сохранить">💾</button>
-                <button type="button" class="btn btn-sm btn-danger" onclick="deleteRow(this)" title="Удалить">×</button>
-            </td>
-        `;
-        
-        tbody.insertBefore(newRow, btnRow);
-        
-        if (window.attachMoneyInput) {
-            newRow.querySelectorAll('input.money-input').forEach(window.attachMoneyInput);
-        }
-        
-        const today = new Date().toISOString().split('T')[0];
-        newRow.querySelector('input[name="operation_date[]"]').value = today;
-        updatePayDate(newRow.querySelector('input[name="operation_date[]"]'));
-
-        // Автоматически применяем фильтр для первого выбранного этапа
-        const stageSelect = newRow.querySelector('.stage-select');
-        if (stageSelect) {
-            filterWorkKinds(stageSelect);
-        }
-        
-        // Принудительно обновляем скрытое поле work_kind_code из селекта
-        const wkSelect = newRow.querySelector('.workkind-select');
-        const wkhidden = newRow.querySelector('input[name="work_kind_code[]"]');
-        if (wkSelect && wkhidden) {
-            wkhidden.value = wkSelect.value;
-        }
-
-        recalculateTotals();
-    }
-
-    document.addEventListener('DOMContentLoaded', function() {
-        document.querySelectorAll('input[name="is_confirmed[]"]').forEach(cb => {
-            if (cb.checked) {
-                toggleRowInputs(cb);
-            }
-        });
-        
-        if (window.attachMoneyInput) {
-            document.querySelectorAll('input.money-input').forEach(window.attachMoneyInput);
-        }
-
-        document.querySelectorAll('input[name="fact_income[]"], input[name="fact_expense[]"]').forEach(inp => {
-            inp.addEventListener('input', recalculateTotals);
-        });
-
-        recalculateTotals();
-
-        // Формируем HTML для выбора этапа
-        window.stageOptionsHTML = ``;
-        const stageNodes = document.querySelectorAll('#stage-data div');
-        stageNodes.forEach(node => {
-            const guid = node.getAttribute('data-guid');
-            const name = node.getAttribute('data-name');
-            const isSelected = node.hasAttribute('data-selected') ? 'selected' : '';
-            window.stageOptionsHTML += `<option value="${guid}" ${isSelected}>${name}</option>`;
-        });
-
-        // Безопасный парсинг JSON
-        try {
-            const swk = '{{ .StageWorkKindsJSON }}';
-            window.stageWorkKinds = swk ? JSON.parse(swk) : {};
-        } catch (e) {
-            window.stageWorkKinds = {};
-        }
-
-        try {
-            const wk = '{{ .WorkKindsJSON }}';
-            window.workKinds = wk ? JSON.parse(wk) : [];
-        } catch (e) {
-            window.workKinds = [];
-        }
-    });
-
-
-    function toggleSalaryRows() {
-        const checkbox = document.getElementById('show-salary');
-        document.querySelectorAll('.salary-row').forEach(row => {
-            row.style.display = checkbox.checked ? '' : 'none';
-        });
-    }
-
-    function formatMoney(val) {
-        if (!val && val !== 0) return '';
-        const s = Math.abs(val).toFixed(2);
-        const formatted = s.replace(/\B(?=(\d{3})+(?!\d))/g, '\u00A0');
-        return (val < 0 ? '-' : '') + formatted + ' ₽';
-    }
-
-    function parseMoneyText(text) {
-        if (!text) return 0;
-        const clean = text.replace(/[^\d.,-]/g, '').replace(',', '.');
-        const val = parseFloat(clean);
-        return isNaN(val) ? 0 : val;
-    }
-
-    function recalculateTotals() {
-        const table = document.getElementById('fact-table');
-        if (!table) return;
-        
-        let totalIncome = 0;
-        let totalExpense = 0;
-        let confirmedIncome = 0;
-        let confirmedExpense = 0;
-
-        const groupHeaders = table.querySelectorAll('.group-header-row');
-        
-        groupHeaders.forEach(header => {
-            const type = header.getAttribute('data-type');
-            if (!type) return;
-            
-            let groupInc = 0;
-            let groupExp = 0;
-            
-            const rows = table.querySelectorAll(`tr.fact-row`);
-            rows.forEach(row => {
-                const opTypeInput = row.querySelector('input[name="operation_type[]"]');
-                if (opTypeInput && opTypeInput.value === type) {
-                    const incInput = row.querySelector('input[name="fact_income[]"]');
-                    const expInput = row.querySelector('input[name="fact_expense[]"]');
-                    
-                    const incVal = incInput ? parseMoneyText(incInput.value) : 0;
-                    const expVal = expInput ? parseMoneyText(expInput.value) : 0;
-                    
-                    groupInc += incVal;
-                    groupExp += expVal;
-
-                    const isConfirmed = row.classList.contains('confirmed');
-                    if (isConfirmed) {
-                        confirmedIncome += incVal;
-                        confirmedExpense += expVal;
-                    }
-                }
-            });
-
-            const incCell = header.querySelector('.group-total-income');
-            const expCell = header.querySelector('.group-total-expense');
-            if (incCell) incCell.textContent = formatMoney(groupInc);
-            if (expCell) expCell.textContent = formatMoney(groupExp);
-
-            totalIncome += groupInc;
-            totalExpense += groupExp;
-        });
-
-        const totalIncEl = document.getElementById('total-fact-income');
-        const totalExpEl = document.getElementById('total-fact-expense');
-        const totalBalEl = document.getElementById('total-fact-balance');
-
-        if (totalIncEl) totalIncEl.textContent = formatMoney(totalIncome);
-        if (totalExpEl) totalExpEl.textContent = formatMoney(totalExpense);
-        if (totalBalEl) totalBalEl.textContent = formatMoney(totalIncome - totalExpense);
-
-        const confIncEl = document.getElementById('confirmed-fact-income');
-        const confExpEl = document.getElementById('confirmed-fact-expense');
-        const confBalEl = document.getElementById('confirmed-fact-balance');
-
-        if (confIncEl) confIncEl.textContent = 'Подтв.: ' + formatMoney(confirmedIncome);
-        if (confExpEl) confExpEl.textContent = 'Подтв.: ' + formatMoney(confirmedExpense);
-        if (confBalEl) confBalEl.textContent = 'Подтв.: ' + formatMoney(confirmedIncome - confirmedExpense);
-    }
-
-</script>
+<input type="hidden" id="json-work-kinds" value='{{ .WorkKindsJSON }}'>
+<input type="hidden" id="json-stage-work-kinds" value='{{ .StageWorkKindsJSON }}'>
 
 {{ template "layout_footer" . }}
 {{ end }}
