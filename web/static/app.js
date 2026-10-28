@@ -33,8 +33,12 @@
         return out;
     }
 
-    function attach(el) {
-        // Запоминаем исходное значение при фокусе — для Esc
+    function formatDays(raw) {
+        let s = String(raw || "").trim();
+        return s.replace(/\D/g, "");
+    }
+
+    function attachMoney(el) {
         el.addEventListener("focus", function () {
             el.dataset.originalValue = el.value;
         });
@@ -53,26 +57,21 @@
             }
         });
 
-        // На input — форматируем, НО пропускаем события удаления (Backspace/Delete),
-        // чтобы пользователь мог удалить цифру сразу после пробела.
         el.addEventListener("input", function (e) {
             const it = e.inputType || "";
             if (it === "deleteContentBackward" || it === "deleteContentForward") {
                 return;
             }
-
             const before = el.value;
             const after = formatMoney(before);
             if (before === after) return;
 
-            // Позиция курсора от конца строки — так надёжнее при вставке/удалении
             const endOffset = before.length - el.selectionStart;
             el.value = after;
             const pos = Math.max(0, after.length - endOffset);
             el.setSelectionRange(pos, pos);
         });
 
-        // На blur — нормализуем до 2 знаков после точки и докручиваем пробелы
         el.addEventListener("blur", function () {
             if (!el.value) return;
             let v = el.value.replace(/\s/g, "");
@@ -83,14 +82,35 @@
         });
     }
 
-    // Экспортируем, чтобы можно было навешивать на новые строки
-    window.attachMoneyInput = attach;
+    function attachDays(el) {
+        el.addEventListener("input", function () {
+            let val = formatDays(this.value);
+            if (val !== this.value) {
+                this.value = val;
+            }
+        });
+
+        el.addEventListener("blur", function () {
+            if (!this.value) return;
+            this.value = formatDays(this.value);
+        });
+    }
+
+    window.attachMoneyInput = attachMoney;
     window.formatMoney = formatMoney;
+    window.formatDays = formatDays;
 
     document.addEventListener("DOMContentLoaded", function () {
+        // Инициализация денег
         document.querySelectorAll("input.money-input").forEach(function (el) {
             if (el.value) el.value = formatMoney(el.value);
-            attach(el);
+            attachMoney(el);
+        });
+
+        // Инициализация дней
+        document.querySelectorAll("input.days-input").forEach(function (el) {
+            if (el.value) el.value = formatDays(el.value);
+            attachDays(el);
         });
     });
 })();

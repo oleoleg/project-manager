@@ -28,6 +28,7 @@ type BudgetPlanSnapshot struct {
 	IsActive           bool
 	Settings           []byte
 	StageCostsSnapshot []byte
+	StageDataSnapshot  []byte
 	ApprovedBy         *int64
 	ApprovedAt         *time.Time
 	ApproverName       string
@@ -37,7 +38,8 @@ type BudgetPlanSnapshot struct {
 type BudgetPlanLine struct {
 	ID            string
 	SnapshotID    string
-	StageGUID     *string // <--- Исправили на string
+	StageGUID     *string
+	StageNumber   string
 	WorkKindCode  string
 	Name          string
 	OperationDate time.Time
@@ -56,6 +58,8 @@ type BudgetFactLine struct {
 	ContractID    string    `json:"contract_id"`
 	PlanLineID    *string   `json:"plan_line_id"`
 	StageGUID     *string   `json:"stage_guid"`
+	StageNumber   string    `json:"stage_number"`
+	StageName     string    `json:"stage_name"`
 	WorkKindCode  string    `json:"work_kind_code"`
 	Name          string    `json:"name"`
 	OperationDate time.Time `json:"operation_date"`

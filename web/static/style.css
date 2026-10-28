@@ -1288,3 +1288,13 @@ textarea.fact-input {
 html[data-theme="dark"] .cost-row.row-error {
     background-color: rgba(220, 53, 69, 0.2) !important;
 }
+
+
+/* Цвета для отклонений (Сравнение План/Факт) */
+.text-success { color: #2ecc71 !important; }
+.text-danger { color: #e74c3c !important; }
+.text-neutral { color: inherit; }
+
+/* В темной теме сделаем их чуть ярче */
+html[data-theme="dark"] .text-success { color: #4cd137 !important; }
+html[data-theme="dark"] .text-danger { color: #ff6b6b !important; }

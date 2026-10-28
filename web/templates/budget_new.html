@@ -28,7 +28,6 @@
 
 <form method="post" action="/contracts/{{ $c.ID }}/budget/generate" id="new-plan-form">
 
-    <!-- Блок настроек (как в старом ФинПлане) -->
     <section class="collapsible" style="margin-bottom: 20px;">
         <header class="collapsible-header">
             <h3>Настройки плана</h3>
@@ -46,88 +45,92 @@
         </div>
     </section>
 
-    <!-- Таблица затрат (редактируемая) -->
     <section class="collapsible" style="margin-bottom: 20px;">
         <header class="collapsible-header">
-            <h3>Затраты этапов</h3>
+            <h3>Этапы и Затраты</h3>
         </header>
         <div class="collapsible-body">
             <div class="table-scroll">
-                <table class="data-table costs-table" id="costs-table" style="min-width: 1300px;">
+                <table class="data-table costs-table" id="costs-table" style="min-width: 1200px;">
                     <thead>
-                    <tr>
-                        <th style="width: 50px; text-align: center;">Этап</th>
-                        <th style="min-width: 150px;">Наименование этапа</th>
-                        <th class="num">Стоимость этапа</th>
-                        <th class="num">Аванс, %</th>
-                        <th>Вид работы</th>
-                        <th class="num">Стоимость работ</th>
-                        <th class="num">ФОТп</th>
-                        <th class="num">Т/з, дни</th>
-                        <th class="num">Ставка/день</th>
-                        <th class="num">Командир.</th>
-                        <th class="num">Обор. (себест.)</th>
-                        <th class="num">Субподряд</th>
-                        <th class="num">Комиссия</th>
-                        <th class="num">Другое</th>
-                        <th style="width: 50px;"></th>
-                    </tr>
+                        <tr>
+                            <th style="width: 60px; text-align: center;">№</th>
+                            <th style="min-width: 250px;">Наименование этапа / вид работы</th>
+                            <th class="num">Стоимость работ</th>
+                            <th class="num">ФОТп</th>
+                            <th class="num">Коэф.</th> <!-- НОВОЕ -->
+                            <th class="num">Т/з, дни</th>
+                            <th class="num">Ставка/день</th>
+                            <th class="num">Командир.</th>
+                            <th class="num">Обор. (прод.)</th> <!-- НОВОЕ -->
+                            <th class="num">Обор. (себест.)</th>
+                            <th class="num">Субподряд</th>
+                            <th class="num">Комиссия</th>
+                            <th class="num">Другое</th>
+                        </tr>
                     </thead>
                     <tbody id="costs-body">
-                    {{ range $i, $cost := .Costs }}
-                        {{ $stage := index $.StagesMap .StageGUID }}
-                        <tr class="cost-row" data-stage-guid="{{ .StageGUID }}">
-                            <!-- Данные этапа (только для чтения) -->
-                            <td style="text-align: center; font-weight: bold;">
-                                {{ if $stage }}{{ $stage.StageNumber }}{{ else }}—{{ end }}
-                                <input type="hidden" name="cost_stage_guid[]" value="{{ .StageGUID }}">
-                            </td>
-                            <td>
-                                <div style="font-size: 13px; color: var(--text-mid);">{{ if $stage }}{{ $stage.Name }}{{ end }}</div>
-                            </td>
-                            <td class="num">
-                                <div style="font-size: 13px; font-weight: bold;">{{ if $stage }}{{ money $stage.Cost }}{{ end }}</div>
-                                <input type="hidden" class="stage-cost-hidden" value="{{ if $stage }}{{ $stage.Cost }}{{ else }}0{{ end }}">
-                            </td>
-                            <td class="num">
-                                <div style="font-size: 13px;">{{ if $stage }}{{ printf "%.1f" $stage.AdvancePercent }}{{ end }}</div>
-                            </td>
-
-                            <!-- Редактируемые данные затрат -->
-                            <td>
-                                <input type="hidden" name="cost_work_kind[]" value="{{ .WorkKindCode }}">
-                                <span style="font-size: 13px;">{{ workKindLabel $.WorkKinds .WorkKindCode }}</span>
-                            </td>
-                            <td><input type="text" name="cost_amount[]" class="money-input" value="{{ if .Cost }}{{ printf "%.2f" .Cost }}{{ end }}"></td>
-                            <td><input type="text" name="cost_fot_plan[]" class="money-input" value="{{ if .FOTPlan }}{{ printf "%.2f" .FOTPlan }}{{ end }}"></td>
-                            <td><input type="text" name="cost_labor_days[]" class="money-input" value="{{ if .LaborDays }}{{ printf "%.2f" .LaborDays }}{{ end }}"></td>
-                            <td><input type="text" name="cost_rate_per_day[]" class="money-input" value="{{ if .RatePerDay }}{{ printf "%.2f" .RatePerDay }}{{ end }}"></td>
-                            <td><input type="text" name="cost_travel[]" class="money-input" value="{{ if .TravelExpenses }}{{ printf "%.2f" .TravelExpenses }}{{ end }}"></td>
-                            <td><input type="text" name="cost_equipment_cost[]" class="money-input" value="{{ if .EquipmentCost }}{{ printf "%.2f" .EquipmentCost }}{{ end }}"></td>
-                            <td><input type="text" name="cost_subcontract[]" class="money-input" value="{{ if .Subcontract }}{{ printf "%.2f" .Subcontract }}{{ end }}"></td>
-                            <td><input type="text" name="cost_commission[]" class="money-input" value="{{ if .Commission }}{{ printf "%.2f" .Commission }}{{ end }}"></td>
-                            <td><input type="text" name="cost_other[]" class="money-input" value="{{ if .OtherExpenses }}{{ printf "%.2f" .OtherExpenses }}{{ end }}"></td>
-                            <td>
-                                <button type="button" class="btn btn-sm btn-danger cost-remove" title="Удалить">×</button>
-                            </td>
-                        </tr>
+                    {{ range $i, $row := .DisplayRows }}
+                        {{ if $row.IsHeader }}
+                            <!-- СТРОКА ЭТАПА -->
+                            <tr class="stage-header-row" style="background: var(--surface-alt);">
+                                <td style="text-align: center; font-weight: bold; color: var(--accent);">{{ $row.Stage.StageNumber }}</td>
+                                <td style="font-weight: bold; font-size: 1.1em; color: var(--accent);">{{ $row.Stage.Name }}</td>
+                                <td class="num" style="font-weight: bold;">{{ money $row.Stage.Cost }}</td>
+                                <td colspan="8" style="color: var(--text-muted); font-size: 12px;">
+                                    Аванс: {{ printf "%.1f" $row.Stage.AdvancePercent }}% | НДС: {{ printf "%.1f" $row.Stage.VATPercent }}%
+                                </td>
+                            </tr>
+                        {{ else }}
+                            <!-- СТРОКА ЗАТРАТ -->
+                            <tr class="cost-row" data-stage-guid="{{ $row.Stage.GUID }}" data-stage-cost="{{ $row.Stage.Cost }}">
+                                <td></td>
+                                <td>
+                                    <input type="hidden" name="cost_stage_guid[]" value="{{ $row.Stage.GUID }}">
+                                    <input type="hidden" name="cost_work_kind[]" value="{{ $row.Cost.WorkKindCode }}">
+                                    {{ workKindLabel $.WorkKinds $row.Cost.WorkKindCode }}
+                                </td>
+                                <td class="num">
+                                    <input type="text" name="cost_amount[]" class="money-input fact-input" value="{{ if $row.Cost.Cost }}{{ printf "%.2f" $row.Cost.Cost }}{{ end }}">
+                                </td>
+                                <td class="cell-fot" style="position: relative;">
+                                    <input type="text" name="cost_fot_plan[]" class="money-input fact-input" value="{{ if $row.Cost.FOTPlan }}{{ printf "%.2f" $row.Cost.FOTPlan }}{{ end }}">
+                                    <button type="button" class="lock-btn {{ if containsLock $row.Cost.LockedField "fot_plan" }}locked{{ end }}" data-field="fot_plan" title="Зафиксировать ФОТп">🔓</button>
+                                    <input type="hidden" name="cost_locked[]" value="{{ $row.Cost.LockedField }}">
+                                </td>
+                                <!-- НОВАЯ ЯЧЕЙКА: Коэф -->
+                                <td class="cell-ratio" style="position: relative;">
+                                    <input type="text" class="ratio-display fact-input" value="{{ if and $row.Cost.Cost $row.Cost.FOTPlan }}{{ printf "%.2f" (div $row.Cost.FOTPlan $row.Cost.Cost) }}{{ end }}" readonly tabindex="-1" style="background: transparent; border: none;">
+                                </td>
+                                <td class="cell-days" style="position: relative;">
+                                    <input type="text" name="cost_labor_days[]" class="days-input fact-input" value="{{ if $row.Cost.LaborDays }}{{ printf "%.0f" $row.Cost.LaborDays }}{{ end }}">
+                                    <button type="button" class="lock-btn {{ if containsLock $row.Cost.LockedField "labor_days" }}locked{{ end }}" data-field="labor_days" title="Зафиксировать т/з">🔓</button>
+                                </td>
+                                <td class="cell-rate" style="position: relative;">
+                                    <input type="text" name="cost_rate_per_day[]" class="money-input fact-input" value="{{ if $row.Cost.RatePerDay }}{{ printf "%.2f" $row.Cost.RatePerDay }}{{ end }}">
+                                    <button type="button" class="lock-btn {{ if containsLock $row.Cost.LockedField "rate_per_day" }}locked{{ end }}" data-field="rate_per_day" title="Зафиксировать ставку">🔓</button>
+                                </td>
+                                <td><input type="text" name="cost_travel[]" class="money-input fact-input" value="{{ if $row.Cost.TravelExpenses }}{{ printf "%.2f" $row.Cost.TravelExpenses }}{{ end }}"></td>
+                                <!-- НОВОЕ ПОЛЕ: Обор. (прод.) -->
+                                <td><input type="text" name="cost_equipment_sale[]" class="money-input fact-input" value="{{ if $row.Cost.EquipmentSale }}{{ printf "%.2f" $row.Cost.EquipmentSale }}{{ end }}"></td>
+                                <td><input type="text" name="cost_equipment_cost[]" class="money-input fact-input" value="{{ if $row.Cost.EquipmentCost }}{{ printf "%.2f" $row.Cost.EquipmentCost }}{{ end }}"></td>
+                                <td><input type="text" name="cost_subcontract[]" class="money-input fact-input" value="{{ if $row.Cost.Subcontract }}{{ printf "%.2f" $row.Cost.Subcontract }}{{ end }}"></td>
+                                <td><input type="text" name="cost_commission[]" class="money-input fact-input" value="{{ if $row.Cost.Commission }}{{ printf "%.2f" $row.Cost.Commission }}{{ end }}"></td>
+                                <td><input type="text" name="cost_other[]" class="money-input fact-input" value="{{ if $row.Cost.OtherExpenses }}{{ printf "%.2f" $row.Cost.OtherExpenses }}{{ end }}"></td>
+                            </tr>
+                        {{ end }}
                     {{ end }}
                     </tbody>
                 </table>
+            </div>
 
-                <div style="margin-top: 10px; margin-bottom: 20px;">
-                    <button type="button" class="btn btn-sm" id="cost-add">+ Добавить строку</button>
-                </div>
+            <div style="margin-top: 15px; margin-bottom: 20px;">
+                <a href="/contracts/{{ $c.ID }}/stages" class="btn btn-sm btn-primary">✏️ Редактировать состав этапов</a>
+            </div>
 
-                 <!-- Блок для предупреждений -->
-                <div id="cost-warnings" style="margin-top: 15px; display: none; padding: 15px; border-left: 4px solid #c0392b; background: var(--error-bg); color: var(--error-text); border-radius: 4px;">
-                    <h4 style="margin-top: 0; margin-bottom: 10px;">Внимание! Обнаружены ошибки:</h4>
-                    <ul id="warning-list" style="margin: 0; padding-left: 20px;"></ul>
-                </div>
-
-                <div class="warning" id="costs-overrun-warning" style="display: none; margin-top: 15px;"></div>
-                <div class="warning" id="costs-sale-mismatch-warning" style="display: none; margin-top: 15px;"></div>
-
+            <div id="cost-warnings" style="margin-top: 15px; display: none; padding: 15px; border-left: 4px solid #c0392b; background: var(--error-bg); color: var(--error-text); border-radius: 4px;">
+                <h4 style="margin-top: 0; margin-bottom: 10px;">Внимание! Обнаружены ошибки:</h4>
+                <ul id="warning-list" style="margin: 0; padding-left: 20px;"></ul>
             </div>
         </div>
     </section>
@@ -137,80 +140,23 @@
     </div>
 </form>
 
+
+<script src="/static/budget_checks.js"></script>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const body = document.getElementById('costs-body');
     if (!body) return;
 
-    function num(s) {
-        if (!s) return 0;
-        s = String(s).replace(/[^\d.-]/g, '');
-        const v = parseFloat(s);
-        return isNaN(v) ? 0 : v;
-    }
-
-    function formatMoneyEl(el) {
-        if (el && window.formatMoney && el.classList.contains('money-input')) {
-            el.value = window.formatMoney(el.value);
-        }
-    }
-
     function checkWarnings() {
-        let hasErrors = false;
-        const warnings = [];
-
-        // Общие суммы по этапам
-        const stageSales = {};
-        const stageExpenses = {};
-
-        body.querySelectorAll('.cost-row').forEach(r => {
-            const stageGUID = r.dataset.stageGuid;
-            const stageCostHidden = r.querySelector('.stage-cost-hidden');
-            const stageCost = stageCostHidden ? num(stageCostHidden.value) : 0;
-            
-            const rowSale = num(r.querySelector('[name="cost_amount[]"]').value);
-            const rowExpenses = 
-                num(r.querySelector('[name="cost_fot_plan[]"]').value) +
-                num(r.querySelector('[name="cost_travel[]"]').value) +
-                num(r.querySelector('[name="cost_equipment_cost[]"]').value) +
-                num(r.querySelector('[name="cost_subcontract[]"]').value) +
-                num(r.querySelector('[name="cost_commission[]"]').value) +
-                num(r.querySelector('[name="cost_other[]"]').value);
-
-            if (!stageSales[stageGUID]) stageSales[stageGUID] = 0;
-            if (!stageExpenses[stageGUID]) stageExpenses[stageGUID] = 0;
-
-            stageSales[stageGUID] += rowSale;
-            stageExpenses[stageGUID] += rowExpenses;
-
-            // Построчная проверка: расходы > продажи
-            if (rowSale > 0 && rowExpenses > rowSale) {
-                r.classList.add('row-error');
-                hasErrors = true;
-                warnings.push(`Этап ${r.cells[0].innerText}: себестоимость превышает стоимость работ.`);
-            } else {
-                r.classList.remove('row-error');
-            }
-        });
-
-        // Проверка по этапам (сверка суммы продажи со стоимостью этапа)
-        for (const guid in stageSales) {
-            const stageRow = body.querySelector(`.cost-row[data-stage-guid="${guid}"]`);
-            if (!stageRow) continue;
-            const stageCost = num(stageRow.querySelector('.stage-cost-hidden').value);
-            const totalSale = stageSales[guid];
-
-            if (stageCost > 0 && Math.abs(totalSale - stageCost) > 0.01) {
-                hasErrors = true;
-                warnings.push(`Этап ${stageRow.cells[0].innerText}: сумма «Стоимость работ» (${totalSale.toFixed(2)}) не совпадает со стоимостью этапа (${stageCost.toFixed(2)}).`);
-            }
-        }
-
+        // Вызываем общую функцию
+        const result = BudgetChecks.checkRowWarnings(body);
+        
         const warnBox = document.getElementById('cost-warnings');
         const warnList = document.getElementById('warning-list');
         if (warnBox && warnList) {
-            if (hasErrors) {
-                warnList.innerHTML = warnings.map(w => `<li>${w}</li>`).join('');
+            if (result.hasErrors) {
+                warnList.innerHTML = result.warnings.map(w => `<li>${w}</li>`).join('');
                 warnBox.style.display = 'block';
             } else {
                 warnBox.style.display = 'none';
@@ -218,55 +164,26 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // Пересчет ФОТп / т/з / ставки (как в этапах, но здесь без замочков для простоты)
-    // Если нужны замочки, их надо будет добавить в HTML и JS (но для сводной таблицы это может быть избыточно)
-    function recalcRow(row, changedName) {
-        const fotEl  = row.querySelector('[name="cost_fot_plan[]"]');
-        const daysEl = row.querySelector('[name="cost_labor_days[]"]');
-        const rateEl = row.querySelector('[name="cost_rate_per_day[]"]');
-        
-        const days = num(daysEl.value);
-        const rate = num(rateEl.value);
-
-        if (changedName === 'cost_fot_plan[]') {
-            if (rate > 0) daysEl.value = (num(fotEl.value) / rate).toFixed(2);
-        } else if (changedName === 'cost_labor_days[]' || changedName === 'cost_rate_per_day[]') {
-            if (days > 0 && rate > 0) fotEl.value = (days * rate).toFixed(2);
-        }
-    }
-
     body.addEventListener('input', (e) => {
         const row = e.target.closest('.cost-row');
         if (!row) return;
-        recalcRow(row, e.target.name);
+        // Небольшая задержка, чтобы app.js успел отформатировать значение
+        setTimeout(() => {
+            BudgetChecks.recalcRow(row, e.target.name);
+            checkWarnings();
+        }, 0);
+    });
+
+    body.addEventListener('change', (e) => {
+        const row = e.target.closest('.cost-row');
+        if (!row) return;
+        BudgetChecks.recalcRow(row, e.target.name);
         checkWarnings();
     });
 
-    // Добавление строк
-    document.getElementById('cost-add').addEventListener('click', () => {
-        const rows = body.querySelectorAll('.cost-row');
-        if (rows.length === 0) return;
-        // Клонируем первую строку для примера
-        const clone = rows[0].cloneNode(true);
-        clone.querySelectorAll('input').forEach(i => { if(i.type !== 'hidden') i.value = ''; });
-        body.appendChild(clone);
-        checkWarnings();
-    });
+    BudgetChecks.initLocks(body);
 
-    // Удаление строк
-    body.addEventListener('click', (e) => {
-        if (e.target.classList.contains('cost-remove')) {
-            const rows = body.querySelectorAll('.cost-row');
-            if (rows.length > 1) {
-                e.target.closest('tr').remove();
-                checkWarnings();
-            } else {
-                alert('Должна остаться хотя бы одна строка.');
-            }
-        }
-    });
-
-    // Первичная проверка
+    body.querySelectorAll('.cost-row').forEach(row => BudgetChecks.recalcRow(row, ''));
     checkWarnings();
 });
 </script>

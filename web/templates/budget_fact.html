@@ -2,12 +2,8 @@
 {{ template "layout_header" . }}
 {{ $c := .Contract }}
 
-<p class="back-link">
-    <a href="/contracts/{{ $c.ID }}">← К договору</a>
-</p>
-
 <div class="page-header">
-    <div class="contract-title">
+   <div class="contract-title">
         <h2>
             Бюджет (ФинФакт): Договор 
             {{ if $c.ContractNumber }}
@@ -25,7 +21,17 @@
                 <a href="/counterparties/{{ .Counterparty.ID }}">{{ .Counterparty.Name }}</a>
             {{ end }}
         </p>
+        <div class="breadcrumb" style="margin-bottom: 16px;">
+            <a href="/contracts/{{ $c.ID }}">Договор {{ $c.ID }}</a> 
+            &rarr; <a href="/contracts/{{ $c.ID }}/stages">Этапы</a> 
+            &rarr; <a href="/contracts/{{ $c.ID }}/stages/costs">Затраты этапов</a> 
+            &rarr; <a href="/contracts/{{ $c.ID }}/budget">ФинПлан</a>
+            &rarr; <span style="color: var(--text-soft);">ФинФакт</span>
+            &rarr; <a href="/contracts/{{ $c.ID }}/budget/compare">Сравнение</a>
+        </div>
     </div>
+    
+
     <div class="actions" style="display: flex; gap: 8px;">
         {{ if not .FactLines }}
             {{ if .HasActivePlan }}
@@ -39,14 +45,6 @@
             <button type="submit" form="fact-form" class="btn btn-primary">💾 Сохранить изменения</button>
         {{ end }}
     </div>
-</div>
-
-<div class="breadcrumb" style="margin-bottom: 16px;">
-    <a href="/contracts/{{ $c.ID }}">Договор</a> 
-    &rarr; <a href="/contracts/{{ $c.ID }}/stages">Этапы</a> 
-    &rarr; <a href="/contracts/{{ $c.ID }}/stages/costs">Затраты этапов</a> 
-    &rarr; <a href="/contracts/{{ $c.ID }}/budget">ФинПлан</a>
-    &rarr; <span style="color: var(--text-soft);">ФинФакт</span>
 </div>
 
 
@@ -91,6 +89,7 @@
         <table class="data-table" id="fact-table">
             <thead>
             <tr>
+                <th style="width: 60px; text-align: center;">№ этапа</th>
                 <th style="width: 130px;">Вид работы</th>
                 <th>Наименование</th>
                 <th style="width: 110px;">Дата оп.</th>
@@ -112,7 +111,7 @@
                 
                 <!-- Заголовок группы -->
                 <tr class="group-header-row {{ if $isSalary }}salary-row{{ end }}" {{ if $isSalary }}style="display: none;"{{ end }} data-type="{{ $type }}">
-                    <td colspan="5" style="background: var(--surface-alt); font-weight: bold; color: var(--accent); padding: 10px; font-size: 1.1em;">
+                    <td colspan="6" style="background: var(--surface-alt); font-weight: bold; color: var(--accent); padding: 10px; font-size: 1.1em;">
                         {{ $type }}
                         <input type="hidden" class="group-op-type" value="{{ $type }}">
                     </td>
@@ -126,22 +125,17 @@
                     <tr class="fact-row {{ if $isSalary }}salary-row{{ end }} {{ if .IsConfirmed }}confirmed{{ end }}" 
                         {{ if $isSalary }}style="display: none;"{{ end }}>
                         
-                        <td>
-                            <input type="hidden" name="work_kind_code[]" class="workkind-hidden" value="{{ .WorkKindCode }}">
-                            {{ if $isSalary }}
-                                <span style="padding: 5px; display: inline-block;">{{ workKindLabel $.WorkKinds .WorkKindCode }}</span>
-                            {{ else }}
-                                <select class="fact-input workkind-select" onchange="this.previousElementSibling.value = this.value;" {{ if .IsConfirmed }}disabled{{ end }}>
-                                    {{ $line := . }}
-                                    {{ range $.WorkKinds }}
-                                        <option value="{{ .Code }}" {{ if eq .Code $line.WorkKindCode }}selected{{ end }}>{{ .Name }}</option>
-                                    {{ end }}
-                                </select>
-                            {{ end }}
+                        <td style="text-align: center; color: var(--text-muted);" title="{{ .StageNumber }} — {{ .StageName }}">
+                            {{ .StageNumber }}
                         </td>
-                        
-                        <input type="hidden" name="fact_id[]" value="{{ .ID }}">
-                        <input type="hidden" name="operation_type[]" value="{{ $type }}">
+
+                         <td>
+                            <input type="hidden" name="fact_id[]" value="{{ .ID }}">
+                            <input type="hidden" name="stage_guid[]" value="{{ deref .StageGUID }}">
+                            <input type="hidden" name="work_kind_code[]" class="workkind-hidden" value="{{ .WorkKindCode }}">
+                            <input type="hidden" name="operation_type[]" value="{{ $type }}">
+                            <span style="padding: 5px; display: inline-block;">{{ workKindLabel $.WorkKinds .WorkKindCode }}</span>
+                        </td>
 
                         <td>
                             <textarea name="name[]" class="fact-input" rows="2" style="resize: vertical; height: 100%; min-height: 38px;">{{ .Name }}</textarea>
@@ -194,7 +188,7 @@
                 <!-- Кнопка добавления -->
                 {{ if not $isSalary }}
                 <tr class="group-add-row">
-                    <td colspan="9" style="padding: 5px 10px;">
+                    <td colspan="10" style="padding: 5px 10px;">
                         <button type="button" class="btn btn-sm" style="opacity: 0.7;" onclick="addNewRow('{{ $type }}', event)">+ Добавить операцию</button>
                     </td>
                 </tr>
@@ -218,6 +212,13 @@
         <p class="muted">Нажмите кнопку «Сформировать Факт», чтобы создать таблицу на основе утвержденного плана.</p>
     </div>
 {{ end }}
+
+
+<div id="stage-data" style="display:none;">
+    {{ range $i, $stage := .Stages }}
+        <div data-guid="{{ $stage.GUID }}" data-name="{{ $stage.StageNumber }} — {{ $stage.Name }}" {{ if eq $i 0 }}data-selected="true"{{ end }}></div>
+    {{ end }}
+</div>
 
 <script>
     // Автоматический расчет даты платежа
@@ -243,7 +244,6 @@
     function toggleRowInputs(checkbox) {
         const row = checkbox.closest('tr');
         
-        // Добавляем/убираем класс confirmed для правильного подсчета
         if (checkbox.checked) {
             row.classList.add('confirmed');
         } else {
@@ -260,27 +260,71 @@
             }
         });
         
-        // Пересчитываем итоги
         recalculateTotals();
     }
 
-    // Удаление строки
+    // Фильтрация видов работ в зависимости от выбранного этапа
+    function filterWorkKinds(selectEl) {
+        const row = selectEl.closest('tr');
+        const hiddenGuid = row.querySelector('input[name="stage_guid[]"]');
+        if (hiddenGuid) hiddenGuid.value = selectEl.value;
+        const workKindSelect = row.querySelector('.workkind-select');
+        if (!workKindSelect) return;
+
+        const stageGUID = selectEl.value;
+        const availableWks = window.stageWorkKinds[stageGUID] || [];
+
+        const currentVal = workKindSelect.value;
+        workKindSelect.innerHTML = '';
+
+        // Если видов работ для этого этапа нет, разрешаем выбрать любой
+        if (availableWks.length === 0) {
+            const allOptions = document.querySelector('.workkind-select') ? document.querySelector('.workkind-select').innerHTML : '';
+            workKindSelect.innerHTML = allOptions;
+        } else {
+            // Перебираем справочник из window.workKinds
+            if (window.workKinds && window.workKinds.length > 0) {
+                window.workKinds.forEach(wk => {
+                    if (availableWks.includes(wk.Code)) {
+                        const opt = document.createElement('option');
+                        opt.value = wk.Code;
+                        opt.textContent = wk.Name;
+                        if (wk.Code === currentVal) opt.selected = true;
+                        workKindSelect.appendChild(opt);
+                    }
+                });
+            }
+            
+            if (!workKindSelect.value && workKindSelect.options.length > 0) {
+                workKindSelect.selectedIndex = 0;
+            }
+        }
+        const hiddenWk = row.querySelector('input[name="work_kind_code[]"]');
+        if (hiddenWk) {
+            hiddenWk.value = workKindSelect.value;
+        }
+                // В самом конце, перед закрывающей скобкой:
+        const wkSelect = row.querySelector('.workkind-select');
+        const wkhidden = row.querySelector('input[name="work_kind_code[]"]');
+        if (wkSelect && wkhidden) {
+            wkhidden.value = wkSelect.value;
+        }
+    }
+
     function deleteRow(btn) {
         if (!confirm('Удалить эту строку?')) return;
         const row = btn.closest('tr');
         row.remove();
-        // Здесь можно было бы сделать fetch-запрос на удаление, 
-        // но для простоты строка просто исчезнет из формы, 
-        // и при сохранении сервер её не увидит.
-        
-        // Первичный пересчет
         recalculateTotals();
     }
 
-    // Добавление новой строки
     function addNewRow(opType, event) {
         const btn = event.target;
         const btnRow = btn.closest('tr');
+        if (!window.stageOptionsHTML || window.stageOptionsHTML.trim() === '') {
+            alert('Сначала добавьте хотя бы один этап в договор.');
+            return;
+        }
         const tbody = document.getElementById('fact-table').querySelector('tbody');
         const newRow = document.createElement('tr');
         newRow.className = 'fact-row';
@@ -288,7 +332,6 @@
         const isPayment = opType === 'Платежи по договору';
         const isSalary = opType === 'Зарплата сотрудникам' || opType === 'Накладные';
         
-        // Получаем список видов работ из первого селекта на странице
         let workKindsHTML = '';
         const firstSelect = document.querySelector('.workkind-select');
         if (firstSelect) {
@@ -296,14 +339,20 @@
         }
 
         newRow.innerHTML = `
+            <td style="text-align: center;">
+                <select name="stage_select" class="fact-input stage-select" style="width: 100%; font-size: 12px;" onchange="filterWorkKinds(this)">
+                    ${window.stageOptionsHTML}
+                </select>
+            </td>
             <td>
-                <input type="hidden" name="work_kind_code[]" class="workkind-hidden" value="complex">
-                <select class="fact-input workkind-select" onchange="this.previousElementSibling.value = this.value;">
+                <input type="hidden" name="fact_id[]" value="">
+                <input type="hidden" name="stage_guid[]" value="">
+                <input type="hidden" name="work_kind_code[]" class="workkind-hidden" value="">
+                <input type="hidden" name="operation_type[]" value="${opType}">
+                <select class="fact-input workkind-select" onchange="this.closest('tr').querySelector('input[name=\'work_kind_code[]\']').value = this.value;">
                     ${workKindsHTML}
                 </select>
             </td>
-            <input type="hidden" name="fact_id[]" value="">
-            <input type="hidden" name="operation_type[]" value="${opType}">
             <td><textarea name="name[]" class="fact-input" rows="2" placeholder="Новая операция"></textarea></td>
             <td><input type="date" name="operation_date[]" class="fact-input" onchange="updatePayDate(this)"></td>
             <td><input type="number" name="delay_days[]" value="0" class="fact-input" onchange="updatePayDate(this)"></td>
@@ -334,13 +383,24 @@
         newRow.querySelector('input[name="operation_date[]"]').value = today;
         updatePayDate(newRow.querySelector('input[name="operation_date[]"]'));
 
-        // Первичный пересчет
+        // Автоматически применяем фильтр для первого выбранного этапа
+        const stageSelect = newRow.querySelector('.stage-select');
+        if (stageSelect) {
+            filterWorkKinds(stageSelect);
+        }
+        
+        // Принудительно обновляем скрытое поле work_kind_code из селекта
+        const wkSelect = newRow.querySelector('.workkind-select');
+        const wkhidden = newRow.querySelector('input[name="work_kind_code[]"]');
+        if (wkSelect && wkhidden) {
+            wkhidden.value = wkSelect.value;
+        }
+
         recalculateTotals();
     }
 
     document.addEventListener('DOMContentLoaded', function() {
         document.querySelectorAll('input[name="is_confirmed[]"]').forEach(cb => {
-            // Если галочка стоит — блокируем поля
             if (cb.checked) {
                 toggleRowInputs(cb);
             }
@@ -350,15 +410,38 @@
             document.querySelectorAll('input.money-input').forEach(window.attachMoneyInput);
         }
 
-                // Добавляем пересчет при вводе
         document.querySelectorAll('input[name="fact_income[]"], input[name="fact_expense[]"]').forEach(inp => {
             inp.addEventListener('input', recalculateTotals);
         });
 
-        // Первичный пересчет
         recalculateTotals();
 
+        // Формируем HTML для выбора этапа
+        window.stageOptionsHTML = ``;
+        const stageNodes = document.querySelectorAll('#stage-data div');
+        stageNodes.forEach(node => {
+            const guid = node.getAttribute('data-guid');
+            const name = node.getAttribute('data-name');
+            const isSelected = node.hasAttribute('data-selected') ? 'selected' : '';
+            window.stageOptionsHTML += `<option value="${guid}" ${isSelected}>${name}</option>`;
+        });
+
+        // Безопасный парсинг JSON
+        try {
+            const swk = '{{ .StageWorkKindsJSON }}';
+            window.stageWorkKinds = swk ? JSON.parse(swk) : {};
+        } catch (e) {
+            window.stageWorkKinds = {};
+        }
+
+        try {
+            const wk = '{{ .WorkKindsJSON }}';
+            window.workKinds = wk ? JSON.parse(wk) : [];
+        } catch (e) {
+            window.workKinds = [];
+        }
     });
+
 
     function toggleSalaryRows() {
         const checkbox = document.getElementById('show-salary');
@@ -367,7 +450,7 @@
         });
     }
 
-        function formatMoney(val) {
+    function formatMoney(val) {
         if (!val && val !== 0) return '';
         const s = Math.abs(val).toFixed(2);
         const formatted = s.replace(/\B(?=(\d{3})+(?!\d))/g, '\u00A0');
@@ -385,12 +468,11 @@
         const table = document.getElementById('fact-table');
         if (!table) return;
         
-          let totalIncome = 0;
+        let totalIncome = 0;
         let totalExpense = 0;
         let confirmedIncome = 0;
         let confirmedExpense = 0;
 
-        // Считаем суммы по каждой группе
         const groupHeaders = table.querySelectorAll('.group-header-row');
         
         groupHeaders.forEach(header => {
@@ -400,7 +482,6 @@
             let groupInc = 0;
             let groupExp = 0;
             
-            // Ищем строки этой группы
             const rows = table.querySelectorAll(`tr.fact-row`);
             rows.forEach(row => {
                 const opTypeInput = row.querySelector('input[name="operation_type[]"]');
@@ -414,7 +495,6 @@
                     groupInc += incVal;
                     groupExp += expVal;
 
-                    // Проверяем, подтверждена ли строка
                     const isConfirmed = row.classList.contains('confirmed');
                     if (isConfirmed) {
                         confirmedIncome += incVal;
@@ -423,7 +503,6 @@
                 }
             });
 
-            // Обновляем заголовок группы
             const incCell = header.querySelector('.group-total-income');
             const expCell = header.querySelector('.group-total-expense');
             if (incCell) incCell.textContent = formatMoney(groupInc);
@@ -431,11 +510,8 @@
 
             totalIncome += groupInc;
             totalExpense += groupExp;
-        }); // <--- ЭТА СКОБКА ЗАКРЫВАЕТ ЦИКЛ groupHeaders.forEach
+        });
 
-        // Обновляем общий итог
-
-        // Обновляем общий итог
         const totalIncEl = document.getElementById('total-fact-income');
         const totalExpEl = document.getElementById('total-fact-expense');
         const totalBalEl = document.getElementById('total-fact-balance');
@@ -444,7 +520,6 @@
         if (totalExpEl) totalExpEl.textContent = formatMoney(totalExpense);
         if (totalBalEl) totalBalEl.textContent = formatMoney(totalIncome - totalExpense);
 
-        // Обновляем подтвержденный итог
         const confIncEl = document.getElementById('confirmed-fact-income');
         const confExpEl = document.getElementById('confirmed-fact-expense');
         const confBalEl = document.getElementById('confirmed-fact-balance');

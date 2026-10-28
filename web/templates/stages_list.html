@@ -2,10 +2,6 @@
 {{ template "layout_header" . }}
 {{ $c := .Contract }}
 
-<p class="back-link">
-    <a href="/contracts/{{ $c.ID }}">← К договору</a>
-</p>
-
 <div class="page-header">
     <div class="contract-title">
         <h2>
@@ -24,6 +20,16 @@
                 <a href="/counterparties/{{ .Counterparty.ID }}">{{ .Counterparty.Name }}</a>
             {{ end }}
         </p>
+
+        <div class="breadcrumb" style="margin-bottom: 16px;">
+            <a href="/contracts/{{ $c.ID }}">Договор {{ $c.ID }}</a> 
+            &rarr; <span style="color: var(--text-soft);">Этапы</span>
+            &rarr; <a href="/contracts/{{ $c.ID }}/stages/costs">Затраты этапов</a>
+            &rarr; <a href="/contracts/{{ $c.ID }}/budget">ФинПлан</a>
+            &rarr; <a href="/contracts/{{ $c.ID }}/budget/fact">ФинФакт</a>
+            &rarr; <a href="/contracts/{{ $c.ID }}/budget/compare">Сравнение</a>
+        </div>
+
     </div>
     <div class="actions">
         <div class="vat-toggle">
@@ -36,11 +42,9 @@
     </div>
 </div>
 
-<p class="breadcrumb">
-    <a href="/contracts">Договоры</a> →
-    <a href="/contracts/{{ $c.ID }}">Договор {{ $c.ID }}</a> →
-    Этапы
-</p>
+
+
+
 
 <div class="totals">
     <div class="total-card"><span>Этапов</span><strong>{{ .Totals.Count }}</strong></div>

@@ -31,13 +31,20 @@
                 <a href="/counterparties/{{ .Counterparty.ID }}">{{ .Counterparty.Name }}</a>
             {{ end }}
         </p>
+        <div class="breadcrumb" style="margin-bottom: 16px;">
+            <span style="color: var(--text-soft);">Договор {{ $c.ID }}</span>
+            &rarr; <a href="/contracts/{{ $c.ID }}/stages">Этапы</a> 
+            &rarr; <a href="/contracts/{{ $c.ID }}/stages/costs">Затраты этапов</a>
+            &rarr; <a href="/contracts/{{ $c.ID }}/budget">ФинПлан</a>
+            &rarr; <a href="/contracts/{{ $c.ID }}/budget/fact">ФинФакт</a>
+            &rarr; <a href="/contracts/{{ $c.ID }}/budget/compare">Сравнение</a>
+        </div>
     </div>
+
     <div class="actions">
         {{ if $c.ProjectURL }}
             <a href="pm-agent://open?path={{ $c.ProjectURL | urlquery }}" class="btn btn-sm" title="Открыть папку проекта в проводнике">📁 Открыть папку</a>
         {{ end }}
-        <a href="/contracts/{{ $c.ID }}/budget?tab=plan" class="btn btn-sm" style="background-color: #e6b800; border-color: #e6b800; color: #000;">💰 Бюджет План</a>
-        <a href="/contracts/{{ $c.ID }}/budget/fact" class="btn btn-sm" style="background-color: #e6b800; border-color: #e6b800; color: #000;">💸 Бюджет Факт</a>
         <div class="vat-toggle">
             <a href="{{ $base }}?vat=without&stages={{ $curStages }}&costs={{ $curCosts }}"
                class="btn btn-sm {{ if ne $vatMode "with" }}active{{ end }}">Без НДС</a>
@@ -46,6 +53,8 @@
         </div>
     </div>
 </div>
+
+
 
 <div class="totals">
     <div class="total-card"><span>Стоимость договора</span>

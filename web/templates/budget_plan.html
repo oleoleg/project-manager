@@ -5,11 +5,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-<p class="back-link">
-    <a href="/contracts/{{ $c.ID }}">← К договору</a>
-</p>
-
-
 <div class="page-header">
     <div class="contract-title">
         <h2>
@@ -29,19 +24,22 @@
                 <a href="/counterparties/{{ .Counterparty.ID }}">{{ .Counterparty.Name }}</a>
             {{ end }}
         </p>
+        
+        <div class="breadcrumb" style="margin-bottom: 16px;">
+            <a href="/contracts/{{ $c.ID }}">Договор {{ $c.ID }}</a> 
+            &rarr; <a href="/contracts/{{ $c.ID }}/stages">Этапы</a> 
+            &rarr; <a href="/contracts/{{ $c.ID }}/stages/costs">Затраты этапов</a>
+            &rarr; <span style="color: var(--text-soft);">ФинПлан</span>
+            &rarr; <a href="/contracts/{{ $c.ID }}/budget/fact">ФинФакт</a>
+            &rarr; <a href="/contracts/{{ $c.ID }}/budget/compare">Сравнение</a>
+        </div>
     </div>
+
     <div class="actions">
         <a href="/contracts/{{ $c.ID }}/budget/new" class="btn btn-primary">➕ Создать версию</a>
     </div>
 </div>
 
-<div class="breadcrumb" style="margin-bottom: 16px;">
-    <a href="/contracts/{{ $c.ID }}">Договор</a> 
-    &rarr; <a href="/contracts/{{ $c.ID }}/stages">Этапы</a> 
-    &rarr; <a href="/contracts/{{ $c.ID }}/stages/costs">Затраты этапов</a>
-    &rarr; <span style="color: var(--text-soft);">ФинПлан</span>
-    &rarr; <a href="/contracts/{{ $c.ID }}/budget/fact">ФинФакт</a>
-</div>
 
 
 {{ if .Flash }}<div class="info-box" style="background-color: #e6f4ea; color: #1e8e3e; margin-bottom: 15px;">{{ .Flash }}</div>{{ end }}
@@ -67,7 +65,7 @@
             {{ if .Snapshot.IsActive }}
                 <span class="budget-tag budget-tag-active">Активный</span>
             {{ else }}
-                <form method="post" action="/contracts/{{ $c.ID }}/budget/snapshots/{{ .Snapshot.ID }}/activate">
+                <form method="post" action="/contracts/{{ $c.ID }}/budget/snapshots/{{ .Snapshot.ID }}/activate" style="margin: 0;" onsubmit="return confirm('ВНИМАНИЕ! При активации этого снимка все текущие этапы и затраты будут удалены и заменены данными из этого снимка. Продолжить?');">
                     <button type="submit" class="btn btn-sm btn-success-custom">Сделать активным</button>
                 </form>
             {{ end }}
@@ -258,6 +256,7 @@
         <table class="data-table" id="plan-table">
             <thead>
             <tr>
+                <th style="width: 60px; text-align: center;">№ этапа</th>
                 <th>Вид работы</th>
                 <th>Наименование</th>
                 <th>Дата операции</th>
@@ -276,6 +275,7 @@
             
             {{ range .PlanLines }}
                 <tr data-work="{{ .WorkKindCode }}" data-type="{{ .OperationType }}" data-date="{{ .OperationDate.Unix }}">
+                    <td style="text-align: center; color: var(--text-muted);">{{ .StageNumber }}</td>
                     <td>{{ workKindLabel $.WorkKinds .WorkKindCode }}</td>
                     <td>{{ .Name }}</td>
                     <td>{{ .OperationDate.Format "02.01.2006" }}</td>

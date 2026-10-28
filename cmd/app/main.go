@@ -306,6 +306,7 @@ func startHTTPServer(stopCh <-chan struct{}) {
 
 		r.Get("/contracts", contractH.List)
 		r.Get("/contracts/new", contractH.New)
+		r.Post("/contracts", contractH.Create)
 		r.Get("/contracts/{id}", contractH.Show)
 		r.Get("/contracts/{id}/edit", contractH.Edit)
 		r.Get("/contracts/{id}/open-folder", contractH.OpenFolder)
@@ -360,6 +361,9 @@ func startHTTPServer(stopCh <-chan struct{}) {
 			r.Post("/contracts/{id}/budget/fact/{factID}/update", budgetH.FactUpdate)
 			//r.Post("/contracts/{id}/budget/fact/save", budgetH.FactSaveBatch)
 			r.Post("/contracts/{id}/budget/fact/save-form", budgetH.FactSaveForm)
+
+			// Сравнить Бюджет Факт vs План
+			r.Get("/contracts/{id}/budget/compare", budgetH.PlanFactIndex)
 
 		})
 

@@ -46,11 +46,6 @@ func (s *StageCostService) Validate(c *models.StageCost) error {
 
 // Recalculate пересчитывает ФОТп / т/з / ставку в зависимости от замочков.
 // Коэф не хранится — он вычисляется только при отображении.
-//
-// lockedField может содержать одно или два значения через запятую:
-//
-//	"fot_plan", "labor_days", "rate_per_day",
-//	"fot_plan,labor_days", "fot_plan,rate_per_day", "labor_days,rate_per_day"
 func (s *StageCostService) Recalculate(c *models.StageCost) {
 	locks := parseLocks(c.LockedField)
 

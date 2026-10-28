@@ -188,8 +188,8 @@
                     </td>
 
                     <td class="cell-days col-lockable">
-                        <input type="text" name="cost_labor_days" class="money-input"
-                               value="{{ if $cost.LaborDays }}{{ printf "%.2f" $cost.LaborDays }}{{ end }}">
+                        <input type="text" name="cost_labor_days" class="days-input"
+                               value="{{ if $cost.LaborDays }}{{ printf "%.0f" $cost.LaborDays }}{{ end }}">
                         <button type="button"
                                 class="lock-btn {{ if containsLock $cost.LockedField "labor_days" }}locked{{ end }}"
                                 data-field="labor_days"
@@ -241,8 +241,10 @@
     </div>
 </form>
 
+<script src="/static/budget_checks.js"></script>
+
 <script>
-    // 1. Скрытие столбцов в таблице затрат
+    // 1. Скрытие столбцов
     (function () {
         const toggle = document.getElementById('costs-compact-toggle');
         const table = document.getElementById('costs-table');
@@ -253,301 +255,87 @@
         }
     })();
 
-    // 2. Замки на ФОТп / т/з / ставку (до двух одновременно)
+    // 2. Инициализация замочков
     (function () {
         const body = document.getElementById('costs-body');
-        if (!body) return;
-
-        function refreshRow(row) {
-            const hidden = row.querySelector('input[name="cost_locked"]');
-            if (!hidden) return;
-            const set = (hidden.value || '').split(',').map(s => s.trim()).filter(Boolean);
-            row.querySelectorAll('.lock-btn').forEach(b => {
-                if (set.includes(b.dataset.field)) {
-                    b.classList.add('locked');
-                    b.textContent = '🔒';
-                } else {
-                    b.classList.remove('locked');
-                    b.textContent = '🔓';
-                }
-            });
+        if (body) {
+            BudgetChecks.initLocks(body);
         }
-
-        body.addEventListener('click', (e) => {
-            const btn = e.target.closest('.lock-btn');
-            if (!btn) return;
-            e.preventDefault();
-
-            const row = btn.closest('.cost-row');
-            const hidden = row.querySelector('input[name="cost_locked"]');
-            if (!hidden) return;
-
-            const field = btn.dataset.field;
-            let set = (hidden.value || '').split(',').map(s => s.trim()).filter(Boolean);
-
-            if (set.includes(field)) {
-                set = set.filter(f => f !== field);
-            } else {
-                if (set.length >= 2) {
-                    alert('Можно зафиксировать не больше двух параметров.');
-                    return;
-                }
-                set.push(field);
-            }
-            hidden.value = set.join(',');
-            refreshRow(row);
-
-            // после изменения замков — пересчитываем строку
-            row.dispatchEvent(new Event('recalc-request', { bubbles: true }));
-        });
-
-        // синхронизация иконок при загрузке
-        body.querySelectorAll('.cost-row').forEach(refreshRow);
     })();
 
-    // 3. Пересчёт ФОТп / т/з / ставки + коэф + проверка превышения
+    // 3. Пересчет и проверки
     (function () {
         const body = document.getElementById('costs-body');
         if (!body) return;
 
-        function num(s) {
-            if (!s) return 0;
-            s = String(s).replace(/\s/g, '').replace(',', '.');
-            const v = parseFloat(s);
-            return isNaN(v) ? 0 : v;
-        }
-        
-        // Применяет форматирование к полю, если оно зарегистрировано как money-input
-        function formatMoneyEl(el) {
-            if (!el) return;
-            if (window.formatMoney && el.classList.contains('money-input')) {
-                el.value = window.formatMoney(el.value);
-            }
-        }
+        function checkWarnings() {
+            // Собираем данные для проверки
+            const stageCostEl = document.querySelector('input[name="cost"]');
+            const stageCost = BudgetChecks.num(stageCostEl ? stageCostEl.value : 0);
+            
+            let totalSale = 0;
+            let totalExpenses = 0;
 
-        function setVal(el, v) {
-            if (v > 0 || v < 0) {
-                el.value = v.toFixed(2);
-            } else {
-                el.value = '';
-            }
-            formatMoneyEl(el);
-        }
-
-        function updateRatio(row) {
-            const amountEl = row.querySelector('[name="cost_amount"]');
-            const fotEl    = row.querySelector('[name="cost_fot_plan"]');
-            const ratioEl  = row.querySelector('.ratio-display');
-            if (!ratioEl) return;
-            const amount = num(amountEl.value);
-            const fot    = num(fotEl.value);
-            ratioEl.value = amount > 0 ? (fot / amount).toFixed(2) : '';
-        }
-
-       function recalcRow(row, changedName) {
-            const fotEl  = row.querySelector('[name="cost_fot_plan"]');
-            const daysEl = row.querySelector('[name="cost_labor_days"]');
-            const rateEl = row.querySelector('[name="cost_rate_per_day"]');
-            const lockEl = row.querySelector('input[name="cost_locked"]');
-
-            const locks = (lockEl.value || '').split(',').map(s => s.trim()).filter(Boolean);
-            const hasFOT  = locks.includes('fot_plan');
-            const hasDays = locks.includes('labor_days');
-            const hasRate = locks.includes('rate_per_day');
-
-            const days = num(daysEl.value);
-            const rate = num(rateEl.value);
-            const fot  = num(fotEl.value);
-
-            // --- Два замочка ---
-            if (hasFOT && hasDays) {
-                if (days > 0) {
-                    rateEl.value = (fot / days).toFixed(2);
-                    formatMoneyEl(rateEl);
-                }
-                updateRatio(row);
-                return;
-            }
-            if (hasFOT && hasRate) {
-                if (rate > 0) {
-                    daysEl.value = (fot / rate).toFixed(2);
-                    formatMoneyEl(daysEl);
-                }
-                updateRatio(row);
-                return;
-            }
-            if (hasDays && hasRate) {
-                setVal(fotEl, days * rate);
-                updateRatio(row);
-                return;
-            }
-
-            // --- Один замочек ---
-            if (hasFOT) {
-                // ФОТп зафиксирован — при вводе т/з или ставки пересчитываем ставку/т/з
-                if (changedName === 'cost_labor_days') {
-                    if (days > 0) {
-                        rateEl.value = (fot / days).toFixed(2);
-                        formatMoneyEl(rateEl);
-                    }
-                } else if (changedName === 'cost_rate_per_day') {
-                    if (rate > 0) {
-                        daysEl.value = (fot / rate).toFixed(2);
-                        formatMoneyEl(daysEl);
-                    }
-                }
-                updateRatio(row);
-                return;
-            }
-            if (hasDays) {
-                // т/з зафиксированы — при вводе ФОТп пересчитываем ставку
-                if (changedName === 'cost_fot_plan') {
-                    if (days > 0) {
-                        rateEl.value = (fot / days).toFixed(2);
-                        formatMoneyEl(rateEl);
-                    }
-                } else if (changedName === 'cost_rate_per_day') {
-                    // Ставку меняют — а т/з фиксирован → пересчитываем ФОТп
-                    setVal(fotEl, days * rate);
-                }
-                updateRatio(row);
-                return;
-            }
-            if (hasRate) {
-                // Ставка зафиксирована — при вводе т/з или ФОТп пересчитываем недостающее
-                if (changedName === 'cost_labor_days') {
-                    setVal(fotEl, rate * days);
-                } else if (changedName === 'cost_fot_plan') {
-                    // Ручной ввод ФОТп при фиксированной ставке → пересчитываем т/з
-                    if (rate > 0) {
-                        daysEl.value = (fot / rate).toFixed(2);
-                        formatMoneyEl(daysEl);
-                    }
-                }
-                updateRatio(row);
-                return;
-            }
-
-            // --- Без замочков ---
-            if (changedName === 'cost_fot_plan') {
-                // Ручной ввод ФОТп → пересчитываем т/з, если задана ставка
-                if (rate > 0) {
-                    daysEl.value = (fot / rate).toFixed(2);
-                    formatMoneyEl(daysEl);
-                }
-            } else if (changedName === 'cost_labor_days' || changedName === 'cost_rate_per_day') {
-                if (days > 0 && rate > 0) {
-                    setVal(fotEl, days * rate);
-                }
-            }
-
-            updateRatio(row);
-        }
-
-        function sumByField(field) {
-            let sum = 0;
             body.querySelectorAll('.cost-row').forEach(r => {
-                const el = r.querySelector('[name="' + field + '"]');
-                if (el) sum += num(el.value);
+                totalSale += 
+                    BudgetChecks.num(r.querySelector('[name="cost_amount"]').value) +
+                    BudgetChecks.num(r.querySelector('[name="cost_equipment_sale"]').value);
+                
+                totalExpenses += 
+                    BudgetChecks.num(r.querySelector('[name="cost_fot_plan"]').value) +
+                    BudgetChecks.num(r.querySelector('[name="cost_travel"]').value) +
+                    BudgetChecks.num(r.querySelector('[name="cost_equipment_cost"]').value) +
+                    BudgetChecks.num(r.querySelector('[name="cost_subcontract"]').value) +
+                    BudgetChecks.num(r.querySelector('[name="cost_commission"]').value) +
+                    BudgetChecks.num(r.querySelector('[name="cost_other"]').value);
             });
-            return sum;
-        }
-
-        function sumExpenses() {
-            // Себестоимость: ФОТп + Командир. + Обор. (себест.) + Субподряд + Комиссия + Другое
-            let sum = 0;
-            body.querySelectorAll('.cost-row').forEach(r => {
-                sum += num(r.querySelector('[name="cost_fot_plan"]').value);
-                sum += num(r.querySelector('[name="cost_travel"]').value);
-                sum += num(r.querySelector('[name="cost_equipment_cost"]').value);
-                sum += num(r.querySelector('[name="cost_subcontract"]').value);
-                sum += num(r.querySelector('[name="cost_commission"]').value);
-                sum += num(r.querySelector('[name="cost_other"]').value);
-            });
-            return sum;
-        }
-
-        function sumSale() {
-            // Продажа (то, что закладываем в стоимость этапа):
-            // Стоимость работ + Командир. + Обор. (продажа) + Субподряд + Комиссия + Другое
-            let sum = 0;
-            body.querySelectorAll('.cost-row').forEach(r => {
-                sum += num(r.querySelector('[name="cost_amount"]').value);
-                sum += num(r.querySelector('[name="cost_travel"]').value);
-                sum += num(r.querySelector('[name="cost_equipment_sale"]').value);
-                sum += num(r.querySelector('[name="cost_subcontract"]').value);
-                sum += num(r.querySelector('[name="cost_commission"]').value);
-                sum += num(r.querySelector('[name="cost_other"]').value);
-            });
-            return sum;
-        }
-
-        function checkOverrun() {
-            const stageCostEl   = document.querySelector('input[name="cost"]');
-            const stageCost     = num(stageCostEl ? stageCostEl.value : 0);
-            const totalExpenses = sumExpenses();
 
             const w1 = document.getElementById('costs-overrun-warning');
             if (w1) {
                 if (stageCost > 0 && totalExpenses > stageCost) {
-                    w1.textContent = 'Внимание: затраты (' + totalExpenses.toFixed(2) +
-                        ' ₽) превышают стоимость этапа (' + stageCost.toFixed(2) +
-                        ' ₽). Этап убыточный.';
+                    w1.textContent = 'Внимание: затраты (' + totalExpenses.toFixed(2) + ' ₽) превышают стоимость этапа (' + stageCost.toFixed(2) + ' ₽). Этап убыточный.';
                     w1.style.display = 'block';
                 } else {
                     w1.style.display = 'none';
                 }
             }
-        }
-
-        function checkSaleMismatch() {
-            const stageCostEl = document.querySelector('input[name="cost"]');
-            const stageCost   = num(stageCostEl ? stageCostEl.value : 0);
-            const totalSale   = sumSale();
 
             const w2 = document.getElementById('costs-sale-mismatch-warning');
-            if (!w2) return;
-
-            if (stageCost > 0 && totalSale > 0 && Math.abs(stageCost - totalSale) > 0.01) {
-                w2.textContent = 'Внимание: сумма разложения по строкам (' + totalSale.toFixed(2) +
-                    ' ₽) не совпадает со стоимостью этапа (' + stageCost.toFixed(2) +
-                    ' ₽). Можно сохранить, но проверьте смету.';
-                w2.style.display = 'block';
-            } else {
-                w2.style.display = 'none';
+            if (w2) {
+                if (stageCost > 0 && totalSale > 0 && Math.abs(stageCost - totalSale) > 0.01) {
+                    w2.textContent = 'Внимание: сумма разложения по строкам (' + totalSale.toFixed(2) + ' ₽) не совпадает со стоимостью этапа (' + stageCost.toFixed(2) + ' ₽).';
+                    w2.style.display = 'block';
+                } else {
+                    w2.style.display = 'none';
+                }
             }
         }
 
-        function checkAll() {
-            checkOverrun();
-            checkSaleMismatch();
-        }
         body.addEventListener('input', (e) => {
             const row = e.target.closest('.cost-row');
             if (!row) return;
-            recalcRow(row, e.target.name);
-            checkAll();         // <-- вызываем оба предупреждения
+            BudgetChecks.recalcRow(row, e.target.name);
+            checkWarnings();
         });
 
         body.addEventListener('change', (e) => {
             const row = e.target.closest('.cost-row');
             if (!row) return;
-            recalcRow(row, e.target.name);
-            checkAll();
+            BudgetChecks.recalcRow(row, e.target.name);
+            checkWarnings();
         });
 
         body.addEventListener('recalc-request', (e) => {
             const row = e.target.closest('.cost-row');
             if (!row) return;
-            recalcRow(row, '');
+            BudgetChecks.recalcRow(row, '');
         });
 
         const stageCostEl = document.querySelector('input[name="cost"]');
-        if (stageCostEl) stageCostEl.addEventListener('input', checkAll);
+        if (stageCostEl) stageCostEl.addEventListener('input', checkWarnings);
 
-        // первичный расчёт при загрузке
-        body.querySelectorAll('.cost-row').forEach(row => recalcRow(row, ''));
-        checkAll();
+        body.querySelectorAll('.cost-row').forEach(row => BudgetChecks.recalcRow(row, ''));
+        checkWarnings();
     })();
 
     // 4. Добавление / удаление строк
@@ -599,42 +387,31 @@
         });
     })();
 
-  // Переключатель режима «Закрыто по актам»
+    // 5. Переключатель Закрыто по актам
     (function () {
         const btn      = document.getElementById('closed-by-acts-lock');
         const checkbox = document.getElementById('closed-by-acts-manual');
         const input    = document.getElementById('closed-by-acts-input');
         if (!btn || !checkbox || !input) return;
 
-        // Берём contractID и stageGUID из формы
-        const form = input.closest('form');
-        const action = form ? form.getAttribute('action') : '';
-        // action вида /contracts/6666/stages/UUID или /contracts/6666/stages (для новых)
-        // Нам нужен только /contracts/{id}/stages/{guid}/act-sum.json
-        // GUID этапа доступен в data-атрибуте — если есть, используем; иначе не запрашиваем.
-
         btn.addEventListener('click', () => {
             checkbox.checked = !checkbox.checked;
 
             if (checkbox.checked) {
-                // Ручной ввод
                 input.readOnly = false;
                 btn.textContent = '🔒';
                 btn.classList.add('locked');
                 btn.title = 'Сейчас ручной ввод. Нажмите, чтобы подтягивать из актов';
             } else {
-                // Из актов
                 input.readOnly = true;
                 btn.textContent = '🔗';
                 btn.classList.remove('locked');
                 btn.title = 'Сейчас подтяжка из актов. Нажмите для ручного ввода';
-                // Запрашиваем сумму актов и подставляем
                 loadActSum(input);
             }
         });
 
         function loadActSum(input) {
-            // URL берём из data-атрибута у кнопки, если задан.
             const url = btn.dataset.actSumUrl;
             if (!url) return;
             fetch(url)
@@ -650,7 +427,6 @@
                 .catch(() => {});
         }
     })();
-
 </script>
 
 {{ template "layout_footer" . }}

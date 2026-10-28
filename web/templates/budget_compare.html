@@ -1,0 +1,216 @@
+{{ define "budget_compare.html" }}
+{{ template "layout_header" . }}
+{{ $c := .Contract }}
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<div class="page-header" style="margin-bottom: 15px;">
+    <div class="contract-title">
+        <h2>
+            Сравнение План vs Факт: Договор 
+            {{ if $c.ContractNumber }}№ {{ $c.ContractNumber }} от {{ if $c.ContractDate }}{{ $c.ContractDate.Format "02.01.2006" }}{{ else }}—{{ end }}{{ else }}№ не присвоен{{ end }}
+            <span class="contract-id">ID: {{ $c.ID }}</span>
+        </h2>
+        
+        <p class="contract-subtitle">
+            {{ if $c.WorkName }}{{ $c.WorkName }}{{ else }}<span class="muted">наименование не указано</span>{{ end }}
+            {{ if .Counterparty }} &nbsp;·&nbsp; <a href="/counterparties/{{ .Counterparty.ID }}">{{ .Counterparty.Name }}</a>{{ end }}
+        </p>
+
+        <div class="breadcrumb" style="margin-bottom: 16px;">
+            <a href="/contracts/{{ $c.ID }}">Договор {{ $c.ID }}</a>
+            &rarr; <a href="/contracts/{{ $c.ID }}/stages">Этапы</a> 
+            &rarr; <a href="/contracts/{{ $c.ID }}/stages/costs">Затраты этапов</a>
+            &rarr; <a href="/contracts/{{ $c.ID }}/budget">ФинПлан</a>
+            &rarr; <a href="/contracts/{{ $c.ID }}/budget/fact">ФинФакт</a>
+            &rarr; <span style="color: var(--text-soft);">Сравнение</span>
+        </div>
+    </div>
+    <div class="actions" style="display: flex; gap: 10px; align-items: center;">
+        <!-- Переключатель режима Факта -->
+        <div class="stage-toggle">
+            <a href="?fact=confirmed" class="btn btn-sm {{ if eq .FactMode "confirmed" }}active{{ end }}">Подтвержденный</a>
+            <a href="?fact=all" class="btn btn-sm {{ if eq .FactMode "all" }}active{{ end }}">Смешанный</a>
+        </div>
+    </div>
+</div>
+
+<!-- Группировка по видам работ (Главная таблица) -->
+<section class="collapsible" style="margin-bottom: 20px;">
+    <header class="collapsible-header">
+        <h3>Сводная по видам работ (Отделам)</h3>
+    </header>
+    <div class="collapsible-body">
+        <div class="table-scroll">
+            <table class="data-table">
+                <thead>
+                <tr>
+                    <th>Отдел (Вид работы)</th>
+                    <th class="num" style="color: #36a2eb;">Прибыль План</th>
+                    <th class="num" style="color: #ff6384;">Прибыль Факт</th>
+                    <th class="num">Отклонение (Сверхплана)</th>
+                </tr>
+                </thead>
+                <tbody>
+                {{ $totalPlan := 0.0 }}
+                {{ $totalFact := 0.0 }}
+                {{ $totalDev := 0.0 }}
+                {{ range .GroupedByWK }}
+                    {{ $totalPlan = add $totalPlan .PlanProfit }}
+                    {{ $totalFact = add $totalFact .FactProfit }}
+                    {{ $totalDev = add $totalDev .Deviation }}
+                    <tr>
+                        <td>{{ .Name }}</td>
+                        <td class="num">{{ money .PlanProfit }}</td>
+                        <td class="num">{{ money .FactProfit }}</td>
+                        <td class="num {{ if lt .Deviation 0.0 }}text-danger{{ else if gt .Deviation 0.0 }}text-success{{ else }}text-neutral{{ end }}" style="font-weight: bold;">
+                            {{ if gt .Deviation 0.0 }}+{{ end }}{{ money .Deviation }}
+                        </td>
+                    </tr>
+                {{ end }}
+                </tbody>
+                <tfoot>
+                <tr style="background: var(--surface-alt); font-weight: bold;">
+                    <td>ОБЩИЙ ИТОГ</td>
+                    <td class="num">{{ money $totalPlan }}</td>
+                    <td class="num">{{ money $totalFact }}</td>
+                    <td class="num {{ if lt $totalDev 0.0 }}text-danger{{ else }}text-success{{ end }}" style="font-weight: bold;">
+                        {{ if gt $totalDev 0.0 }}+{{ end }}{{ money $totalDev }}
+                    </td>
+                </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</section>
+
+<!-- График сравнения -->
+<div class="card" style="padding: 20px; margin-bottom: 20px; height: 400px;">
+    <h3 style="text-align: center; margin-bottom: 15px;">Сравнение прибыли по отделам</h3>
+    <canvas id="profitChart" style="max-height: 320px;"></canvas>
+</div>
+
+<!-- Детализация по типам операций -->
+<section class="collapsible">
+    <header class="collapsible-header">
+        <h3>Детализация по операциям</h3>
+        <div class="collapsible-actions">
+            <button type="button" class="toggle-btn" onclick="toggleSection('section-details')">Свернуть</button>
+        </div>
+    </header>
+    <div class="collapsible-body" id="section-details">
+        <div class="table-scroll">
+            <table class="data-table">
+                <thead>
+                <tr>
+                    <th>Вид работы</th>
+                    <th>Тип операции</th>
+                    <th class="num">План.Поступление</th>
+                    <th class="num">План.Затраты</th>
+                    <th class="num">План.Баланс</th>
+                    <th class="num">Факт.Поступление</th>
+                    <th class="num">Факт.Затраты</th>
+                    <th class="num">Факт.Баланс</th>
+                    <th class="num">Отклонение</th>
+                </tr>
+                </thead>
+                <tbody>
+                {{ range .Summary }}
+                    <tr>
+                        <td>{{ workKindLabel $.WorkKinds .WorkKindCode }}</td>
+                        <td>{{ .OperationType }}</td>
+                        <td class="num">{{ money .PlanIncome }}</td>
+                        <td class="num">{{ money .PlanExpense }}</td>
+                        <td class="num">{{ money .PlanBalance }}</td>
+                        <td class="num">{{ money .FactIncome }}</td>
+                        <td class="num">{{ money .FactExpense }}</td>
+                        <td class="num">{{ money .FactBalance }}</td>
+                        <td class="num {{ if lt .Deviation 0.0 }}text-danger{{ else if gt .Deviation 0.0 }}text-success{{ else }}text-neutral{{ end }}" style="font-weight: bold;">
+                            {{ if gt .Deviation 0.0 }}+{{ end }}{{ money .Deviation }}
+                        </td>
+                    </tr>
+                {{ end }}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<!-- Скрытый JSON с данными для графика -->
+<script id="chart-data" type="application/json">
+    [
+        {{ range $i, $wk := .GroupedByWK }}
+            {{ if $i }},{{ end }}
+            {
+                "name": "{{ $wk.Name }}",
+                "plan": {{ $wk.PlanProfit }},
+                "fact": {{ $wk.FactProfit }},
+                "dev": {{ $wk.Deviation }}
+            }
+        {{ end }}
+    ]
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const jsonText = document.getElementById('chart-data').textContent;
+    const data = JSON.parse(jsonText);
+
+    const labels = [];
+    const planData = [];
+    const factData = [];
+    const devData = [];
+
+    data.forEach(item => {
+        labels.push(item.name);
+        planData.push(item.plan);
+        factData.push(item.fact);
+        devData.push(item.dev);
+    });
+
+    const ctx = document.getElementById('profitChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Прибыль План',
+                    data: planData,
+                    backgroundColor: '#36a2eb',
+                },
+                {
+                    label: 'Прибыль Факт',
+                    data: factData,
+                    backgroundColor: '#ff6384',
+                },
+                {
+                    label: 'Сверхплана',
+                    data: devData,
+                    backgroundColor: '#bdc3c7',
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'top' },
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return value.toLocaleString('ru-RU') + ' ₽';
+                        }
+                    }
+                }
+            }
+        }
+    });
+});
+</script>
+
+{{ template "layout_footer" . }}
+{{ end }}

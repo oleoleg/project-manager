@@ -2,18 +2,39 @@
 {{ template "layout_header" . }}
 {{ $c := .Contract }}
 
-<p class="back-link">
-    <a href="/contracts/{{ $c.ID }}/stages">← К этапам</a>
-</p>
-
 <div class="page-header">
-    <div class="contract-title">
-        <h2>Затраты этапов по договору № {{ $c.ID }}</h2>
-    </div>
-    <div class="actions">
-        <a href="/contracts/{{ $c.ID }}/budget" class="btn">← К ФинПлану</a>
+       <div class="contract-title">
+        <h2>
+            Затраты этапов по договору 
+            {{ if $c.ContractNumber }}
+                № {{ $c.ContractNumber }} от {{ if $c.ContractDate }}{{ $c.ContractDate.Format "02.01.2006" }}{{ else }}—{{ end }}
+            {{ else }}
+                № не присвоен
+            {{ end }}
+            <span class="contract-id">ID: {{ $c.ID }}</span>
+        </h2>
+        
+        <p class="contract-subtitle">
+            {{ if $c.WorkName }}{{ $c.WorkName }}{{ else }}<span class="muted">наименование не указано</span>{{ end }}
+            {{ if .Counterparty }}
+                &nbsp;·&nbsp;
+                <a href="/counterparties/{{ .Counterparty.ID }}">{{ .Counterparty.Name }}</a>
+            {{ end }}
+        </p>
+        
+        <div class="breadcrumb" style="margin-bottom: 16px;">
+            <a href="/contracts/{{ $c.ID }}">Договор {{ $c.ID }}</a> 
+            &rarr; <a href="/contracts/{{ $c.ID }}/stages">Этапы</a>  
+            &rarr; <span style="color: var(--text-soft);">Затраты этапов</span>
+            &rarr; <a href="/contracts/{{ $c.ID }}/budget">ФинПлан</a>
+            &rarr; <a href="/contracts/{{ $c.ID }}/budget/fact">ФинФакт</a> 
+            &rarr; <a href="/contracts/{{ $c.ID }}/budget/compare">Сравнение</a>
+        </div>
     </div>
 </div>
+
+
+
 
 {{ if .Flash }}<div class="info-box" style="background-color: #e6f4ea; color: #1e8e3e; margin-bottom: 15px;">{{ .Flash }}</div>{{ end }}
 
