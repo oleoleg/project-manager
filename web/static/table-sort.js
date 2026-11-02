@@ -68,52 +68,117 @@ function sortTable(tableId, field, btnElement, groupConfig) {
 
     function flushGroup() {
         if (currentGroupRows.length === 0) return;
+        
         let gInc = 0, gExp = 0, gBal = 0;
         currentGroupRows.forEach(row => {
-            const incCell = row.cells[groupConfig.incIdx];
-            const expCell = row.cells[groupConfig.expIdx];
+            const incInput = row.querySelector('input[name="fact_income[]"]');
+            const expInput = row.querySelector('input[name="fact_expense[]"]');
+            
+            let inc = 0, exp = 0, bal = 0;
+            
+            if (incInput && expInput) {
+                // Если есть инпуты - читаем из них (ФинФакт)
+                inc = parseMoneyText(incInput.value);
+                exp = parseMoneyText(expInput.value);
+            } else {
+                // Если нет - читаем из текста (ФинПлан)
+                const incCell = row.cells[groupConfig.incIdx];
+                const expCell = row.cells[groupConfig.expIdx];
+                if (incCell) inc = parseMoneyText(incCell.textContent);
+                if (expCell) exp = parseMoneyText(expCell.textContent);
+            }
+            
             const balCell = row.cells[groupConfig.balIdx];
-
-            const inc = incCell ? parseMoneyText(incCell.textContent) : 0;
-            const exp = expCell ? parseMoneyText(expCell.textContent) : 0;
-            const bal = balCell ? parseMoneyText(balCell.textContent) : 0;
+            if (balCell) bal = parseMoneyText(balCell.textContent);
             
             gInc += inc; gExp += exp; gBal += bal;
             tableIncome += inc; tableExpense += exp; tableBalance += bal;
         });
 
+        // Корректировка названия для этапа
+        if (field === 'stage') {
+            // Ищем полное название этапа по его номеру
+            let stageFullName = 'Этап ' + (currentGroupValue || '—');
+            if (currentGroupValue) {
+                // Берем HTML из скрытых опций, которые сформировал JS при загрузке
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = window.stageOptionsHTML;
+                const opt = Array.from(tempDiv.querySelectorAll('option')).find(o => o.getAttribute('data-stage-num') === currentGroupValue.toString());
+                if (opt) {
+                    stageFullName = opt.textContent.trim();
+                }
+            }
+            currentGroupLabel = stageFullName;
+        }
+        
+     //   const isSalaryGroup = currentGroupLabel === 'Зарплата сотрудникам' || currentGroupLabel === 'Накладные';
+        
+        // Проверяем, есть ли в группе строки ЗП/Накладные
+        let isSalaryGroup = false;
+        currentGroupRows.forEach(row => {
+            if (row.classList.contains('salary-row')) {
+                isSalaryGroup = true;
+            }
+        });
         const headerRow = document.createElement('tr');
-        headerRow.className = 'group-header-row dynamic';
+        headerRow.className = 'group-header-row dynamic' + (isSalaryGroup ? ' salary-row' : '');
+        if (isSalaryGroup) {
+            headerRow.style.display = 'none';
+        }
         headerRow.setAttribute('data-type', field === 'type' ? currentGroupValue : '');
+        
         headerRow.innerHTML = `
             <td colspan="${groupConfig.labelColspan}" style="background-color: var(--surface-alt); font-weight: bold; color: var(--accent); padding: 10px; border-top: 2px solid var(--border); border-bottom: 1px solid var(--border);">${currentGroupLabel}</td>
             <td colspan="${groupConfig.incIdx - groupConfig.labelColspan}" style="background-color: var(--surface-alt); border-top: 2px solid var(--border); border-bottom: 1px solid var(--border);"></td>
-            ${groupConfig.hasIncome ? `<td class="num group-total-income" style="background-color: var(--surface-alt); color: var(--accent); font-weight: bold; padding: 10px; border-bottom: 1px solid var(--border);"></td>` : ''}
-            ${groupConfig.hasExpense ? `<td class="num group-total-expense" style="background-color: var(--surface-alt); color: var(--accent); font-weight: bold; padding: 10px; border-bottom: 1px solid var(--border);"></td>` : ''}
-            ${groupConfig.hasBalance ? `<td class="num group-total-balance" style="background-color: var(--surface-alt); color: var(--accent); font-weight: bold; padding: 10px; border-bottom: 1px solid var(--border);"></td>` : ''}
+            ${groupConfig.hasIncome ? `<td class="num group-total-income" style="background-color: var(--surface-alt); color: var(--accent); font-weight: bold; padding: 10px; border-bottom: 1px solid var(--border);">${gInc !== 0 ? formatMoney(gInc) : ''}</td>` : ''}
+            ${groupConfig.hasExpense ? `<td class="num group-total-expense" style="background-color: var(--surface-alt); color: var(--accent); font-weight: bold; padding: 10px; border-bottom: 1px solid var(--border);">${gExp !== 0 ? formatMoney(gExp) : ''}</td>` : ''}
+            ${groupConfig.hasBalance ? `<td class="num group-total-balance" style="background-color: var(--surface-alt); color: var(--accent); font-weight: bold; padding: 10px; border-bottom: 1px solid var(--border);">${gBal !== 0 ? formatMoney(gBal) : ''}</td>` : ''}
             <td style="background-color: var(--surface-alt); border-top: 2px solid var(--border); border-bottom: 1px solid var(--border);"></td>
         `;
+        
         tbody.appendChild(headerRow);
         currentGroupRows.forEach(row => tbody.appendChild(row));
         
-         // ... заполнение ячеек
-        const incDiv = headerRow.querySelector('.group-total-income');
-        const expDiv = headerRow.querySelector('.group-total-expense');
-        const balDiv = headerRow.querySelector('.group-total-balance');
-        if (incDiv) incDiv.textContent = formatMoney(gInc);
-        if (expDiv) expDiv.textContent = formatMoney(gExp);
-        if (balDiv) balDiv.textContent = formatMoney(gBal);
-        tbody.appendChild(headerRow);
-        currentGroupRows.forEach(row => tbody.appendChild(row));
+        // Проверяем, есть ли в группе хотя бы одна строка, не относящаяся к ЗП/Накладным
+        let hasVisibleRows = false;
+        currentGroupRows.forEach(row => {
+            // Если строка не имеет класса salary-row, значит она всегда видима
+            if (!row.classList.contains('salary-row')) {
+                hasVisibleRows = true;
+            }
+        });
 
-        // Возвращаем кнопку
-        const isSalaryGroup = currentGroupLabel === 'Зарплата сотрудникам' || currentGroupLabel === 'Накладные';
-        if (field === 'type' && !isSalaryGroup) {
+        // Добавляем кнопку в конец группы (кроме ЗП и Накладных)
+        if (!isSalaryGroup && hasVisibleRows) {
+            let groupOpType = 'Платежи по договору'; // По умолчанию
+            
+            if (field === 'type') {
+                groupOpType = currentGroupValue; // Если сортируем по типу, берем название группы
+            } else {
+                // Если сортируем по другому, берем тип из первой строки группы
+                const firstRow = currentGroupRows[0];
+                if (firstRow) {
+                    const select = firstRow.querySelector('.op-type-select');
+                    if (select) {
+                        groupOpType = select.value;
+                    } else {
+                        groupOpType = firstRow.dataset.type || 'Платежи по договору';
+                    }
+                }
+            }
+            
             const addRow = document.createElement('tr');
             addRow.className = 'group-add-row';
+            // В ФинФакте 11 колонок, в ФинПлане - 10. Вычисляем динамически.
+            const totalCols = groupConfig.labelColspan + 
+                              (groupConfig.incIdx - groupConfig.labelColspan) + 
+                              (groupConfig.hasIncome ? 1 : 0) + 
+                              (groupConfig.hasExpense ? 1 : 0) + 
+                              (groupConfig.hasBalance ? 1 : 0) + 1;
+            
             addRow.innerHTML = `
-                <td colspan="10" style="padding: 5px 10px;">
-                    <button type="button" class="btn btn-sm" style="opacity: 0.7;" onclick="addNewRow('${currentGroupLabel}', event)">+ Добавить операцию</button>
+                <td colspan="${totalCols}" style="padding: 5px 10px;">
+                    <button type="button" class="btn btn-sm" style="opacity: 0.7;" onclick="addNewRow('${groupOpType}', event)">+ Добавить операцию</button>
                 </td>
             `;
             tbody.appendChild(addRow);

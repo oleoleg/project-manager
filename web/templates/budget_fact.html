@@ -101,13 +101,14 @@
         </div>
     </div>
 
-    <form id="fact-form" method="post" action="/contracts/{{ $c.ID }}/budget/fact/save-form">
+    <form id="fact-form" method="post" action="/contracts/{{ $c.ID }}/budget/fact/save-form" onsubmit="return enableDisabledSelects()">
         <div class="table-scroll">
         <table class="data-table" id="fact-table">
             <thead>
             <tr>
                 <th style="width: 60px; text-align: center;">№ этапа</th>
                 <th style="width: 130px;">Вид работы</th>
+                <th style="width: 150px;">Тип операции</th>
                 <th>Наименование</th>
                 <th style="width: 110px;">Дата оп.</th>
                 <th style="width: 60px;">Отсрочка</th>
@@ -147,15 +148,18 @@
                         {{ if $isSalary }}style="display: none;"{{ end }}>
                         
                         <td style="text-align: center; color: var(--text-muted);" title="{{ .StageNumber }} — {{ .StageName }}">
-                            {{ .StageNumber }}
+                            {{ if .StageNumber }}{{ .StageNumber }}{{ else }}—{{ end }}
                         </td>
 
-                         <td>
+                        <td>
                             <input type="hidden" name="fact_id[]" value="{{ .ID }}">
                             <input type="hidden" name="stage_guid[]" value="{{ deref .StageGUID }}">
                             <input type="hidden" name="work_kind_code[]" class="workkind-hidden" value="{{ .WorkKindCode }}">
-                            <input type="hidden" name="operation_type[]" value="{{ $type }}">
                             <span style="padding: 5px; display: inline-block;">{{ workKindLabel $.WorkKinds .WorkKindCode }}</span>
+                        </td>
+                        <td>
+                            <input type="hidden" name="operation_type[]" value="{{ $type }}">
+                            <span style="padding: 5px; display: inline-block;">{{ $type }}</span>
                         </td>
 
                         <td>
@@ -242,6 +246,16 @@
 
 <input type="hidden" id="json-work-kinds" value='{{ .WorkKindsJSON }}'>
 <input type="hidden" id="json-stage-work-kinds" value='{{ .StageWorkKindsJSON }}'>
+
+<script>
+        function enableDisabledSelects() {
+        // Включаем все disabled селекты перед отправкой, чтобы они передались на сервер
+        document.querySelectorAll('select.op-type-select[disabled]').forEach(el => {
+            el.removeAttribute('disabled');
+        });
+        return true;
+    }
+</script>
 
 {{ template "layout_footer" . }}
 {{ end }}

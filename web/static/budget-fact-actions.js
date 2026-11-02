@@ -119,9 +119,18 @@ function addNewRow(opType, event) {
             <input type="hidden" name="fact_id[]" value="">
             <input type="hidden" name="stage_guid[]" value="">
             <input type="hidden" name="work_kind_code[]" class="workkind-hidden" value="">
-            <input type="hidden" name="operation_type[]" value="${opType}">
             <select class="fact-input workkind-select">
                 ${workKindsHTML}
+            </select>
+        </td>
+        <td>
+            <select name="operation_type[]" class="fact-input op-type-select" style="width: 100%; font-size: 12px;" onchange="updateRowInputsByType(this)">
+                <option value="Платежи по договору" ${opType === 'Платежи по договору' ? 'selected' : ''}>Платежи по договору</option>
+                <option value="Закупка по договору" ${opType === 'Закупка по договору' ? 'selected' : ''}>Закупка по договору</option>
+                <option value="Командировки" ${opType === 'Командировки' ? 'selected' : ''}>Командировки</option>
+                <option value="Субподрядчики" ${opType === 'Субподрядчики' ? 'selected' : ''}>Субподрядчики</option>
+                <option value="Комиссия" ${opType === 'Комиссия' ? 'selected' : ''}>Комиссия</option>
+                <option value="Другое (расходы)" ${opType === 'Другое (расходы)' ? 'selected' : ''}>Другое (расходы)</option>
             </select>
         </td>
         <td><textarea name="name[]" class="fact-input" rows="2" placeholder="Новая операция"></textarea></td>
@@ -144,6 +153,13 @@ function addNewRow(opType, event) {
         </td>
     `;
     
+    // Принудительно ставим тип операции в новый селект и применяем логику отображения полей
+    const opTypeSelect = newRow.querySelector('.op-type-select');
+    if (opTypeSelect) {
+        opTypeSelect.value = opType;
+        updateRowInputsByType(opTypeSelect); // Применяем блокировку/разблокировку полей
+    }
+
     tbody.insertBefore(newRow, btnRow);
     
     if (window.attachMoneyInput) {
@@ -199,4 +215,41 @@ function toggleSalaryRows() {
     document.querySelectorAll('.salary-row').forEach(row => {
         row.style.display = checkbox.checked ? '' : 'none';
     });
+}
+
+
+function updateRowInputsByType(selectEl) {
+    const row = selectEl.closest('tr');
+    const newType = selectEl.value;
+    
+    // Обновляем скрытое поле с типом операции
+    // const hiddenType = row.querySelector('input[name="operation_type[]"]');
+    // if (hiddenType) {
+    //     hiddenType.value = newType;
+    // }
+    
+    // Обновляем data-type для сортировки
+    row.dataset.type = newType;
+    
+    const isPayment = newType === 'Платежи по договору';
+    
+    // Индексы колонок для ФинФакта:
+    // 0 - №, 1 - Вид работы, 2 - Наименование, 3 - Тип операции, 4 - Дата, 5 - Отсрочка, 6 - Дата платежа, 7 - Приход, 8 - Расход
+    const incCell = row.cells[7];
+    const expCell = row.cells[8];
+    
+    if (isPayment) {
+        incCell.innerHTML = `<input type="text" name="fact_income[]" class="fact-input money-input" value="">`;
+        expCell.innerHTML = `<input type="hidden" name="fact_expense[]" value="0"><span class="muted">—</span>`;
+    } else {
+        incCell.innerHTML = `<input type="hidden" name="fact_income[]" value="0"><span class="muted">—</span>`;
+        expCell.innerHTML = `<input type="text" name="fact_expense[]" class="fact-input money-input" value="">`;
+    }
+    
+    // Применяем маску ввода, если есть
+    if (window.attachMoneyInput) {
+        row.querySelectorAll('input.money-input').forEach(window.attachMoneyInput);
+    }
+    
+    recalculateTotals();
 }

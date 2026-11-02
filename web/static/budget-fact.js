@@ -1,6 +1,10 @@
 
 
 document.addEventListener('DOMContentLoaded', function() {
+
+    
+
+
         // Читаем JSON из скрытых полей
     const wkInput = document.getElementById('json-work-kinds');
     const swkInput = document.getElementById('json-stage-work-kinds');
@@ -16,6 +20,10 @@ document.addEventListener('DOMContentLoaded', function() {
     } catch (e) {
         window.stageWorkKinds = {};
     }
+
+    console.log("WorkKinds loaded:", window.workKinds);
+    console.log("StageWorkKinds loaded:", window.stageWorkKinds);
+
     // 2. Формируем HTML для выбора этапа
     window.stageOptionsHTML = ``;
     const stageNodes = document.querySelectorAll('#stage-data div');
@@ -75,45 +83,26 @@ function recalculateTotals() {
     let confirmedIncome = 0;
     let confirmedExpense = 0;
 
-    const groupHeaders = table.querySelectorAll('.group-header-row');
-    
-    groupHeaders.forEach(header => {
-        const type = header.getAttribute('data-type');
-        if (!type) return;
+    // Считаем суммы по всем строкам
+    const rows = table.querySelectorAll('tr.fact-row');
+    rows.forEach(row => {
+        const incInput = row.querySelector('input[name="fact_income[]"]');
+        const expInput = row.querySelector('input[name="fact_expense[]"]');
         
-        let groupInc = 0;
-        let groupExp = 0;
+        const incVal = incInput ? parseMoneyText(incInput.value) : 0;
+        const expVal = expInput ? parseMoneyText(expInput.value) : 0;
         
-        const rows = table.querySelectorAll(`tr.fact-row`);
-        rows.forEach(row => {
-            const opTypeInput = row.querySelector('input[name="operation_type[]"]');
-            if (opTypeInput && opTypeInput.value === type) {
-                const incInput = row.querySelector('input[name="fact_income[]"]');
-                const expInput = row.querySelector('input[name="fact_expense[]"]');
-                
-                const incVal = incInput ? parseMoneyText(incInput.value) : 0;
-                const expVal = expInput ? parseMoneyText(expInput.value) : 0;
-                
-                groupInc += incVal;
-                groupExp += expVal;
+        totalIncome += incVal;
+        totalExpense += expVal;
 
-                const isConfirmed = row.classList.contains('confirmed');
-                if (isConfirmed) {
-                    confirmedIncome += incVal;
-                    confirmedExpense += expVal;
-                }
-            }
-        });
-
-        const incCell = header.querySelector('.group-total-income');
-        const expCell = header.querySelector('.group-total-expense');
-        if (incCell) incCell.textContent = formatMoney(groupInc);
-        if (expCell) expCell.textContent = formatMoney(groupExp);
-
-        totalIncome += groupInc;
-        totalExpense += groupExp;
+        const isConfirmed = row.classList.contains('confirmed');
+        if (isConfirmed) {
+            confirmedIncome += incVal;
+            confirmedExpense += expVal;
+        }
     });
 
+    // Записываем в общие карточки
     const totalIncEl = document.getElementById('total-fact-income');
     const totalExpEl = document.getElementById('total-fact-expense');
     const totalBalEl = document.getElementById('total-fact-balance');
@@ -136,9 +125,9 @@ function sortFactTable(field, btnElement) {
     // мы передаем colspan 3 (первые 3 колонки: №, Вид, Наименование).
     // hasBalance: false, так как в факте нет колонки Баланс.
     sortTable('fact-table', field, btnElement, {
-        labelColspan: 3,
-        incIdx: 6, // Факт (Приход)
-        expIdx: 7, // Факт (Расход)
+        labelColspan: 4,
+        incIdx: 7, // Факт (Приход)
+        expIdx: 8, // Факт (Расход)
         balIdx: -1,
         hasIncome: true,
         hasExpense: true,
