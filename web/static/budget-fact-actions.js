@@ -48,7 +48,13 @@ function filterWorkKinds(selectEl) {
     // Обновляем скрытое поле stage_guid
     const hiddenGuid = row.querySelector('input[name="stage_guid[]"]');
     if (hiddenGuid) hiddenGuid.value = stageGUID;
-
+    // Обновляем data-stage и data-stage-name для сортировки
+    if (selectEl.options.length > 0 && selectEl.selectedIndex >= 0) {
+        const opt = selectEl.options[selectEl.selectedIndex];
+        row.dataset.stage = opt.getAttribute('data-stage-num') || '0';
+        row.dataset.stageName = opt.textContent.trim() || '';
+    }
+    
     const workKindSelect = row.querySelector('.workkind-select');
     if (!workKindSelect) return;
 
@@ -80,8 +86,40 @@ function filterWorkKinds(selectEl) {
 function deleteRow(btn) {
     if (!confirm('Удалить эту строку?')) return;
     const row = btn.closest('tr');
-    row.remove();
-    recalculateTotals();
+    const idInput = row.querySelector('input[name="fact_id[]"]');
+    const factID = idInput ? idInput.value : '';
+
+    // Если строка новая (нет ID), просто удаляем из HTML
+    if (!factID) {
+        row.remove();
+        recalculateTotals();
+        return;
+    }
+
+    // Если строка есть в БД, отправляем запрос на удаление
+    // Для этого нам нужен ID договора (его можно взять из URL или data-атрибута)
+    const contractID = window.location.pathname.split('/')[2]; // /contracts/6666/budget/fact
+
+    const formData = new URLSearchParams();
+    formData.append('id', factID);
+
+    fetch(`/contracts/${contractID}/budget/fact/delete-row`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: formData.toString()
+    })
+    .then(resp => {
+        if (resp.ok) {
+            row.remove();
+            recalculateTotals();
+        } else {
+            alert('Ошибка при удалении строки');
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        alert('Ошибка сети');
+    });
 }
 
 function addNewRow(opType, event) {
@@ -97,7 +135,8 @@ function addNewRow(opType, event) {
     // Устанавливаем атрибуты для сортировки
     newRow.dataset.type = opType;
     newRow.dataset.date = Math.floor(Date.now() / 1000); // текущая дата как временная метка
-    // Этап и вид работы проставим чуть позже, после выбора
+    newRow.dataset.stage = '0'; // Заглушка
+    newRow.dataset.stageName = ''; // Заглушка
     
     const isPayment = opType === 'Платежи по договору';
     const isSalary = opType === 'Зарплата сотрудникам' || opType === 'Накладные';

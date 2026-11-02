@@ -40,6 +40,7 @@ type BudgetPlanLine struct {
 	SnapshotID    string
 	StageGUID     *string
 	StageNumber   string
+	StageName     string
 	WorkKindCode  string
 	Name          string
 	OperationDate time.Time

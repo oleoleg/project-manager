@@ -831,3 +831,20 @@ func (h *BudgetHandler) PlanFactIndex(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	h.tmpl.ExecuteTemplate(w, "budget_compare.html", data)
 }
+
+func (h *BudgetHandler) FactDeleteRow(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	factID := r.FormValue("id")
+
+	if factID != "" {
+		// Вызываем метод удаления одной строки в сервисе (создадим его на след. шаге)
+		if err := h.svc.DeleteFactLine(r.Context(), factID); err != nil {
+			log.Printf("delete fact line: %v", err)
+			http.Error(w, "Error", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"status":"ok"}`))
+}

@@ -108,7 +108,7 @@ func (r *BudgetRepo) GetLatestSnapshot(ctx context.Context, contractID string) (
 // GetPlanLines получает строки плана для конкретного снимка.
 func (r *BudgetRepo) GetPlanLines(ctx context.Context, snapshotID string) ([]models.BudgetPlanLine, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT l.id, l.snapshot_id, l.stage_guid, COALESCE(s.stage_number, ''), l.work_kind_code, l.name, 
+		SELECT l.id, l.snapshot_id, l.stage_guid, COALESCE(s.stage_number, ''), COALESCE(s.name, ''), l.work_kind_code, l.name, 
 		       l.operation_date, l.delay_days, l.payment_date, l.income, l.expense, l.operation_type, l.note
 		FROM budget_plan_lines l
 		LEFT JOIN stages s ON s.guid = l.stage_guid
@@ -124,7 +124,7 @@ func (r *BudgetRepo) GetPlanLines(ctx context.Context, snapshotID string) ([]mod
 	for rows.Next() {
 		var l models.BudgetPlanLine
 		if err := rows.Scan(
-			&l.ID, &l.SnapshotID, &l.StageGUID, &l.StageNumber, &l.WorkKindCode, &l.Name,
+			&l.ID, &l.SnapshotID, &l.StageGUID, &l.StageNumber, &l.StageName, &l.WorkKindCode, &l.Name,
 			&l.OperationDate, &l.DelayDays, &l.PaymentDate, &l.Income, &l.Expense,
 			&l.OperationType, &l.Note,
 		); err != nil {
@@ -265,8 +265,51 @@ func (r *BudgetRepo) GetAllSnapshots(ctx context.Context, contractID string) ([]
 
 // DeleteSnapshot удаляет снимок и все его строки.
 func (r *BudgetRepo) DeleteSnapshot(ctx context.Context, snapshotID string) error {
-	_, err := r.pool.Exec(ctx, `DELETE FROM budget_plan_snapshots WHERE id = $1`, snapshotID)
-	return err
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	// Сохраняем contract_id до удаления
+	var contractID string
+	err = tx.QueryRow(ctx, `SELECT contract_id FROM budget_plan_snapshots WHERE id = $1`, snapshotID).Scan(&contractID)
+	if err != nil {
+		return err // Если снимок не найден, дальше идти нет смысла
+	}
+
+	// 1. Отвязываем факт
+	_, err = tx.Exec(ctx, `UPDATE budget_fact_lines SET plan_line_id = NULL WHERE plan_line_id IN (SELECT id FROM budget_plan_lines WHERE snapshot_id = $1)`, snapshotID)
+	if err != nil {
+		return err
+	}
+
+	// 2. Удаляем снимок
+	_, err = tx.Exec(ctx, `DELETE FROM budget_plan_snapshots WHERE id = $1`, snapshotID)
+	if err != nil {
+		return err
+	}
+
+	// 3. Ищем активный снимок
+	var activeSnapshotID string
+	err = tx.QueryRow(ctx, `SELECT id FROM budget_plan_snapshots WHERE contract_id = $1 AND is_active = TRUE LIMIT 1`, contractID).Scan(&activeSnapshotID)
+
+	// Если нашли, привязываем по имени
+	if err == nil && activeSnapshotID != "" {
+		_, err = tx.Exec(ctx, `
+			UPDATE budget_fact_lines f
+			SET plan_line_id = p.id
+			FROM budget_plan_lines p
+			WHERE p.snapshot_id = $1 
+			  AND p.name = f.name 
+			  AND f.contract_id = $2
+		`, activeSnapshotID, contractID)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit(ctx)
 }
 
 // GetSnapshotByID получает один снимок по ID.
@@ -952,4 +995,9 @@ func (r *BudgetRepo) AutoConfirmSalaryAndOverhead(ctx context.Context, contractI
 		return fmt.Errorf("auto confirm salary/overhead: %w", err)
 	}
 	return nil
+}
+
+func (r *BudgetRepo) DeleteFactLine(ctx context.Context, id string) error {
+	_, err := r.pool.Exec(ctx, `DELETE FROM budget_fact_lines WHERE id = $1`, id)
+	return err
 }

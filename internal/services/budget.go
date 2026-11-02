@@ -411,3 +411,7 @@ func (s *BudgetService) GetPlanFactSummary(ctx context.Context, contractID strin
 func (s *BudgetService) AutoConfirmSalaryAndOverhead(ctx context.Context, contractID string) error {
 	return s.repo.AutoConfirmSalaryAndOverhead(ctx, contractID)
 }
+
+func (s *BudgetService) DeleteFactLine(ctx context.Context, id string) error {
+	return s.repo.DeleteFactLine(ctx, id)
+}

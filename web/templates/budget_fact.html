@@ -2,7 +2,7 @@
 {{ template "layout_header" . }}
 {{ $c := .Contract }}
 
-<script src="/static/table-sort.js"></script>
+<script src="/static/budget-table-sort-fact.js"></script>
 <script src="/static/budget-fact.js"></script>
 <script src="/static/budget-fact-actions.js"></script>
 
@@ -143,6 +143,7 @@
                     <tr class="fact-row {{ if $isSalary }}salary-row{{ end }} {{ if .IsConfirmed }}confirmed{{ end }}" 
                         data-type="{{ $type }}" 
                         data-stage="{{ .StageNumber }}" 
+                        data-stage-name="{{ .StageNumber }} — {{ .StageName }}"
                         data-work="{{ .WorkKindCode }}" 
                         data-date="{{ .OperationDate.Unix }}" 
                         {{ if $isSalary }}style="display: none;"{{ end }}>
