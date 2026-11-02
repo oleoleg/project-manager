@@ -97,13 +97,13 @@ func (h *BudgetHandler) Index(w http.ResponseWriter, r *http.Request) {
 	for _, c := range costs {
 		found := false
 		for _, wk := range stageWorkKinds[c.StageGUID] {
-			if wk == c.WorkKindCode {
+			if wk == c.WorkKind {
 				found = true
 				break
 			}
 		}
 		if !found {
-			stageWorkKinds[c.StageGUID] = append(stageWorkKinds[c.StageGUID], c.WorkKindCode)
+			stageWorkKinds[c.StageGUID] = append(stageWorkKinds[c.StageGUID], c.WorkKind)
 		}
 	}
 
@@ -241,8 +241,8 @@ func (h *BudgetHandler) NewVersion(w http.ResponseWriter, r *http.Request) {
 				IsHeader: false,
 				Stage:    s,
 				Cost: models.StageCost{
-					StageGUID:    s.GUID,
-					WorkKindCode: s.WorkKindCode,
+					StageGUID: s.GUID,
+					WorkKind:  s.WorkKind,
 				},
 			})
 		}
@@ -423,13 +423,13 @@ func (h *BudgetHandler) FactIndex(w http.ResponseWriter, r *http.Request) {
 	for _, c := range costs {
 		found := false
 		for _, wk := range stageWorkKinds[c.StageGUID] {
-			if wk == c.WorkKindCode {
+			if wk == c.WorkKind {
 				found = true
 				break
 			}
 		}
 		if !found {
-			stageWorkKinds[c.StageGUID] = append(stageWorkKinds[c.StageGUID], c.WorkKindCode)
+			stageWorkKinds[c.StageGUID] = append(stageWorkKinds[c.StageGUID], c.WorkKind)
 		}
 	}
 
@@ -559,7 +559,7 @@ func (h *BudgetHandler) FactSaveForm(w http.ResponseWriter, r *http.Request) {
 	payDates := r.Form["payment_date[]"]
 	incIncomes := r.Form["fact_income[]"]
 	incExpenses := r.Form["fact_expense[]"]
-	workKindCodes := r.Form["work_kind_code[]"]
+	workKinds := r.Form["work_kind[]"]
 	opTypes := r.Form["operation_type[]"]
 	stageGUIDs := r.Form["stage_guid[]"]
 	log.Printf("DEBUG: Received %d fact_ids, %d stage_guids", len(ids), len(stageGUIDs))
@@ -594,12 +594,16 @@ func (h *BudgetHandler) FactSaveForm(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for i := 0; i < len(ids); i++ {
-		log.Printf("DEBUG[%d]: work_kind_code='%s'", i, workKindCodes[i])
+		wk := ""
+		if i < len(workKinds) {
+			wk = workKinds[i]
+		}
+		log.Printf("DEBUG[%d]: work_kind='%s'", i, wk)
 	}
 
 	err := h.svc.BatchUpdateFactLines(
 		r.Context(), contractID,
-		ids, pad(names), pad(workKindCodes), pad(opTypes), pad(stageGUIDs),
+		ids, pad(names), pad(workKinds), pad(opTypes), pad(stageGUIDs),
 		pad(opDates), pad(delayDays), pad(payDates),
 		pad(incIncomes), pad(incExpenses), confirms,
 	)
@@ -667,7 +671,7 @@ func parseCostsFromBudgetForm(r *http.Request) []models.StageCost {
 		}
 		res = append(res, models.StageCost{
 			StageGUID:      getStr(stageGUIDs, i),
-			WorkKindCode:   wc,
+			WorkKind:       wc,
 			Cost:           parseMoney(getStr(amounts, i)),
 			FOTPlan:        parseMoney(getStr(fotPlans, i)),
 			LaborDays:      parseMoney(getStr(days, i)),
@@ -707,7 +711,7 @@ func (h *BudgetHandler) GetSummaryChart(w http.ResponseWriter, r *http.Request) 
 
 		if l.OperationType != "Платежи по договору" && l.Expense > 0 {
 			expenseSums[l.OperationType] += l.Expense
-			deptSums[l.WorkKindCode] += l.Expense
+			deptSums[l.WorkKind] += l.Expense
 		}
 	}
 
@@ -775,23 +779,23 @@ func (h *BudgetHandler) PlanFactIndex(w http.ResponseWriter, r *http.Request) {
 	// Считаем прибыль по видам работ (Сумма всех Балансов по этому виду работ)
 	wkMap := make(map[string]*WorkKindSummary)
 	for _, row := range summary {
-		if _, ok := wkMap[row.WorkKindCode]; !ok {
-			name := row.WorkKindCode
+		if _, ok := wkMap[row.WorkKind]; !ok {
+			name := row.WorkKind
 			for _, wk := range workKinds {
-				if wk.Code == row.WorkKindCode {
+				if wk.Code == row.WorkKind {
 					name = wk.Name
 					break
 				}
 			}
-			wkMap[row.WorkKindCode] = &WorkKindSummary{Code: row.WorkKindCode, Name: name}
+			wkMap[row.WorkKind] = &WorkKindSummary{Code: row.WorkKind, Name: name}
 		}
-		wkMap[row.WorkKindCode].PlanProfit += row.PlanBalance
-		wkMap[row.WorkKindCode].FactProfit += row.FactBalance
-		wkMap[row.WorkKindCode].Deviation += row.Deviation
+		wkMap[row.WorkKind].PlanProfit += row.PlanBalance
+		wkMap[row.WorkKind].FactProfit += row.FactBalance
+		wkMap[row.WorkKind].Deviation += row.Deviation
 	}
 
 	// Сортируем виды работ (по порядку как в Excel: ПИР, ППО, СМР, ПНР, Сборка, Продажа)
-	order := map[string]int{"pir": 1, "ppo": 2, "smr": 3, "pnr": 4, "sbor": 5, "sale": 6}
+	order := map[string]int{"ПИР": 1, "ППО": 2, "СМР": 3, "ПНР": 4, "Сборка": 5, "Продажа": 6}
 
 	var wkList []*WorkKindSummary
 	for _, v := range wkMap {
@@ -847,4 +851,14 @@ func (h *BudgetHandler) FactDeleteRow(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"status":"ok"}`))
+}
+
+func (h *BudgetHandler) FactAppendFromPlan(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "id")
+	if err := h.svc.AppendMissingFactLinesFromPlan(r.Context(), contractID); err != nil {
+		log.Printf("append fact from plan: %v", err)
+		http.Error(w, "Ошибка дозаполнения факта: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/contracts/"+contractID+"/budget/fact?flash=Факт+дозаполнен+из+активного+плана", http.StatusSeeOther)
 }

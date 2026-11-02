@@ -37,10 +37,10 @@
 
     <label>
         Вид работы *
-        <select name="work_kind_code" id="work-kind-select" required>
+        <select name="work_kind" id="work-kind-select" required>
             <option value="">— выберите —</option>
             {{ range .WorkKinds }}
-                <option value="{{ .Code }}" {{ if eq .Code $s.WorkKindCode }}selected{{ end }}>{{ .Name }}</option>
+                <option value="{{ .Code }}" {{ if eq .Code $s.WorkKind }}selected{{ end }}>{{ .Name }}</option>
             {{ end }}
         </select>
     </label>
@@ -66,7 +66,6 @@
                     title="{{ if $s.ClosedByActsManual }}Сейчас ручной ввод. Нажмите, чтобы подтягивать из актов{{ else }}Сейчас подтяжка из актов. Нажмите для ручного ввода{{ end }}">
                 {{ if $s.ClosedByActsManual }}🔒{{ else }}🔗{{ end }}
             </button>
-            {{/* Чекбокс: отмечен = ручной ввод. Скрыт — управляется кнопкой. */}}
             <input type="checkbox" name="closed_by_acts_manual" id="closed-by-acts-manual"
                    {{ if $s.ClosedByActsManual }}checked{{ end }}
                    style="display: none;">
@@ -153,16 +152,16 @@
             {{ range $i, $cost := .Costs }}
                 <tr class="cost-row">
                     <td>
-                        {{ if isComplexWork $s.WorkKindCode }}
+                        {{ if eq $s.WorkKind "Комплексный" }}
                             <select name="cost_work_kind">
                                 <option value="">—</option>
                                 {{ range $.CostWorkKinds }}
-                                    <option value="{{ .Code }}" {{ if eq .Code $cost.WorkKindCode }}selected{{ end }}>{{ .Name }}</option>
+                                    <option value="{{ .Code }}" {{ if eq .Code $cost.WorkKind }}selected{{ end }}>{{ .Name }}</option>
                                 {{ end }}
                             </select>
                         {{ else }}
-                            <input type="hidden" name="cost_work_kind" value="{{ $s.WorkKindCode }}">
-                            <span class="cost-workkind-static">{{ workKindLabel $.WorkKinds $s.WorkKindCode }}</span>
+                            <input type="hidden" name="cost_work_kind" value="{{ $s.WorkKind }}">
+                            <span class="cost-workkind-static">{{ $s.WorkKind }}</span>
                         {{ end }}
                     </td>
 
@@ -229,7 +228,7 @@
     <div class="warning" id="costs-overrun-warning" style="display: none;"></div>
     <div class="warning" id="costs-sale-mismatch-warning" style="display: none;"></div>
 
-    {{ if isComplexWork $s.WorkKindCode }}
+    {{ if eq $s.WorkKind "Комплексный" }}
     <p>
         <button type="button" class="btn btn-sm" id="cost-add">+ Добавить строку</button>
     </p>
@@ -269,7 +268,6 @@
         if (!body) return;
 
         function checkWarnings() {
-            // Собираем данные для проверки
             const stageCostEl = document.querySelector('input[name="cost"]');
             const stageCost = BudgetChecks.num(stageCostEl ? stageCostEl.value : 0);
             

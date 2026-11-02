@@ -42,7 +42,12 @@
                 <button type="submit" class="btn btn-success-custom">🔄 Загрузить ЗП</button>
             </form>
         {{ end }}
-        
+        {{ if .FactLines }}
+            <form method="post" action="/contracts/{{ $c.ID }}/budget/fact/append" style="display:inline;" onsubmit="return confirm('Добавить в факт недостающие строки из активного плана?');">
+                <button type="submit" class="btn btn-primary">➕ Дозаполнить из плана</button>
+            </form>
+        {{ end }}
+
         {{ if not .FactLines }}
             {{ if .HasActivePlan }}
                 <form method="post" action="/contracts/{{ $c.ID }}/budget/fact/generate" style="display:inline;" onsubmit="return confirm('Сформировать факт на основе активного плана?');">
@@ -144,7 +149,7 @@
                         data-type="{{ $type }}" 
                         data-stage="{{ .StageNumber }}" 
                         data-stage-name="{{ .StageNumber }} — {{ .StageName }}"
-                        data-work="{{ .WorkKindCode }}" 
+                        data-work="{{ .WorkKind }}" 
                         data-date="{{ .OperationDate.Unix }}" 
                         {{ if $isSalary }}style="display: none;"{{ end }}>
                         
@@ -155,8 +160,8 @@
                         <td>
                             <input type="hidden" name="fact_id[]" value="{{ .ID }}">
                             <input type="hidden" name="stage_guid[]" value="{{ deref .StageGUID }}">
-                            <input type="hidden" name="work_kind_code[]" class="workkind-hidden" value="{{ .WorkKindCode }}">
-                            <span style="padding: 5px; display: inline-block;">{{ workKindLabel $.WorkKinds .WorkKindCode }}</span>
+                            <input type="hidden" name="work_kind[]" class="workkind-hidden" value="{{ .WorkKind }}">
+                            <span style="padding: 5px; display: inline-block;">{{ .WorkKind }}</span>
                         </td>
                         <td>
                             <input type="hidden" name="operation_type[]" value="{{ $type }}">

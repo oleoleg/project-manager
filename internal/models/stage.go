@@ -18,7 +18,7 @@ type Stage struct {
 	CloseDatePlan      *time.Time
 	ResponsiblePerson  string
 	StatusCode         int16
-	WorkKindCode       string
+	WorkKind           string
 	Note               string
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
@@ -27,12 +27,6 @@ type Stage struct {
 type StageStatusRef struct {
 	Code int16
 	Name string
-}
-
-type WorkKindRef struct {
-	Code      string
-	Name      string
-	IsComplex bool
 }
 
 // ContractCard — маленькая модель для вкладки «Карточка договора».

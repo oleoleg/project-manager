@@ -18,7 +18,7 @@ func NewStageCostRepo(pool *pgxpool.Pool) *StageCostRepo {
 }
 
 const stageCostColumns = `
-	sc.guid, sc.stage_guid, sc.work_kind_code, sc.cost, sc.fot_plan, 
+	sc.guid, sc.stage_guid, sc.work_kind, sc.cost, sc.fot_plan, 
 	sc.labor_days, sc.rate_per_day, sc.travel_expenses,
 	sc.equipment_sale, sc.equipment_cost, sc.subcontract, sc.commission, sc.other_expenses,
 	sc.locked_field, sc.created_at, sc.updated_at
@@ -28,7 +28,7 @@ func scanStageCost(row interface {
 	Scan(dest ...any) error
 }, c *models.StageCost) error {
 	return row.Scan(
-		&c.GUID, &c.StageGUID, &c.WorkKindCode, &c.Cost, &c.FOTPlan,
+		&c.GUID, &c.StageGUID, &c.WorkKind, &c.Cost, &c.FOTPlan,
 		&c.LaborDays, &c.RatePerDay, &c.TravelExpenses,
 		&c.EquipmentSale, &c.EquipmentCost, &c.Subcontract, &c.Commission, &c.OtherExpenses,
 		&c.LockedField, &c.CreatedAt, &c.UpdatedAt,
@@ -58,7 +58,6 @@ func (r *StageCostRepo) ListByStage(ctx context.Context, stageGUID string) ([]mo
 	return res, rows.Err()
 }
 
-// ReplaceForStage атомарно перезаписывает все затраты этапа.
 func (r *StageCostRepo) ReplaceForStage(ctx context.Context, stageGUID string, costs []models.StageCost) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -73,12 +72,12 @@ func (r *StageCostRepo) ReplaceForStage(ctx context.Context, stageGUID string, c
 	for _, c := range costs {
 		_, err := tx.Exec(ctx, `
 			INSERT INTO stage_costs (
-				stage_guid, work_kind_code, cost, fot_plan, 
+				stage_guid, work_kind, cost, fot_plan, 
 				labor_days, rate_per_day, travel_expenses,
 				equipment_sale, equipment_cost, subcontract, commission, other_expenses, locked_field
 			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
 		`,
-			stageGUID, c.WorkKindCode, c.Cost, c.FOTPlan,
+			stageGUID, c.WorkKind, c.Cost, c.FOTPlan,
 			c.LaborDays, c.RatePerDay, c.TravelExpenses,
 			c.EquipmentSale, c.EquipmentCost, c.Subcontract, c.Commission, c.OtherExpenses, c.LockedField,
 		)
@@ -89,14 +88,13 @@ func (r *StageCostRepo) ReplaceForStage(ctx context.Context, stageGUID string, c
 	return tx.Commit(ctx)
 }
 
-// GetAllCostsForContract возвращает плоский список затрат по всем этапам договора для сводной таблицы.
 func (r *StageCostRepo) GetAllCostsForContract(ctx context.Context, contractID string) ([]models.StageCost, error) {
 	query := `
 		SELECT ` + stageCostColumns + `
 		FROM stage_costs sc
 		JOIN stages s ON s.guid = sc.stage_guid
 		WHERE s.contract_id = $1
-		ORDER BY s.row_order, s.stage_number, sc.work_kind_code
+		ORDER BY s.row_order, s.stage_number, sc.work_kind
 	`
 	rows, err := r.pool.Query(ctx, query, contractID)
 	if err != nil {

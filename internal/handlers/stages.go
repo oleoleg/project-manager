@@ -73,7 +73,6 @@ func (h *StageHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// создаём карточку, если ещё нет
 	if err := h.svc.EnsureCard(r.Context(), contractID); err != nil {
 		log.Printf("stage ensure card: %v", err)
 	}
@@ -101,23 +100,20 @@ func (h *StageHandler) List(w http.ResponseWriter, r *http.Request) {
 	data["Card"] = card
 	data["Counterparty"] = cp
 	data["StatusName"] = func(code int16) string { return stageStatusName(statuses, code) }
-	data["WorkKindName"] = func(code string) string { return workKindName(workKinds, code) }
+	// Теперь WorkKind — это уже русская строка, поэтому просто возвращаем её (для совместимости с шаблоном)
+	data["WorkKindName"] = func(code string) string { return code }
 	data["Flash"] = r.URL.Query().Get("flash")
 	data["CostTotals"] = costTotals
 	data["ActCountByStage"] = actCounts
 	actSums, _ := h.svc.StageActSums(r.Context(), contractID)
 	data["StageActSums"] = actSums
 
-	// Режим НДС: "with" или "without" (по умолчанию "without")
 	vatMode := r.URL.Query().Get("vat")
 	if vatMode != "with" {
 		vatMode = "without"
 	}
 	data["VATMode"] = vatMode
 
-	// Определяем единую ставку НДС по всем этапам договора.
-	// Если все этапы имеют одинаковую ставку — показываем её в карточке-итоге.
-	// Если разные — «смешанный НДС». Если этапов нет — НДС не начисляется.
 	var vatSingle float64
 	var vatMixed bool
 	seen := map[float64]bool{}
@@ -308,14 +304,13 @@ func (h *StageHandler) renderFormWithError(w http.ResponseWriter, r *http.Reques
 		costs, _ = h.costSvc.ListByStage(r.Context(), st.GUID)
 	}
 	if len(costs) == 0 {
-		// одна пустая строка по умолчанию
 		costs = []models.StageCost{{}}
 	}
 
-	// work kinds для строк затрат — без "complex"
-	var costWorkKinds []models.WorkKindRef
+	// work kinds для строк затрат — без "Комплексный"
+	var costWorkKinds []models.WorkKind
 	for _, wk := range workKinds {
-		if !wk.IsComplex {
+		if wk.Code != "Комплексный" {
 			costWorkKinds = append(costWorkKinds, wk)
 		}
 	}
@@ -360,7 +355,6 @@ func parseStageForm(r *http.Request) (*models.Stage, error) {
 		return nil, fmt.Errorf("Аванс: %w", err)
 	}
 
-	// Режим «Закрыто по актам»: on — ручной ввод, пусто — из актов.
 	closedManual := r.FormValue("closed_by_acts_manual") == "on"
 
 	return &models.Stage{
@@ -377,12 +371,11 @@ func parseStageForm(r *http.Request) (*models.Stage, error) {
 		CloseDatePlan:      services.ParseDate(r.FormValue("close_date_plan")),
 		ResponsiblePerson:  strings.TrimSpace(r.FormValue("responsible_person")),
 		StatusCode:         statusCode,
-		WorkKindCode:       strings.TrimSpace(r.FormValue("work_kind_code")),
+		WorkKind:           strings.TrimSpace(r.FormValue("work_kind")), // <-- ИЗМЕНЕНО
 		Note:               strings.TrimSpace(r.FormValue("note")),
 	}, nil
 }
 
-// parsePercent — как ParseMoney, но для процентов (0..100).
 func parsePercent(s string) (float64, error) {
 	v, err := services.ParseMoney(s)
 	if err != nil {
@@ -412,17 +405,7 @@ func stageStatusName(list []models.StageStatusRef, code int16) string {
 	return ""
 }
 
-func workKindName(list []models.WorkKindRef, code string) string {
-	for _, w := range list {
-		if w.Code == code {
-			return w.Name
-		}
-	}
-	return code
-}
-
-// parseStageCostsForm собирает затраты из полей формы,
-// которые приходят массивами: cost_work_kind[], cost_amount[], и т.д.
+// parseStageCostsForm собирает затраты из полей формы
 func parseStageCostsForm(r *http.Request) []models.StageCost {
 	_ = r.ParseForm()
 
@@ -447,7 +430,7 @@ func parseStageCostsForm(r *http.Request) []models.StageCost {
 			continue
 		}
 		res = append(res, models.StageCost{
-			WorkKindCode:   wc,
+			WorkKind:       wc, // <-- ИЗМЕНЕНО
 			Cost:           parseMoneyOrZero(getSlice(amounts, i)),
 			FOTPlan:        parseMoneyOrZero(getSlice(fotPlans, i)),
 			LaborDays:      parseMoneyOrZero(getSlice(days, i)),
@@ -493,8 +476,6 @@ func humanizeStageCostError(err error) string {
 	return "Затраты: " + err.Error()
 }
 
-// StageActSumJSON возвращает сумму актов по этапу.
-// Используется в форме этапа при переключении замочка на «из актов».
 func (h *StageHandler) StageActSumJSON(w http.ResponseWriter, r *http.Request) {
 	stageGUID := chi.URLParam(r, "guid")
 	sum, err := h.actSvc.SumByStage(r.Context(), stageGUID)
@@ -506,7 +487,6 @@ func (h *StageHandler) StageActSumJSON(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]float64{"sum": sum})
 }
 
-// CostsIndex отображает общую таблицу затрат по всем этапам договора.
 func (h *StageHandler) CostsIndex(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "id")
 
@@ -531,7 +511,6 @@ func (h *StageHandler) CostsIndex(w http.ResponseWriter, r *http.Request) {
 	stages, _ := h.svc.List(r.Context(), contractID)
 	workKinds, _ := h.svc.WorkKinds(r.Context())
 
-	// Создаем мапу для быстрого поиска этапа по GUID в шаблоне
 	stagesMap := make(map[string]models.Stage)
 	for _, s := range stages {
 		stagesMap[s.GUID] = s
@@ -540,7 +519,7 @@ func (h *StageHandler) CostsIndex(w http.ResponseWriter, r *http.Request) {
 	data := h.commonData(r, "Затраты этапов договора "+contractID)
 	data["Contract"] = contract
 	data["Costs"] = costs
-	data["StagesMap"] = stagesMap // Передаем мапу
+	data["StagesMap"] = stagesMap
 	data["WorkKinds"] = workKinds
 	data["Flash"] = r.URL.Query().Get("flash")
 

@@ -117,7 +117,7 @@
                 <tbody>
                 {{ range .Summary }}
                     <tr>
-                        <td>{{ workKindLabel $.WorkKinds .WorkKindCode }}</td>
+                        <td>{{ .WorkKind }}</td>
                         <td>{{ .OperationType }}</td>
                         <td class="num">{{ money .PlanIncome }}</td>
                         <td class="num">{{ money .PlanExpense }}</td>

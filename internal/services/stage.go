@@ -27,7 +27,7 @@ func (s *StageService) Validate(st *models.Stage) error {
 	if st.Name == "" {
 		return ErrStageNameRequired
 	}
-	if st.WorkKindCode == "" {
+	if st.WorkKind == "" {
 		return ErrStageWorkKindNeeded
 	}
 	if st.Cost < 0 || st.ClosedByActs < 0 {
@@ -81,8 +81,9 @@ func (s *StageService) Statuses(ctx context.Context) ([]models.StageStatusRef, e
 	return s.repo.ListStatuses(ctx)
 }
 
-func (s *StageService) WorkKinds(ctx context.Context) ([]models.WorkKindRef, error) {
-	return s.repo.ListWorkKinds(ctx)
+// WorkKinds теперь возвращает статический список из модели
+func (s *StageService) WorkKinds(ctx context.Context) ([]models.WorkKind, error) {
+	return models.WorkKinds, nil
 }
 
 func (s *StageService) EnsureCard(ctx context.Context, contractID string) error {
@@ -105,7 +106,6 @@ func (s *StageService) Move(ctx context.Context, contractID, guid string, direct
 	if err := s.repo.SwapOrder(ctx, contractID, guid, direction); err != nil {
 		return err
 	}
-	// пересобираем порядок, чтобы не было дублей
 	return s.repo.NormalizeOrder(ctx, contractID)
 }
 

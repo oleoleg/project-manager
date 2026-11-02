@@ -70,14 +70,11 @@ func (s *BudgetService) GeneratePlan(ctx context.Context, contractID string, use
 		return "", fmt.Errorf("get data for plan: %w", err)
 	}
 
-	// Считаем общую стоимость всех затрат по этапу (для распределения Аванса/Оплаты)
-	// Включаем Стоимость работ (Cost) и Продажу оборудования (EquipmentSale)
 	stageTotalCost := make(map[string]float64)
 	for _, c := range costs {
 		stageTotalCost[c.StageGUID] += (c.Cost + c.EquipmentSale)
 	}
 
-	// Группируем затраты по этапам
 	costsByStage := make(map[string][]models.StageCost)
 	for _, c := range costs {
 		costsByStage[c.StageGUID] = append(costsByStage[c.StageGUID], c)
@@ -85,26 +82,22 @@ func (s *BudgetService) GeneratePlan(ctx context.Context, contractID string, use
 
 	var lines []models.BudgetPlanLine
 
-	// Перебираем ЭТАПЫ, чтобы взять их даты и проценты
 	for _, st := range stages {
 		stageCosts := costsByStage[st.GUID]
 		totalCostForStage := stageTotalCost[st.GUID]
 
-		// Дата закрытия (для операций)
 		closeDate := settings.ProjectStartDate
 		if st.CloseDatePlan != nil {
 			closeDate = *st.CloseDatePlan
 		}
 
-		// Если у этапа НЕТ затрат, но есть Аванс/Оплата — выводим их с видом работы самого этапа
-		// Если у этапа НЕТ затрат, но есть Аванс/Оплата — выводим их с видом работы самого этапа
 		if len(stageCosts) == 0 {
 			if st.AdvancePercent > 0 {
 				advSum := st.Cost * (st.AdvancePercent / 100.0)
 				if advSum > 0.01 {
 					lines = append(lines, models.BudgetPlanLine{
 						StageGUID:     &st.GUID,
-						WorkKindCode:  st.WorkKindCode,
+						WorkKind:      st.WorkKind,
 						Name:          fmt.Sprintf("Аванс (%.1f%%). %s", st.AdvancePercent, st.Name),
 						OperationDate: settings.ProjectStartDate,
 						DelayDays:     2,
@@ -123,7 +116,7 @@ func (s *BudgetService) GeneratePlan(ctx context.Context, contractID string, use
 				}
 				lines = append(lines, models.BudgetPlanLine{
 					StageGUID:     &st.GUID,
-					WorkKindCode:  st.WorkKindCode,
+					WorkKind:      st.WorkKind,
 					Name:          name,
 					OperationDate: closeDate,
 					DelayDays:     settings.PaymentDelayDays,
@@ -135,23 +128,19 @@ func (s *BudgetService) GeneratePlan(ctx context.Context, contractID string, use
 			continue
 		}
 
-		// Если затраты ЕСТЬ, перебираем каждую строку затрат
 		for _, c := range stageCosts {
-			// Считаем долю этой строки в общей стоимости этапа (Работы + Оборудование)
 			rowTotalSale := c.Cost + c.EquipmentSale
 			ratio := 0.0
 			if totalCostForStage > 0 {
 				ratio = rowTotalSale / totalCostForStage
 			}
 
-			// 1. АВАНС (распределяем по строкам пропорционально стоимости)
-			// Выводим аванс, если есть продажа (работ или оборудования)
 			if st.AdvancePercent > 0 && rowTotalSale > 0 {
 				advSum := (st.Cost * (st.AdvancePercent / 100.0)) * ratio
 				if advSum > 0.01 {
 					lines = append(lines, models.BudgetPlanLine{
 						StageGUID:     &st.GUID,
-						WorkKindCode:  c.WorkKindCode,
+						WorkKind:      c.WorkKind,
 						Name:          fmt.Sprintf("Аванс (%.1f%%). %s", st.AdvancePercent, st.Name),
 						OperationDate: settings.ProjectStartDate,
 						DelayDays:     2,
@@ -162,8 +151,6 @@ func (s *BudgetService) GeneratePlan(ctx context.Context, contractID string, use
 				}
 			}
 
-			// 2. ОПЛАТА ПО ДОГОВОРУ
-			// Выводим оплату, если есть продажа (работ или оборудования)
 			if rowTotalSale > 0 {
 				remainSum := (st.Cost - (st.Cost * (st.AdvancePercent / 100.0))) * ratio
 				if remainSum > 0.01 {
@@ -175,7 +162,7 @@ func (s *BudgetService) GeneratePlan(ctx context.Context, contractID string, use
 
 					lines = append(lines, models.BudgetPlanLine{
 						StageGUID:     &st.GUID,
-						WorkKindCode:  c.WorkKindCode,
+						WorkKind:      c.WorkKind,
 						Name:          name,
 						OperationDate: closeDate,
 						DelayDays:     settings.PaymentDelayDays,
@@ -186,12 +173,11 @@ func (s *BudgetService) GeneratePlan(ctx context.Context, contractID string, use
 				}
 			}
 
-			// 3. ЗАРПЛАТА (ФОТп)
 			if c.FOTPlan > 0 {
 				opDate := closeDate.AddDate(0, 0, -15)
 				lines = append(lines, models.BudgetPlanLine{
 					StageGUID:     &st.GUID,
-					WorkKindCode:  c.WorkKindCode,
+					WorkKind:      c.WorkKind,
 					Name:          "Зарплата сотрудникам. " + st.Name,
 					OperationDate: opDate,
 					DelayDays:     0,
@@ -200,11 +186,10 @@ func (s *BudgetService) GeneratePlan(ctx context.Context, contractID string, use
 					OperationType: "Зарплата сотрудникам",
 				})
 
-				// 4. НАКЛАДНЫЕ
 				overheadSum := c.FOTPlan * settings.OverheadRate
 				lines = append(lines, models.BudgetPlanLine{
 					StageGUID:     &st.GUID,
-					WorkKindCode:  c.WorkKindCode,
+					WorkKind:      c.WorkKind,
 					Name:          "Накладные. " + st.Name,
 					OperationDate: opDate,
 					DelayDays:     0,
@@ -214,13 +199,12 @@ func (s *BudgetService) GeneratePlan(ctx context.Context, contractID string, use
 				})
 			}
 
-			// 5. ОБОРУДОВАНИЕ
 			if c.EquipmentCost > 0 {
 				prepay := c.EquipmentCost * (settings.EquipPaymentPercent / 100.0)
 				if prepay > 0.01 {
 					lines = append(lines, models.BudgetPlanLine{
 						StageGUID:     &st.GUID,
-						WorkKindCode:  c.WorkKindCode,
+						WorkKind:      c.WorkKind,
 						Name:          fmt.Sprintf("Предоплата за оборудование (%.1f%%). %s", settings.EquipPaymentPercent, st.Name),
 						OperationDate: settings.ProjectStartDate,
 						DelayDays:     2,
@@ -235,7 +219,7 @@ func (s *BudgetService) GeneratePlan(ctx context.Context, contractID string, use
 					postPercent := 100.0 - settings.EquipPaymentPercent
 					lines = append(lines, models.BudgetPlanLine{
 						StageGUID:     &st.GUID,
-						WorkKindCode:  c.WorkKindCode,
+						WorkKind:      c.WorkKind,
 						Name:          fmt.Sprintf("Постоплата за оборудование (%.1f%%). %s", postPercent, st.Name),
 						OperationDate: postDate,
 						DelayDays:     0,
@@ -246,11 +230,10 @@ func (s *BudgetService) GeneratePlan(ctx context.Context, contractID string, use
 				}
 			}
 
-			// 6. СУБПОДРЯД
 			if c.Subcontract > 0 {
 				lines = append(lines, models.BudgetPlanLine{
 					StageGUID:     &st.GUID,
-					WorkKindCode:  c.WorkKindCode,
+					WorkKind:      c.WorkKind,
 					Name:          "Оплата субподрядчику. " + st.Name,
 					OperationDate: closeDate,
 					DelayDays:     0,
@@ -260,12 +243,11 @@ func (s *BudgetService) GeneratePlan(ctx context.Context, contractID string, use
 				})
 			}
 
-			// 7. КОМАНДИРОВКИ
 			if c.TravelExpenses > 0 {
 				opDate := closeDate.AddDate(0, 0, -15)
 				lines = append(lines, models.BudgetPlanLine{
 					StageGUID:     &st.GUID,
-					WorkKindCode:  c.WorkKindCode,
+					WorkKind:      c.WorkKind,
 					Name:          "Командировочные. " + st.Name,
 					OperationDate: opDate,
 					DelayDays:     0,
@@ -275,11 +257,10 @@ func (s *BudgetService) GeneratePlan(ctx context.Context, contractID string, use
 				})
 			}
 
-			// 8. КОМИССИЯ
 			if c.Commission > 0 {
 				lines = append(lines, models.BudgetPlanLine{
 					StageGUID:     &st.GUID,
-					WorkKindCode:  c.WorkKindCode,
+					WorkKind:      c.WorkKind,
 					Name:          "Комиссия. " + st.Name,
 					OperationDate: closeDate,
 					DelayDays:     0,
@@ -289,11 +270,10 @@ func (s *BudgetService) GeneratePlan(ctx context.Context, contractID string, use
 				})
 			}
 
-			// 9. ДРУГОЕ
 			if c.OtherExpenses > 0 {
 				lines = append(lines, models.BudgetPlanLine{
 					StageGUID:     &st.GUID,
-					WorkKindCode:  c.WorkKindCode,
+					WorkKind:      c.WorkKind,
 					Name:          "Расходы разные. " + st.Name,
 					OperationDate: closeDate,
 					DelayDays:     0,
@@ -316,7 +296,6 @@ func (s *BudgetService) DeleteSnapshot(ctx context.Context, snapshotID string) e
 	return s.repo.DeleteSnapshot(ctx, snapshotID)
 }
 
-// GetPlanByID возвращает снимок и его строки по ID снимка.
 func (s *BudgetService) GetPlanByID(ctx context.Context, snapshotID string) (*models.BudgetPlanSnapshot, []models.BudgetPlanLine, error) {
 	snapshot, err := s.repo.GetSnapshotByID(ctx, snapshotID)
 	if err != nil || snapshot == nil {
@@ -330,7 +309,6 @@ func (s *BudgetService) GetPlanByID(ctx context.Context, snapshotID string) (*mo
 	return snapshot, lines, nil
 }
 
-// SetActiveSnapshot делает снимок активным.
 func (s *BudgetService) SetActiveSnapshot(ctx context.Context, contractID, snapshotID string) error {
 	return s.repo.SetActiveSnapshot(ctx, contractID, snapshotID)
 }
@@ -347,22 +325,18 @@ func (s *BudgetService) GetActivePlanTotals(ctx context.Context, contractID stri
 	return s.repo.GetActivePlanTotals(ctx, contractID)
 }
 
-// GenerateFactFromPlan генерирует фактические строки на основе активного плана.
 func (s *BudgetService) GenerateFactFromPlan(ctx context.Context, contractID string) error {
 	return s.repo.GenerateFactFromPlan(ctx, contractID)
 }
 
-// GetFactLines получает фактические строки договора.
 func (s *BudgetService) GetFactLines(ctx context.Context, contractID string) ([]models.BudgetFactLine, error) {
 	return s.repo.GetFactLines(ctx, contractID)
 }
 
-// UpdateFactLine обновляет конкретную фактическую строку.
 func (s *BudgetService) UpdateFactLine(ctx context.Context, id string, factIncome, factExpense float64, isConfirmed bool) error {
 	return s.repo.UpdateFactLine(ctx, id, factIncome, factExpense, isConfirmed)
 }
 
-// DeleteFact полностью удаляет факт по договору.
 func (s *BudgetService) DeleteFact(ctx context.Context, contractID string) error {
 	return s.repo.DeleteFact(ctx, contractID)
 }
@@ -407,11 +381,14 @@ func (s *BudgetService) GetPlanFactSummary(ctx context.Context, contractID strin
 	return s.repo.GetPlanFactSummary(ctx, contractID, onlyConfirmed)
 }
 
-// AutoConfirmSalaryAndOverhead квитирует ЗП и Накладные за текущий и прошлые месяцы.
 func (s *BudgetService) AutoConfirmSalaryAndOverhead(ctx context.Context, contractID string) error {
 	return s.repo.AutoConfirmSalaryAndOverhead(ctx, contractID)
 }
 
 func (s *BudgetService) DeleteFactLine(ctx context.Context, id string) error {
 	return s.repo.DeleteFactLine(ctx, id)
+}
+
+func (s *BudgetService) AppendMissingFactLinesFromPlan(ctx context.Context, contractID string) error {
+	return s.repo.AppendMissingFactLinesFromPlan(ctx, contractID)
 }

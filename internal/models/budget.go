@@ -41,7 +41,7 @@ type BudgetPlanLine struct {
 	StageGUID     *string
 	StageNumber   string
 	StageName     string
-	WorkKindCode  string
+	WorkKind      string
 	Name          string
 	OperationDate time.Time
 	DelayDays     int
@@ -61,7 +61,7 @@ type BudgetFactLine struct {
 	StageGUID     *string   `json:"stage_guid"`
 	StageNumber   string    `json:"stage_number"`
 	StageName     string    `json:"stage_name"`
-	WorkKindCode  string    `json:"work_kind_code"`
+	WorkKind      string    `json:"work_kind"`
 	Name          string    `json:"name"`
 	OperationDate time.Time `json:"operation_date"`
 	DelayDays     int       `json:"delay_days"`

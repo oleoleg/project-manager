@@ -5,7 +5,7 @@ import "time"
 type StageCost struct {
 	GUID           string
 	StageGUID      string
-	WorkKindCode   string
+	WorkKind       string
 	Cost           float64
 	FOTPlan        float64
 	LaborDays      float64

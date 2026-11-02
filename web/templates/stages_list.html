@@ -100,7 +100,7 @@
             <td class="cell-stage">
                 <div class="stage-name">{{ .Name }}</div>
                 <div class="stage-tags">
-                    <span class="tag tag-work">{{ call $.WorkKindName .WorkKindCode }}</span>
+                    <span class="tag tag-work">{{ .WorkKind }}</span>
                     <span class="tag tag-status tag-status-{{ .StatusCode }}">{{ call $.StatusName .StatusCode }}</span>
                     {{ if .ResponsiblePerson }}
                         <span class="tag tag-resp">{{ .ResponsiblePerson }}</span>

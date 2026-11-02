@@ -139,17 +139,6 @@ func startHTTPServer(stopCh <-chan struct{}) {
 		"addVAT": func(v float64, vatPercent float64) float64 {
 			return v * (1 + vatPercent/100.0)
 		},
-		"isComplexWork": func(code string) bool {
-			return code == "complex"
-		},
-		"workKindLabel": func(list []models.WorkKindRef, code string) string {
-			for _, w := range list {
-				if w.Code == code {
-					return w.Name
-				}
-			}
-			return code
-		},
 		"moneyOrBlur": func(u *models.User, v float64) template.HTML {
 			if u != nil && u.HideFinancials {
 				return template.HTML(`<span class="money-blur" title="Скрыто">•••••••</span>`)
@@ -363,6 +352,7 @@ func startHTTPServer(stopCh <-chan struct{}) {
 			r.Post("/contracts/{id}/budget/fact/save-form", budgetH.FactSaveForm)
 			r.Post("/contracts/{id}/budget/fact/delete-row", budgetH.FactDeleteRow)
 			r.Post("/contracts/{id}/budget/fact/auto-confirm", budgetH.FactAutoConfirmAutoRows)
+			r.Post("/contracts/{id}/budget/fact/append", budgetH.FactAppendFromPlan)
 
 			// Сравнить Бюджет Факт vs План
 			r.Get("/contracts/{id}/budget/compare", budgetH.PlanFactIndex)

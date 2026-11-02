@@ -25,7 +25,7 @@ func NewStageRepo(pool *pgxpool.Pool) *StageRepo {
 const stageColumns = `
 	guid, contract_id, row_order, stage_number, name, cost, closed_by_acts, closed_by_acts_manual,
 	vat_percent, advance_percent, start_conditions, end_conditions,
-	close_date_plan, responsible_person, status_code, work_kind_code, note,
+	close_date_plan, responsible_person, status_code, work_kind, note,
 	created_at, updated_at
 `
 
@@ -34,7 +34,7 @@ func scanStage(row pgx.Row, s *models.Stage) error {
 		&s.GUID, &s.ContractID, &s.RowOrder, &s.StageNumber, &s.Name, &s.Cost, &s.ClosedByActs,
 		&s.ClosedByActsManual,
 		&s.VATPercent, &s.AdvancePercent, &s.StartConditions, &s.EndConditions,
-		&s.CloseDatePlan, &s.ResponsiblePerson, &s.StatusCode, &s.WorkKindCode, &s.Note,
+		&s.CloseDatePlan, &s.ResponsiblePerson, &s.StatusCode, &s.WorkKind, &s.Note,
 		&s.CreatedAt, &s.UpdatedAt,
 	)
 }
@@ -79,13 +79,13 @@ func (r *StageRepo) Create(ctx context.Context, s *models.Stage) error {
 		INSERT INTO stages (
 			contract_id, row_order, stage_number, name, cost, closed_by_acts,
 			vat_percent, advance_percent, start_conditions, end_conditions,
-			close_date_plan, responsible_person, status_code, work_kind_code, note
+			close_date_plan, responsible_person, status_code, work_kind, note
 		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
 		RETURNING guid, created_at, updated_at
 	`,
 		s.ContractID, s.RowOrder, s.StageNumber, s.Name, s.Cost, s.ClosedByActs,
 		s.VATPercent, s.AdvancePercent, s.StartConditions, s.EndConditions,
-		s.CloseDatePlan, s.ResponsiblePerson, s.StatusCode, s.WorkKindCode, s.Note,
+		s.CloseDatePlan, s.ResponsiblePerson, s.StatusCode, s.WorkKind, s.Note,
 	).Scan(&s.GUID, &s.CreatedAt, &s.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("create stage: %w", err)
@@ -108,7 +108,7 @@ func (r *StageRepo) Update(ctx context.Context, s *models.Stage) error {
 			close_date_plan = $11,
 			responsible_person = $12,
 			status_code = $13,
-			work_kind_code = $14,
+			work_kind = $14,
 			note = $15,
 			updated_at = NOW()
 		WHERE guid = $1
@@ -126,7 +126,7 @@ func (r *StageRepo) Update(ctx context.Context, s *models.Stage) error {
 		s.CloseDatePlan,
 		s.ResponsiblePerson,
 		s.StatusCode,
-		s.WorkKindCode,
+		s.WorkKind,
 		s.Note,
 	)
 	if err != nil {
@@ -168,26 +168,8 @@ func (r *StageRepo) ListStatuses(ctx context.Context) ([]models.StageStatusRef, 
 	return res, rows.Err()
 }
 
-func (r *StageRepo) ListWorkKinds(ctx context.Context) ([]models.WorkKindRef, error) {
-	rows, err := r.pool.Query(ctx, `SELECT code, name, is_complex FROM work_kinds ORDER BY name`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var res []models.WorkKindRef
-	for rows.Next() {
-		var w models.WorkKindRef
-		if err := rows.Scan(&w.Code, &w.Name, &w.IsComplex); err != nil {
-			return nil, err
-		}
-		res = append(res, w)
-	}
-	return res, rows.Err()
-}
-
 // --- contract_cards ---
 
-// EnsureCard создаёт запись в contract_cards, если её ещё нет.
 func (r *StageRepo) EnsureCard(ctx context.Context, contractID string) error {
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO contract_cards (contract_id)
@@ -223,7 +205,6 @@ func (r *StageRepo) UpdateCardOverhead(ctx context.Context, contractID string, p
 	return err
 }
 
-// NextRowOrder — следующий порядковый номер для нового этапа.
 func (r *StageRepo) NextRowOrder(ctx context.Context, contractID string) (int, error) {
 	var n int
 	err := r.pool.QueryRow(ctx, `
@@ -235,20 +216,16 @@ func (r *StageRepo) NextRowOrder(ctx context.Context, contractID string) (int, e
 	return n, nil
 }
 
-// StageTotals — итоги по договору.
-// Все суммы — без НДС. С НДС считаем в шаблоне или в отдельном методе.
 type StageTotals struct {
 	Count          int
 	TotalCost      float64
 	TotalClosed    float64
 	TotalRemaining float64
 
-	// То же самое, но с НДС по каждому этапу отдельно.
 	TotalCostVAT      float64
 	TotalClosedVAT    float64
 	TotalRemainingVAT float64
 
-	// Сумма затрат этапа (по stage_costs), без НДС.
 	TotalExpenses float64
 }
 
@@ -293,11 +270,7 @@ func (r *StageRepo) Totals(ctx context.Context, contractID string) (StageTotals,
 	return t, nil
 }
 
-// SwapOrder меняет row_order двух этапов одного договора.
-// Если сосед не найден (этап крайний) — ничего не делает.
 func (r *StageRepo) SwapOrder(ctx context.Context, contractID, guid string, direction int) error {
-	// direction: -1 вверх, +1 вниз
-
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
@@ -316,7 +289,6 @@ func (r *StageRepo) SwapOrder(ctx context.Context, contractID, guid string, dire
 		return fmt.Errorf("get current order: %w", err)
 	}
 
-	// Ищем соседа: ближайший меньший или больший row_order
 	var neighbourGUID string
 	var neighbourOrder int
 	if direction < 0 {
@@ -333,14 +305,12 @@ func (r *StageRepo) SwapOrder(ctx context.Context, contractID, guid string, dire
 		`, contractID, currentOrder).Scan(&neighbourGUID, &neighbourOrder)
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
-		// крайний — некуда двигать, это не ошибка
 		return nil
 	}
 	if err != nil {
 		return fmt.Errorf("find neighbour: %w", err)
 	}
 
-	// Меняем местами. Если row_order совпадают — не свапнем, используем промежуточное.
 	if currentOrder == neighbourOrder {
 		neighbourOrder = currentOrder + direction
 		_, err = tx.Exec(ctx, `UPDATE stages SET row_order = $2 WHERE guid = $1`, neighbourGUID, neighbourOrder)
@@ -359,7 +329,6 @@ func (r *StageRepo) SwapOrder(ctx context.Context, contractID, guid string, dire
 	return tx.Commit(ctx)
 }
 
-// ProblemStage — этап, который стоит показать в сводке «что не закрыто».
 type ProblemStage struct {
 	GUID              string
 	StageNumber       string
@@ -400,7 +369,6 @@ func (r *StageRepo) ProblemStages(ctx context.Context, contractID string) ([]Pro
 	return res, rows.Err()
 }
 
-// StageCostTotals — сумма затрат по каждому этапу.
 func (r *StageRepo) StageCostTotals(ctx context.Context, contractID string) (map[string]float64, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT sc.stage_guid,
@@ -434,7 +402,6 @@ func (r *StageRepo) StageCostTotals(ctx context.Context, contractID string) (map
 	return res, rows.Err()
 }
 
-// NormalizeOrder пересобирает row_order по порядку (1, 2, 3, ...).
 func (r *StageRepo) NormalizeOrder(ctx context.Context, contractID string) error {
 	_, err := r.pool.Exec(ctx, `
 		WITH ordered AS (
@@ -447,8 +414,6 @@ func (r *StageRepo) NormalizeOrder(ctx context.Context, contractID string) error
 	return err
 }
 
-// StageActSums — сумма актов по этапам: map stageGUID → сумма (без НДС).
-// Используется для проверки, что closed_by_acts подтверждён актами.
 func (r *StageRepo) StageActSums(ctx context.Context, contractID string) (map[string]float64, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT ast.stage_guid, COALESCE(SUM(ast.amount), 0)

@@ -29,11 +29,11 @@ func (s *StageCostService) ListByStage(ctx context.Context, stageGUID string) ([
 }
 
 func (s *StageCostService) Validate(c *models.StageCost) error {
-	c.WorkKindCode = strings.TrimSpace(c.WorkKindCode)
-	if c.WorkKindCode == "" {
+	c.WorkKind = strings.TrimSpace(c.WorkKind)
+	if c.WorkKind == "" {
 		return ErrStageCostWorkKindEmpty
 	}
-	if c.WorkKindCode == "complex" {
+	if c.WorkKind == "Комплексный" {
 		return ErrStageCostComplex
 	}
 	if c.Cost < 0 || c.FOTPlan < 0 || c.LaborDays < 0 || c.RatePerDay < 0 ||
@@ -44,8 +44,6 @@ func (s *StageCostService) Validate(c *models.StageCost) error {
 	return nil
 }
 
-// Recalculate пересчитывает ФОТп / т/з / ставку в зависимости от замочков.
-// Коэф не хранится — он вычисляется только при отображении.
 func (s *StageCostService) Recalculate(c *models.StageCost) {
 	locks := parseLocks(c.LockedField)
 
@@ -54,40 +52,28 @@ func (s *StageCostService) Recalculate(c *models.StageCost) {
 	hasRate := locks["rate_per_day"]
 
 	switch {
-	// --- Два замочка ---
 	case hasFOT && hasDays:
-		// зафиксированы ФОТп и т/з → ставка вычисляется
 		if c.LaborDays > 0 {
 			c.RatePerDay = c.FOTPlan / c.LaborDays
 		}
-
 	case hasFOT && hasRate:
-		// зафиксированы ФОТп и ставка → вычисляется т/з
 		if c.RatePerDay > 0 {
 			c.LaborDays = c.FOTPlan / c.RatePerDay
 		}
-
 	case hasDays && hasRate:
-		// зафиксированы т/з и ставка → вычисляется ФОТп
 		c.FOTPlan = c.LaborDays * c.RatePerDay
-
-	// --- Один замочек ---
 	case hasFOT:
 		if c.LaborDays > 0 {
 			c.RatePerDay = c.FOTPlan / c.LaborDays
 		}
-
 	case hasDays:
 		if c.LaborDays > 0 {
 			c.RatePerDay = c.FOTPlan / c.LaborDays
 		}
-
 	case hasRate:
 		if c.LaborDays > 0 {
 			c.FOTPlan = c.RatePerDay * c.LaborDays
 		}
-
-	// --- Ничего не зафиксировано ---
 	default:
 		if c.RatePerDay > 0 && c.LaborDays > 0 {
 			c.FOTPlan = c.RatePerDay * c.LaborDays
@@ -107,13 +93,12 @@ func parseLocks(s string) map[string]bool {
 }
 
 func (s *StageCostService) ReplaceForStage(ctx context.Context, stageGUID string, costs []models.StageCost) error {
-	// проверка дублей вида работы
 	seen := map[string]bool{}
 	for _, c := range costs {
-		if seen[c.WorkKindCode] {
+		if seen[c.WorkKind] {
 			return ErrStageCostDuplicateWorkKind
 		}
-		seen[c.WorkKindCode] = true
+		seen[c.WorkKind] = true
 	}
 
 	for i := range costs {

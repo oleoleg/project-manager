@@ -87,8 +87,8 @@
                                 <td></td>
                                 <td>
                                     <input type="hidden" name="cost_stage_guid[]" value="{{ $row.Stage.GUID }}">
-                                    <input type="hidden" name="cost_work_kind[]" value="{{ $row.Cost.WorkKindCode }}">
-                                    {{ workKindLabel $.WorkKinds $row.Cost.WorkKindCode }}
+                                    <input type="hidden" name="cost_work_kind[]" value="{{ $row.Cost.WorkKind }}">
+                                    {{ $row.Cost.WorkKind }}
                                 </td>
                                 <td class="num">
                                     <input type="text" name="cost_amount[]" class="money-input fact-input" value="{{ if $row.Cost.Cost }}{{ printf "%.2f" $row.Cost.Cost }}{{ end }}">

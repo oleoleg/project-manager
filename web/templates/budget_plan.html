@@ -203,7 +203,7 @@
                             —
                         {{ end }}
                     </td>
-                    <td>{{ workKindLabel $.WorkKinds .WorkKindCode }}</td>
+                    <td>{{ .WorkKind }}</td>
                     <td class="num">{{ money .Cost }}</td>
                     <td class="num">{{ money .FOTPlan }}</td>
                     <td class="num" style="color: var(--text-muted);">
@@ -277,9 +277,9 @@
             {{ $totalBalance := 0.0 }}
             
             {{ range .PlanLines }}
-                <tr data-work="{{ .WorkKindCode }}" data-type="{{ .OperationType }}" data-date="{{ .OperationDate.Unix }}" data-stage="{{ .StageNumber }}" data-stage-name="{{ .StageNumber }} — {{ .StageName }}">
+                <tr data-work="{{ .WorkKind }}" data-type="{{ .OperationType }}" data-date="{{ .OperationDate.Unix }}" data-stage="{{ .StageNumber }}" data-stage-name="{{ .StageNumber }} — {{ .StageName }}">
                     <td style="text-align: center; color: var(--text-muted);">{{ .StageNumber }}</td>
-                    <td>{{ workKindLabel $.WorkKinds .WorkKindCode }}</td>
+                    <td>{{ .WorkKind }}</td>
                     <td>{{ .Name }}</td>
                     <td>{{ .OperationDate.Format "02.01.2006" }}</td>
                     <td>{{ .DelayDays }}</td>

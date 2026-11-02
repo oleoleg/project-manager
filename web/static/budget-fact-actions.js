@@ -79,7 +79,7 @@ function filterWorkKinds(selectEl) {
         workKindSelect.selectedIndex = 1; // 0-й это "— выберите —"
     }
 
-    const wkhidden = row.querySelector('input[name="work_kind_code[]"]');
+    const wkhidden = row.querySelector('input[name="work_kind[]"]');
     if (wkhidden) wkhidden.value = workKindSelect.value;
 }
 
@@ -157,7 +157,7 @@ function addNewRow(opType, event) {
         <td>
             <input type="hidden" name="fact_id[]" value="">
             <input type="hidden" name="stage_guid[]" value="">
-            <input type="hidden" name="work_kind_code[]" class="workkind-hidden" value="">
+            <input type="hidden" name="work_kind[]" class="workkind-hidden" value="">
             <select class="fact-input workkind-select">
                 ${workKindsHTML}
             </select>
@@ -228,14 +228,14 @@ function addNewRow(opType, event) {
             if (wkSelect.options.length > 1) {
                 wkSelect.selectedIndex = 1; // 0-й это скрытый "— выберите —"
             }
-            const wkhidden = newRow.querySelector('input[name="work_kind_code[]"]');
+            const wkhidden = newRow.querySelector('input[name="work_kind[]"]');
             if (wkhidden) wkhidden.value = wkSelect.value;
         }
     }
     
-    // Принудительно обновляем скрытое поле work_kind_code из селекта
+    // Принудительно обновляем скрытое поле work_kind из селекта
     const wkSelect = newRow.querySelector('.workkind-select');
-    const wkhidden = newRow.querySelector('input[name="work_kind_code[]"]');
+    const wkhidden = newRow.querySelector('input[name="work_kind[]"]');
     if (wkSelect && wkhidden) {
         wkhidden.value = wkSelect.value;
         // Добавляем обработчик для ручного выбора
