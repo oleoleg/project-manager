@@ -304,6 +304,7 @@ func (h *BudgetHandler) SaveSettings(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/contracts/"+contractID+"/budget?flash=Настройки+сохранены", http.StatusSeeOther)
 }
 
+// DeleteSnapshot удаляет снимок (факт при этом не трогаем, так как строки плана не удаляются)
 func (h *BudgetHandler) DeleteSnapshot(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "id")
 	snapshotID := chi.URLParam(r, "snapshotID")
@@ -316,23 +317,18 @@ func (h *BudgetHandler) DeleteSnapshot(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/contracts/"+contractID+"/budget?flash=Снимок+удален", http.StatusSeeOther)
 }
 
+// ActivateSnapshot делает снимок активным и восстанавливает данные
 func (h *BudgetHandler) ActivateSnapshot(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "id")
 	snapshotID := chi.URLParam(r, "snapshotID")
 
-	// Восстанавливаем данные из снимка
+	// Восстанавливаем данные из снимка (этапы, затраты, строки плана)
 	if err := h.svc.RestoreFromSnapshot(r.Context(), contractID, snapshotID); err != nil {
 		log.Printf("restore from snapshot: %v", err)
-		http.Error(w, "Ошибка восстановления данных из снимка", http.StatusInternalServerError)
+		http.Error(w, "Ошибка восстановления данных из снимка: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// Делаем его активным
-	if err := h.svc.SetActiveSnapshot(r.Context(), contractID, snapshotID); err != nil {
-		log.Printf("activate snapshot: %v", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
 	http.Redirect(w, r, "/contracts/"+contractID+"/budget?flash=Снимок+активирован+и+данные+восстановлены", http.StatusSeeOther)
 }
 

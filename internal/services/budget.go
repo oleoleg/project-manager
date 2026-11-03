@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -39,6 +40,7 @@ func (s *BudgetService) SaveSettings(ctx context.Context, settings models.Budget
 	return s.repo.SaveSettings(ctx, &settings)
 }
 
+// GetLatestPlan возвращает последний (активный) план и его строки из budget_plan_lines
 func (s *BudgetService) GetLatestPlan(ctx context.Context, contractID string) (*models.BudgetPlanSnapshot, []models.BudgetPlanLine, error) {
 	snapshot, err := s.repo.GetLatestSnapshot(ctx, contractID)
 	if err != nil {
@@ -48,9 +50,38 @@ func (s *BudgetService) GetLatestPlan(ctx context.Context, contractID string) (*
 		return nil, nil, nil
 	}
 
-	lines, err := s.repo.GetPlanLines(ctx, snapshot.ID)
+	// Строки берем из активной таблицы
+	lines, err := s.repo.GetPlanLines(ctx)
 	if err != nil {
 		return nil, nil, err
+	}
+	return snapshot, lines, nil
+}
+
+// GetPlanByID возвращает снимок и его строки (если снимок не активен, строки парсятся из JSON)
+func (s *BudgetService) GetPlanByID(ctx context.Context, snapshotID string) (*models.BudgetPlanSnapshot, []models.BudgetPlanLine, error) {
+	snapshot, err := s.repo.GetSnapshotByID(ctx, snapshotID)
+	if err != nil || snapshot == nil {
+		return nil, nil, err
+	}
+
+	// Если снимок активен, берем строки из бюджетной таблицы
+	if snapshot.IsActive {
+		lines, err := s.repo.GetPlanLines(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		return snapshot, lines, nil
+	}
+
+	// Если снимок не активен, достаем строки из plan_data_snapshot (JSON)
+	var lines []models.BudgetPlanLine
+	if len(snapshot.PlanDataSnapshot) > 0 {
+		_ = json.Unmarshal(snapshot.PlanDataSnapshot, &lines)
+	}
+	// Если JSON пуст, возвращаем пустой массив
+	if lines == nil {
+		lines = []models.BudgetPlanLine{}
 	}
 	return snapshot, lines, nil
 }
@@ -294,23 +325,6 @@ func (s *BudgetService) GetAllSnapshots(ctx context.Context, contractID string) 
 
 func (s *BudgetService) DeleteSnapshot(ctx context.Context, snapshotID string) error {
 	return s.repo.DeleteSnapshot(ctx, snapshotID)
-}
-
-func (s *BudgetService) GetPlanByID(ctx context.Context, snapshotID string) (*models.BudgetPlanSnapshot, []models.BudgetPlanLine, error) {
-	snapshot, err := s.repo.GetSnapshotByID(ctx, snapshotID)
-	if err != nil || snapshot == nil {
-		return nil, nil, err
-	}
-
-	lines, err := s.repo.GetPlanLines(ctx, snapshot.ID)
-	if err != nil {
-		return nil, nil, err
-	}
-	return snapshot, lines, nil
-}
-
-func (s *BudgetService) SetActiveSnapshot(ctx context.Context, contractID, snapshotID string) error {
-	return s.repo.SetActiveSnapshot(ctx, contractID, snapshotID)
 }
 
 func (s *BudgetService) ApproveSnapshot(ctx context.Context, contractID string, snapshotID string, userID int64) error {

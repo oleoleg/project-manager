@@ -29,15 +29,15 @@ type BudgetPlanSnapshot struct {
 	Settings           []byte
 	StageCostsSnapshot []byte
 	StageDataSnapshot  []byte
+	PlanDataSnapshot   []byte
 	ApprovedBy         *int64
 	ApprovedAt         *time.Time
 	ApproverName       string
 }
 
-// BudgetPlanLine — строка сгенерированного ФинПлана.
+// BudgetPlanLine — строка сгенерированного активного ФинПлана.
 type BudgetPlanLine struct {
 	ID            string
-	SnapshotID    string
 	StageGUID     *string
 	StageNumber   string
 	StageName     string

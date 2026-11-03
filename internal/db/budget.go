@@ -105,38 +105,7 @@ func (r *BudgetRepo) GetLatestSnapshot(ctx context.Context, contractID string) (
 	return &s, nil
 }
 
-// GetPlanLines получает строки плана для конкретного снимка.
-func (r *BudgetRepo) GetPlanLines(ctx context.Context, snapshotID string) ([]models.BudgetPlanLine, error) {
-	rows, err := r.pool.Query(ctx, `
-		SELECT l.id, l.snapshot_id, l.stage_guid, COALESCE(s.stage_number, ''), COALESCE(s.name, ''), l.work_kind, l.name, 
-		       l.operation_date, l.delay_days, l.payment_date, l.income, l.expense, l.operation_type, l.note
-		FROM budget_plan_lines l
-		LEFT JOIN stages s ON s.guid = l.stage_guid
-		WHERE l.snapshot_id = $1
-		ORDER BY l.operation_date, l.id
-	`, snapshotID)
-	if err != nil {
-		return nil, fmt.Errorf("get plan lines: %w", err)
-	}
-	defer rows.Close()
-
-	var lines []models.BudgetPlanLine
-	for rows.Next() {
-		var l models.BudgetPlanLine
-		if err := rows.Scan(
-			&l.ID, &l.SnapshotID, &l.StageGUID, &l.StageNumber, &l.StageName, &l.WorkKind, &l.Name,
-			&l.OperationDate, &l.DelayDays, &l.PaymentDate, &l.Income, &l.Expense,
-			&l.OperationType, &l.Note,
-		); err != nil {
-			return nil, fmt.Errorf("scan plan line: %w", err)
-		}
-		l.Balance = l.Income - l.Expense
-		lines = append(lines, l)
-	}
-	return lines, rows.Err()
-}
-
-// CreateSnapshotWithLines создает снимок и сохраняет все его строки в транзакции.
+// CreateSnapshotWithLines создает снимок, сохраняя строки в JSON, а сами строки делает активными
 func (r *BudgetRepo) CreateSnapshotWithLines(ctx context.Context, contractID string, userID int64, note string, settings models.BudgetSettings, lines []models.BudgetPlanLine, costs []models.StageCost, stages []models.Stage) (string, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -148,25 +117,50 @@ func (r *BudgetRepo) CreateSnapshotWithLines(ctx context.Context, contractID str
 	settingsJSON, _ := json.Marshal(settings)
 	costsJSON, _ := json.Marshal(costs)
 	stagesJSON, _ := json.Marshal(stages)
+	// Обогащаем строки данными этапов (номер и название) перед сохранением в JSON
+	// Обогащаем строки данными этапов (номер и название) и пересчитываем баланс перед сохранением в JSON
+	stageMap := make(map[string]models.Stage)
+	for _, s := range stages {
+		stageMap[s.GUID] = s
+	}
+	for i := range lines {
+		if lines[i].StageGUID != nil {
+			if st, ok := stageMap[*lines[i].StageGUID]; ok {
+				lines[i].StageNumber = st.StageNumber
+				lines[i].StageName = st.Name
+			}
+		}
+		// Пересчитываем баланс для сохранения в JSON
+		lines[i].Balance = lines[i].Income - lines[i].Expense
+	}
+	planJSON, _ := json.Marshal(lines)
 
+	// 1. Создаем снимок
 	err = tx.QueryRow(ctx, `
-		INSERT INTO budget_plan_snapshots (contract_id, created_by, note, settings, stage_costs_snapshot, stage_data_snapshot) 
-		VALUES ($1, $2, $3, $4, $5, $6) RETURNING id
-	`, contractID, userID, note, settingsJSON, costsJSON, stagesJSON).Scan(&snapshotID)
+		INSERT INTO budget_plan_snapshots (contract_id, created_by, note, settings, stage_costs_snapshot, stage_data_snapshot, plan_data_snapshot) 
+		VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id
+	`, contractID, userID, note, settingsJSON, costsJSON, stagesJSON, planJSON).Scan(&snapshotID)
 	if err != nil {
 		return "", fmt.Errorf("create snapshot: %w", err)
 	}
 
+	// 2. Очищаем активные строки плана
+	_, err = tx.Exec(ctx, `DELETE FROM budget_plan_lines`)
+	if err != nil {
+		return "", fmt.Errorf("clear plan lines: %w", err)
+	}
+
+	// 3. Вставляем строки в активную таблицу
 	insertQuery := `
 		INSERT INTO budget_plan_lines (
-			snapshot_id, stage_guid, work_kind, name, operation_date, delay_days, 
+			stage_guid, work_kind, name, operation_date, delay_days, 
 			payment_date, income, expense, operation_type, note
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`
 
 	for _, l := range lines {
 		_, err := tx.Exec(ctx, insertQuery,
-			snapshotID, l.StageGUID, l.WorkKind, l.Name, l.OperationDate, l.DelayDays,
+			l.StageGUID, l.WorkKind, l.Name, l.OperationDate, l.DelayDays,
 			l.PaymentDate, l.Income, l.Expense, l.OperationType, l.Note,
 		)
 		if err != nil {
@@ -174,6 +168,7 @@ func (r *BudgetRepo) CreateSnapshotWithLines(ctx context.Context, contractID str
 		}
 	}
 
+	// 4. Переключаем активность снимков
 	_, err = tx.Exec(ctx, `UPDATE budget_plan_snapshots SET is_active = FALSE WHERE contract_id = $1`, contractID)
 	if err != nil {
 		return "", err
@@ -183,7 +178,7 @@ func (r *BudgetRepo) CreateSnapshotWithLines(ctx context.Context, contractID str
 		return "", err
 	}
 
-	// Перепривязываем ФинФакт к новому плану
+	// 5. Перепривязываем ФинФакт к новому плану
 	_, err = tx.Exec(ctx, `UPDATE budget_fact_lines SET plan_line_id = NULL WHERE contract_id = $1`, contractID)
 	if err != nil {
 		return "", err
@@ -192,15 +187,143 @@ func (r *BudgetRepo) CreateSnapshotWithLines(ctx context.Context, contractID str
 		UPDATE budget_fact_lines f
 		SET plan_line_id = p.id
 		FROM budget_plan_lines p
-		WHERE p.snapshot_id = $1 
-		  AND p.name = f.name 
-		  AND f.contract_id = $2
-	`, snapshotID, contractID)
+		WHERE p.name = f.name 
+		  AND f.contract_id = $1
+	`, contractID)
 	if err != nil {
 		return "", err
 	}
 
 	return snapshotID, tx.Commit(ctx)
+}
+
+// RestoreFromSnapshot активирует снимок: восстанавливает этапы, затраты и строки плана из JSON
+func (r *BudgetRepo) RestoreFromSnapshot(ctx context.Context, contractID string, snapshotID string) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	var stagesJSON, costsJSON, planJSON []byte
+	err = tx.QueryRow(ctx, `
+		SELECT COALESCE(stage_data_snapshot, '[]'::jsonb), COALESCE(stage_costs_snapshot, '[]'::jsonb), COALESCE(plan_data_snapshot, '[]'::jsonb)
+		FROM budget_plan_snapshots WHERE id = $1
+	`, snapshotID).Scan(&stagesJSON, &costsJSON, &planJSON)
+	if err != nil {
+		return err
+	}
+
+	var stages []models.Stage
+	var costs []models.StageCost
+	var lines []models.BudgetPlanLine
+	_ = json.Unmarshal(stagesJSON, &stages)
+	_ = json.Unmarshal(costsJSON, &costs)
+	_ = json.Unmarshal(planJSON, &lines)
+
+	// 1. Удаляем все текущие этапы (кроме тех, что есть в снимке, их обновим)
+	keepGUIDs := make(map[string]bool)
+	for _, s := range stages {
+		keepGUIDs[s.GUID] = true
+	}
+	existingStages, _, err := r.GetStagesForPlan(ctx, contractID)
+	if err != nil {
+		return err
+	}
+	for _, es := range existingStages {
+		if !keepGUIDs[es.GUID] {
+			// Обнуляем ссылки, чтобы не было ошибок внешнего ключа
+			_, _ = tx.Exec(ctx, `UPDATE budget_fact_lines SET stage_guid = NULL WHERE contract_id = $1 AND stage_guid = $2`, contractID, es.GUID)
+			_, _ = tx.Exec(ctx, `UPDATE budget_plan_lines SET stage_guid = NULL WHERE stage_guid = $1`, es.GUID)
+			_, _ = tx.Exec(ctx, `DELETE FROM stage_costs WHERE stage_guid = $1`, es.GUID)
+			_, _ = tx.Exec(ctx, `DELETE FROM stages WHERE guid = $1`, es.GUID)
+		}
+	}
+
+	// 2. Вставляем или обновляем этапы из снимка
+	for _, s := range stages {
+		_, err = tx.Exec(ctx, `
+			INSERT INTO stages (
+				guid, contract_id, row_order, stage_number, name, cost, closed_by_acts, closed_by_acts_manual,
+				vat_percent, advance_percent, start_conditions, end_conditions,
+				close_date_plan, responsible_person, status_code, work_kind, note
+			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+			ON CONFLICT (guid) DO UPDATE SET
+				row_order = EXCLUDED.row_order, stage_number = EXCLUDED.stage_number, name = EXCLUDED.name,
+				cost = EXCLUDED.cost, closed_by_acts = EXCLUDED.closed_by_acts, closed_by_acts_manual = EXCLUDED.closed_by_acts_manual,
+				vat_percent = EXCLUDED.vat_percent, advance_percent = EXCLUDED.advance_percent,
+				start_conditions = EXCLUDED.start_conditions, end_conditions = EXCLUDED.end_conditions,
+				close_date_plan = EXCLUDED.close_date_plan, responsible_person = EXCLUDED.responsible_person,
+				status_code = EXCLUDED.status_code, work_kind = EXCLUDED.work_kind, note = EXCLUDED.note
+		`, s.GUID, contractID, s.RowOrder, s.StageNumber, s.Name, s.Cost, s.ClosedByActs, s.ClosedByActsManual,
+			s.VATPercent, s.AdvancePercent, s.StartConditions, s.EndConditions,
+			s.CloseDatePlan, s.ResponsiblePerson, s.StatusCode, s.WorkKind, s.Note)
+		if err != nil {
+			return err
+		}
+	}
+
+	// 3. Перезаписываем затраты
+	_, err = tx.Exec(ctx, `DELETE FROM stage_costs WHERE stage_guid IN (SELECT guid FROM stages WHERE contract_id = $1)`, contractID)
+	if err != nil {
+		return err
+	}
+	for _, c := range costs {
+		_, err = tx.Exec(ctx, `
+			INSERT INTO stage_costs (
+				stage_guid, work_kind, cost, fot_plan, labor_days, rate_per_day, travel_expenses,
+				equipment_sale, equipment_cost, subcontract, commission, other_expenses, locked_field
+			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+		`, c.StageGUID, c.WorkKind, c.Cost, c.FOTPlan, c.LaborDays, c.RatePerDay, c.TravelExpenses,
+			c.EquipmentSale, c.EquipmentCost, c.Subcontract, c.Commission, c.OtherExpenses, c.LockedField)
+		if err != nil {
+			return err
+		}
+	}
+
+	// 4. Очищаем активные строки плана и вставляем из JSON
+	_, err = tx.Exec(ctx, `DELETE FROM budget_plan_lines`)
+	if err != nil {
+		return err
+	}
+	for _, l := range lines {
+		_, err = tx.Exec(ctx, `
+			INSERT INTO budget_plan_lines (
+				stage_guid, work_kind, name, operation_date, delay_days, payment_date, income, expense, operation_type, note
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		`, l.StageGUID, l.WorkKind, l.Name, l.OperationDate, l.DelayDays, l.PaymentDate, l.Income, l.Expense, l.OperationType, l.Note)
+		if err != nil {
+			return err
+		}
+	}
+
+	// 5. Перепривязываем ФинФакт по имени
+	_, err = tx.Exec(ctx, `UPDATE budget_fact_lines SET plan_line_id = NULL WHERE contract_id = $1`, contractID)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `
+		UPDATE budget_fact_lines f
+		SET plan_line_id = p.id
+		FROM budget_plan_lines p
+		WHERE p.name = f.name 
+		  AND f.contract_id = $1
+	`, contractID)
+	if err != nil {
+		return err
+	}
+
+	// 6. Делаем текущий снимок активным
+	_, err = tx.Exec(ctx, `UPDATE budget_plan_snapshots SET is_active = FALSE WHERE contract_id = $1`, contractID)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `UPDATE budget_plan_snapshots SET is_active = TRUE WHERE id = $1`, snapshotID)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
 }
 
 // GetStagesForPlan возвращает этапы договора и их затраты.
@@ -280,61 +403,49 @@ func (r *BudgetRepo) GetAllSnapshots(ctx context.Context, contractID string) ([]
 	return res, rows.Err()
 }
 
-// DeleteSnapshot удаляет снимок и все его строки.
+// DeleteSnapshot удаляет снимок (строки плана не трогаем, так как они активные)
 func (r *BudgetRepo) DeleteSnapshot(ctx context.Context, snapshotID string) error {
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(ctx)
-
-	// Сохраняем contract_id до удаления
-	var contractID string
-	err = tx.QueryRow(ctx, `SELECT contract_id FROM budget_plan_snapshots WHERE id = $1`, snapshotID).Scan(&contractID)
-	if err != nil {
-		return err // Если снимок не найден, дальше идти нет смысла
-	}
-
-	// 1. Отвязываем факт
-	_, err = tx.Exec(ctx, `UPDATE budget_fact_lines SET plan_line_id = NULL WHERE plan_line_id IN (SELECT id FROM budget_plan_lines WHERE snapshot_id = $1)`, snapshotID)
-	if err != nil {
-		return err
-	}
-
-	// 2. Удаляем снимок
-	_, err = tx.Exec(ctx, `DELETE FROM budget_plan_snapshots WHERE id = $1`, snapshotID)
-	if err != nil {
-		return err
-	}
-
-	// 3. Ищем активный снимок
-	var activeSnapshotID string
-	err = tx.QueryRow(ctx, `SELECT id FROM budget_plan_snapshots WHERE contract_id = $1 AND is_active = TRUE LIMIT 1`, contractID).Scan(&activeSnapshotID)
-
-	// Если нашли, привязываем по имени
-	if err == nil && activeSnapshotID != "" {
-		_, err = tx.Exec(ctx, `
-			UPDATE budget_fact_lines f
-			SET plan_line_id = p.id
-			FROM budget_plan_lines p
-			WHERE p.snapshot_id = $1 
-			  AND p.name = f.name 
-			  AND f.contract_id = $2
-		`, activeSnapshotID, contractID)
-		if err != nil {
-			return err
-		}
-	}
-
-	return tx.Commit(ctx)
+	_, err := r.pool.Exec(ctx, `DELETE FROM budget_plan_snapshots WHERE id = $1`, snapshotID)
+	return err
 }
 
-// GetSnapshotByID получает один снимок по ID.
+// GetPlanLines возвращает строки активного плана (те, что лежат в budget_plan_lines)
+func (r *BudgetRepo) GetPlanLines(ctx context.Context) ([]models.BudgetPlanLine, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT l.id, l.stage_guid, COALESCE(s.stage_number, ''), COALESCE(s.name, ''), l.work_kind, l.name, 
+		       l.operation_date, l.delay_days, l.payment_date, l.income, l.expense, l.operation_type, l.note
+		FROM budget_plan_lines l
+		LEFT JOIN stages s ON s.guid = l.stage_guid
+		ORDER BY l.operation_date, l.id
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("get plan lines: %w", err)
+	}
+	defer rows.Close()
+
+	var lines []models.BudgetPlanLine
+	for rows.Next() {
+		var l models.BudgetPlanLine
+		if err := rows.Scan(
+			&l.ID, &l.StageGUID, &l.StageNumber, &l.StageName, &l.WorkKind, &l.Name,
+			&l.OperationDate, &l.DelayDays, &l.PaymentDate, &l.Income, &l.Expense,
+			&l.OperationType, &l.Note,
+		); err != nil {
+			return nil, fmt.Errorf("scan plan line: %w", err)
+		}
+		l.Balance = l.Income - l.Expense
+		lines = append(lines, l)
+	}
+	return lines, rows.Err()
+}
+
+// GetSnapshotByID получает снимок по ID вместе с JSON-данными для просмотра
 func (r *BudgetRepo) GetSnapshotByID(ctx context.Context, snapshotID string) (*models.BudgetPlanSnapshot, error) {
 	row := r.pool.QueryRow(ctx, `
 		SELECT s.id, s.contract_id, s.created_at, s.created_by, COALESCE(u.full_name, '—'), 
 		       COALESCE(s.note, ''), COALESCE(s.is_active, false), COALESCE(s.settings, '{}'::jsonb), 
 		       COALESCE(s.stage_costs_snapshot, '[]'::jsonb), COALESCE(s.stage_data_snapshot, '[]'::jsonb),
+		       COALESCE(s.plan_data_snapshot, '[]'::jsonb),
 		       s.approved_by, s.approved_at, COALESCE(a.full_name, '—')
 		FROM budget_plan_snapshots s
 		LEFT JOIN users u ON u.id = s.created_by
@@ -343,13 +454,13 @@ func (r *BudgetRepo) GetSnapshotByID(ctx context.Context, snapshotID string) (*m
 	`, snapshotID)
 
 	var s models.BudgetPlanSnapshot
-	var settingsBytes, costsBytes, stagesBytes []byte
+	var settingsBytes, costsBytes, stagesBytes, planBytes []byte
 	var approvedAt *time.Time
 	var approvedBy *int64
 
 	err := row.Scan(
 		&s.ID, &s.ContractID, &s.CreatedAt, &s.CreatedBy, &s.CreatorName,
-		&s.Note, &s.IsActive, &settingsBytes, &costsBytes, &stagesBytes,
+		&s.Note, &s.IsActive, &settingsBytes, &costsBytes, &stagesBytes, &planBytes,
 		&approvedBy, &approvedAt, &s.ApproverName,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -361,6 +472,7 @@ func (r *BudgetRepo) GetSnapshotByID(ctx context.Context, snapshotID string) (*m
 	s.Settings = settingsBytes
 	s.StageCostsSnapshot = costsBytes
 	s.StageDataSnapshot = stagesBytes
+	s.PlanDataSnapshot = planBytes
 	s.ApprovedBy = approvedBy
 	s.ApprovedAt = approvedAt
 	return &s, nil
@@ -507,8 +619,8 @@ func (r *BudgetRepo) GenerateFactFromPlan(ctx context.Context, contractID string
 	// 3. Получаем строки плана
 	rows, err := tx.Query(ctx, `
 		SELECT id, stage_guid, work_kind, name, operation_date, delay_days, payment_date, operation_type, income, expense
-		FROM budget_plan_lines WHERE snapshot_id = $1
-	`, snapshotID)
+		FROM budget_plan_lines
+	`)
 	if err != nil {
 		return err
 	}
@@ -838,10 +950,9 @@ func (r *BudgetRepo) BatchUpdateFactLines(
 			_ = tx.QueryRow(ctx, `
 				SELECT p.id 
 				FROM budget_plan_lines p
-				JOIN budget_plan_snapshots s ON s.id = p.snapshot_id
-				WHERE s.contract_id = $1 AND s.is_active = TRUE AND p.name = $2
+				WHERE p.name = $1
 				LIMIT 1
-			`, contractID, name).Scan(&newPlanLineID)
+			`, name).Scan(&newPlanLineID)
 
 			// НОВАЯ СТРОКА
 			_, err := tx.Exec(ctx, `
@@ -879,10 +990,9 @@ func (r *BudgetRepo) BatchUpdateFactLines(
 				_ = tx.QueryRow(ctx, `
 					SELECT p.id 
 					FROM budget_plan_lines p
-					JOIN budget_plan_snapshots s ON s.id = p.snapshot_id
-					WHERE s.contract_id = $1 AND s.is_active = TRUE AND p.name = $2
+					WHERE p.name = $1
 					LIMIT 1
-				`, contractID, name).Scan(&newPlanLineID)
+				`, name).Scan(&newPlanLineID)
 
 				if newPlanLineID != nil {
 					// Если новый план найден — привязываем
@@ -903,119 +1013,6 @@ func (r *BudgetRepo) BatchUpdateFactLines(
 			if err != nil {
 				return err
 			}
-		}
-	}
-
-	return tx.Commit(ctx)
-}
-
-// RestoreFromSnapshot восстанавливает этапы и затраты из снимка
-func (r *BudgetRepo) RestoreFromSnapshot(ctx context.Context, contractID string, snapshotID string) error {
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(ctx)
-
-	var stagesJSON, costsJSON []byte
-	err = tx.QueryRow(ctx, `
-		SELECT COALESCE(stage_data_snapshot, '[]'::jsonb), COALESCE(stage_costs_snapshot, '[]'::jsonb)
-		FROM budget_plan_snapshots WHERE id = $1
-	`, snapshotID).Scan(&stagesJSON, &costsJSON)
-	if err != nil {
-		return err
-	}
-
-	var stages []models.Stage
-	var costs []models.StageCost
-	_ = json.Unmarshal(stagesJSON, &stages)
-	_ = json.Unmarshal(costsJSON, &costs)
-
-	// Собираем GUID этапов из снимка (для проверки, какие этапы должны остаться)
-	keepGUIDs := make(map[string]bool)
-	for _, s := range stages {
-		keepGUIDs[s.GUID] = true
-	}
-
-	// 1. Получаем текущие этапы, которых нет в снимке
-	existingStages, _, err := r.GetStagesForPlan(ctx, contractID)
-	if err != nil {
-		return err
-	}
-
-	for _, es := range existingStages {
-		if !keepGUIDs[es.GUID] {
-			// 2. Обнуляем ссылки в ФинФакте и ФинПлане, чтобы не было "висячих" связей
-			_, err = tx.Exec(ctx, `UPDATE budget_fact_lines SET stage_guid = NULL WHERE contract_id = $1 AND stage_guid = $2`, contractID, es.GUID)
-			if err != nil {
-				return err
-			}
-			_, err = tx.Exec(ctx, `UPDATE budget_plan_lines SET stage_guid = NULL WHERE stage_guid = $1`, es.GUID)
-			if err != nil {
-				return err
-			}
-
-			// 3. Удаляем затраты и сам этап
-			_, err = tx.Exec(ctx, `DELETE FROM stage_costs WHERE stage_guid = $1`, es.GUID)
-			if err != nil {
-				return err
-			}
-			_, err = tx.Exec(ctx, `DELETE FROM stages WHERE guid = $1`, es.GUID)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	// 4. Вставляем или обновляем этапы из снимка (с сохранением GUID)
-	for _, s := range stages {
-		_, err = tx.Exec(ctx, `
-			INSERT INTO stages (
-				guid, contract_id, row_order, stage_number, name, cost, closed_by_acts, closed_by_acts_manual,
-				vat_percent, advance_percent, start_conditions, end_conditions,
-				close_date_plan, responsible_person, status_code, work_kind, note
-			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
-			ON CONFLICT (guid) DO UPDATE SET
-				row_order = EXCLUDED.row_order,
-				stage_number = EXCLUDED.stage_number,
-				name = EXCLUDED.name,
-				cost = EXCLUDED.cost,
-				closed_by_acts = EXCLUDED.closed_by_acts,
-				closed_by_acts_manual = EXCLUDED.closed_by_acts_manual,
-				vat_percent = EXCLUDED.vat_percent,
-				advance_percent = EXCLUDED.advance_percent,
-				start_conditions = EXCLUDED.start_conditions,
-				end_conditions = EXCLUDED.end_conditions,
-				close_date_plan = EXCLUDED.close_date_plan,
-				responsible_person = EXCLUDED.responsible_person,
-				status_code = EXCLUDED.status_code,
-				work_kind = EXCLUDED.work_kind,
-				note = EXCLUDED.note
-		`, s.GUID, contractID, s.RowOrder, s.StageNumber, s.Name, s.Cost, s.ClosedByActs, s.ClosedByActsManual,
-			s.VATPercent, s.AdvancePercent, s.StartConditions, s.EndConditions,
-			s.CloseDatePlan, s.ResponsiblePerson, s.StatusCode, s.WorkKind, s.Note)
-		if err != nil {
-			return err
-		}
-	}
-
-	// 5. Удаляем все текущие затраты для этапов, которые остались
-	_, err = tx.Exec(ctx, `DELETE FROM stage_costs WHERE stage_guid IN (SELECT guid FROM stages WHERE contract_id = $1)`, contractID)
-	if err != nil {
-		return err
-	}
-
-	// 6. Вставляем затраты из снимка
-	for _, c := range costs {
-		_, err = tx.Exec(ctx, `
-			INSERT INTO stage_costs (
-				stage_guid, work_kind, cost, fot_plan, labor_days, rate_per_day, travel_expenses,
-				equipment_sale, equipment_cost, subcontract, commission, other_expenses, locked_field
-			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-		`, c.StageGUID, c.WorkKind, c.Cost, c.FOTPlan, c.LaborDays, c.RatePerDay, c.TravelExpenses,
-			c.EquipmentSale, c.EquipmentCost, c.Subcontract, c.Commission, c.OtherExpenses, c.LockedField)
-		if err != nil {
-			return err
 		}
 	}
 
@@ -1051,8 +1048,6 @@ func (r *BudgetRepo) GetPlanFactSummary(ctx context.Context, contractID string, 
 				SUM(l.expense) as expense,
 				SUM(l.income - l.expense) as balance
 			FROM budget_plan_lines l
-			JOIN budget_plan_snapshots s ON s.id = l.snapshot_id
-			WHERE s.contract_id = $1 AND s.is_active = TRUE
 			GROUP BY l.work_kind, l.operation_type
 		),
 		fact AS (
@@ -1158,8 +1153,8 @@ func (r *BudgetRepo) AppendMissingFactLinesFromPlan(ctx context.Context, contrac
 	// 3. Получаем строки плана, которых нет в факте
 	planRows, err := tx.Query(ctx, `
 		SELECT id, stage_guid, work_kind, name, operation_date, delay_days, payment_date, operation_type, income, expense
-		FROM budget_plan_lines WHERE snapshot_id = $1
-	`, snapshotID)
+		FROM budget_plan_lines
+	`)
 	if err != nil {
 		return err
 	}
