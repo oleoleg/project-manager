@@ -572,24 +572,17 @@ func (r *BudgetRepo) UnapproveSnapshot(ctx context.Context, snapshotID string) e
 	return err
 }
 
-// GetActivePlanTotals возвращает сумму затрат по активному снимку плана и флаг его утверждения.
+// GetActivePlanTotals возвращает сумму затрат по активному плану.
 func (r *BudgetRepo) GetActivePlanTotals(ctx context.Context, contractID string) (float64, bool, error) {
 	var total float64
 	var isApproved bool
 	err := r.pool.QueryRow(ctx, `
 		SELECT 
-			COALESCE(SUM(l.expense), 0),
-			COALESCE(s.approved_at IS NOT NULL, false)
-		FROM budget_plan_snapshots s
-		LEFT JOIN budget_plan_lines l ON l.snapshot_id = s.id
-		WHERE s.contract_id = $1 AND s.is_active = TRUE
-		GROUP BY s.id, s.approved_at
+			COALESCE((SELECT SUM(expense) FROM budget_plan_lines), 0),
+			COALESCE((SELECT approved_at IS NOT NULL FROM budget_plan_snapshots WHERE contract_id = $1 AND is_active = TRUE LIMIT 1), false)
 	`, contractID).Scan(&total, &isApproved)
 
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return 0, false, nil // Активного плана нет
-		}
 		return 0, false, err
 	}
 	return total, isApproved, nil
@@ -976,7 +969,7 @@ func (r *BudgetRepo) BatchUpdateFactLines(
 			_, err := tx.Exec(ctx, `
 				UPDATE budget_fact_lines 
 				SET stage_guid = $2, work_kind = $3, name = $4, operation_date = $5, delay_days = $6, payment_date = $7,
-				    fact_income = $8, fact_expense = $9, is_confirmed = $10, updated_at = NOW()
+					fact_income = $8, fact_expense = $9, is_confirmed = $10, updated_at = NOW()
 				WHERE id = $1
 			`, id, stageGUIDPtr, workKind, name, opDate, delay, payDate, inc, exp, confirmMap[id])
 			if err != nil {
@@ -1020,7 +1013,7 @@ func (r *BudgetRepo) BatchUpdateFactLines(
 }
 
 type PlanFactRow struct {
-	WorkKind      string // код вида работы (pir, ppo и т.д.)
+	WorkKind      string // код вида работы
 	OperationType string // тип операции
 	PlanIncome    float64
 	PlanExpense   float64
@@ -1224,4 +1217,54 @@ func (r *BudgetRepo) AppendMissingFactLinesFromPlan(ctx context.Context, contrac
 	}
 
 	return tx.Commit(ctx)
+}
+
+// GetFactCostTotalsByStage возвращает сумму фактических затрат (подтвержденных) по каждому этапу.
+func (r *BudgetRepo) GetFactCostTotalsByStage(ctx context.Context, contractID string) (map[string]float64, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT stage_guid, SUM(fact_expense) 
+		FROM budget_fact_lines 
+		WHERE contract_id = $1 AND is_confirmed = TRUE AND stage_guid IS NOT NULL
+		GROUP BY stage_guid
+	`, contractID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	res := make(map[string]float64)
+	for rows.Next() {
+		var guid string
+		var sum float64
+		if err := rows.Scan(&guid, &sum); err != nil {
+			return nil, err
+		}
+		res[guid] = sum
+	}
+	return res, rows.Err()
+}
+
+// GetPlanCostTotalsByStage возвращает сумму плановых затрат по каждому этапу из активного плана.
+func (r *BudgetRepo) GetPlanCostTotalsByStage(ctx context.Context, contractID string) (map[string]float64, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT stage_guid, SUM(expense) 
+		FROM budget_plan_lines 
+		WHERE stage_guid IS NOT NULL
+		GROUP BY stage_guid
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	res := make(map[string]float64)
+	for rows.Next() {
+		var guid string
+		var sum float64
+		if err := rows.Scan(&guid, &sum); err != nil {
+			return nil, err
+		}
+		res[guid] = sum
+	}
+	return res, rows.Err()
 }

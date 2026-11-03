@@ -25,6 +25,7 @@ type StageHandler struct {
 	contractSvc *services.ContractService
 	cpSvc       *services.CounterpartyService
 	actSvc      *services.ActService
+	budgetSvc   *services.BudgetService
 	tmpl        *template.Template
 }
 
@@ -34,11 +35,12 @@ func NewStageHandler(
 	contractSvc *services.ContractService,
 	cpSvc *services.CounterpartyService,
 	actSvc *services.ActService,
+	budgetSvc *services.BudgetService,
 	tmpl *template.Template,
 ) *StageHandler {
 	return &StageHandler{
 		svc: svc, costSvc: costSvc, contractSvc: contractSvc,
-		cpSvc: cpSvc, actSvc: actSvc, tmpl: tmpl,
+		cpSvc: cpSvc, actSvc: actSvc, budgetSvc: budgetSvc, tmpl: tmpl,
 	}
 }
 
@@ -88,8 +90,12 @@ func (h *StageHandler) List(w http.ResponseWriter, r *http.Request) {
 	totals, _ := h.svc.Totals(r.Context(), contractID)
 	card, _ := h.svc.GetCard(r.Context(), contractID)
 	cp, _ := h.cpSvc.GetByID(r.Context(), contract.CounterpartyID)
-	costTotals, _ := h.svc.StageCostTotals(r.Context(), contractID)
+	costTotals, _ := h.budgetSvc.GetPlanCostTotalsByStage(r.Context(), contractID)
 	actCounts, _ := h.actSvc.CountByContract(r.Context(), contractID)
+	factCostTotals, _ := h.budgetSvc.GetFactCostTotalsByStage(r.Context(), contractID)
+	factTotal, _ := h.budgetSvc.GetFactTotal(r.Context(), contractID)
+	factConfirmed, _ := h.budgetSvc.GetFactConfirmedTotal(r.Context(), contractID)
+	showDetails := r.URL.Query().Get("details") == "1"
 
 	data := h.commonData(r, "Этапы договора "+contractID)
 	data["Contract"] = contract
@@ -132,6 +138,11 @@ func (h *StageHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	data["VatSingle"] = vatSingle
 	data["VatMixed"] = vatMixed
+	data["FactCostTotals"] = factCostTotals
+	data["FactTotal"] = factTotal
+	data["FactConfirmed"] = factConfirmed
+	data["CostTotals"] = costTotals
+	data["ShowDetails"] = showDetails
 
 	h.render(w, "stages_list.html", data)
 }

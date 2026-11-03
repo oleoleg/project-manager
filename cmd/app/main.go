@@ -246,7 +246,7 @@ func startHTTPServer(stopCh <-chan struct{}) {
 	settingsH := handlers.NewSettingsHandler(userSvc, tmpl)
 	counterpartyH := handlers.NewCounterpartyHandler(counterpartySvc, tmpl)
 	contractH := handlers.NewContractHandler(contractSvc, counterpartySvc, stageSvc, budgetSvc, tmpl)
-	stageH := handlers.NewStageHandler(stageSvc, stageCostSvc, contractSvc, counterpartySvc, actSvc, tmpl)
+	stageH := handlers.NewStageHandler(stageSvc, stageCostSvc, contractSvc, counterpartySvc, actSvc, budgetSvc, tmpl)
 	adminUserH := handlers.NewAdminUserHandler(userSvc, tmpl)
 	actH := handlers.NewActHandler(actSvc, stageSvc, contractSvc, tmpl)
 	budgetH := handlers.NewBudgetHandler(budgetSvc, contractSvc, stageSvc, stageCostSvc, counterpartySvc, tmpl)

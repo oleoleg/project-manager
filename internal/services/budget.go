@@ -406,3 +406,11 @@ func (s *BudgetService) DeleteFactLine(ctx context.Context, id string) error {
 func (s *BudgetService) AppendMissingFactLinesFromPlan(ctx context.Context, contractID string) error {
 	return s.repo.AppendMissingFactLinesFromPlan(ctx, contractID)
 }
+
+func (s *BudgetService) GetFactCostTotalsByStage(ctx context.Context, contractID string) (map[string]float64, error) {
+	return s.repo.GetFactCostTotalsByStage(ctx, contractID)
+}
+
+func (s *BudgetService) GetPlanCostTotalsByStage(ctx context.Context, contractID string) (map[string]float64, error) {
+	return s.repo.GetPlanCostTotalsByStage(ctx, contractID)
+}
