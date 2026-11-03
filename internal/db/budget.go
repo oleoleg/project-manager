@@ -931,13 +931,43 @@ func (r *BudgetRepo) RestoreFromSnapshot(ctx context.Context, contractID string,
 	_ = json.Unmarshal(stagesJSON, &stages)
 	_ = json.Unmarshal(costsJSON, &costs)
 
-	// 1. Удаляем текущие затраты
-	_, err = tx.Exec(ctx, `DELETE FROM stage_costs WHERE stage_guid IN (SELECT guid FROM stages WHERE contract_id = $1)`, contractID)
+	// Собираем GUID этапов из снимка (для проверки, какие этапы должны остаться)
+	keepGUIDs := make(map[string]bool)
+	for _, s := range stages {
+		keepGUIDs[s.GUID] = true
+	}
+
+	// 1. Получаем текущие этапы, которых нет в снимке
+	existingStages, _, err := r.GetStagesForPlan(ctx, contractID)
 	if err != nil {
 		return err
 	}
 
-	// 2. Вставляем или обновляем этапы из снимка
+	for _, es := range existingStages {
+		if !keepGUIDs[es.GUID] {
+			// 2. Обнуляем ссылки в ФинФакте и ФинПлане, чтобы не было "висячих" связей
+			_, err = tx.Exec(ctx, `UPDATE budget_fact_lines SET stage_guid = NULL WHERE contract_id = $1 AND stage_guid = $2`, contractID, es.GUID)
+			if err != nil {
+				return err
+			}
+			_, err = tx.Exec(ctx, `UPDATE budget_plan_lines SET stage_guid = NULL WHERE stage_guid = $1`, es.GUID)
+			if err != nil {
+				return err
+			}
+
+			// 3. Удаляем затраты и сам этап
+			_, err = tx.Exec(ctx, `DELETE FROM stage_costs WHERE stage_guid = $1`, es.GUID)
+			if err != nil {
+				return err
+			}
+			_, err = tx.Exec(ctx, `DELETE FROM stages WHERE guid = $1`, es.GUID)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	// 4. Вставляем или обновляем этапы из снимка (с сохранением GUID)
 	for _, s := range stages {
 		_, err = tx.Exec(ctx, `
 			INSERT INTO stages (
@@ -969,7 +999,13 @@ func (r *BudgetRepo) RestoreFromSnapshot(ctx context.Context, contractID string,
 		}
 	}
 
-	// 3. Вставляем затраты из снимка
+	// 5. Удаляем все текущие затраты для этапов, которые остались
+	_, err = tx.Exec(ctx, `DELETE FROM stage_costs WHERE stage_guid IN (SELECT guid FROM stages WHERE contract_id = $1)`, contractID)
+	if err != nil {
+		return err
+	}
+
+	// 6. Вставляем затраты из снимка
 	for _, c := range costs {
 		_, err = tx.Exec(ctx, `
 			INSERT INTO stage_costs (
