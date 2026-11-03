@@ -38,6 +38,7 @@ type BudgetPlanSnapshot struct {
 // BudgetPlanLine — строка сгенерированного активного ФинПлана.
 type BudgetPlanLine struct {
 	ID            string
+	ContractID    string
 	StageGUID     *string
 	StageNumber   string
 	StageName     string

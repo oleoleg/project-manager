@@ -51,7 +51,7 @@ func (s *BudgetService) GetLatestPlan(ctx context.Context, contractID string) (*
 	}
 
 	// Строки берем из активной таблицы
-	lines, err := s.repo.GetPlanLines(ctx)
+	lines, err := s.repo.GetPlanLines(ctx, contractID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -67,7 +67,7 @@ func (s *BudgetService) GetPlanByID(ctx context.Context, snapshotID string) (*mo
 
 	// Если снимок активен, берем строки из бюджетной таблицы
 	if snapshot.IsActive {
-		lines, err := s.repo.GetPlanLines(ctx)
+		lines, err := s.repo.GetPlanLines(ctx, snapshot.ContractID)
 		if err != nil {
 			return nil, nil, err
 		}
