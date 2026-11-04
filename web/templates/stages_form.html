@@ -416,13 +416,13 @@
                 .then(r => r.json())
                 .then(data => {
                     const sum = data.sum || 0;
-                    if (window.formatMoney) {
-                        input.value = window.formatMoney(String(sum.toFixed(2)));
+                    if (window.inputMoney) {
+                        input.value = window.inputMoney(String(sum.toFixed(2)));
                     } else {
                         input.value = sum.toFixed(2);
                     }
                 })
-                .catch(() => {});
+                .catch((err) => console.error('Ошибка загрузки суммы актов:', err));
         }
     })();
 </script>

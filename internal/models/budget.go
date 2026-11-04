@@ -39,9 +39,9 @@ type BudgetPlanSnapshot struct {
 type BudgetPlanLine struct {
 	ID            string
 	ContractID    string
-	StageGUID     *string
 	StageNumber   string
 	StageName     string
+	StageRowOrder int
 	WorkKind      string
 	Name          string
 	OperationDate time.Time
@@ -59,9 +59,9 @@ type BudgetFactLine struct {
 	ID            string    `json:"id"`
 	ContractID    string    `json:"contract_id"`
 	PlanLineID    *string   `json:"plan_line_id"`
-	StageGUID     *string   `json:"stage_guid"`
 	StageNumber   string    `json:"stage_number"`
 	StageName     string    `json:"stage_name"`
+	StageRowOrder int       `json:"stage_row_order"`
 	WorkKind      string    `json:"work_kind"`
 	Name          string    `json:"name"`
 	OperationDate time.Time `json:"operation_date"`

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -34,7 +35,12 @@ func NewBudgetHandler(svc *services.BudgetService, contractSvc *services.Contrac
 
 func (h *BudgetHandler) Index(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "id")
-	contract, _ := h.contractSvc.GetByID(r.Context(), contractID)
+	contract, err := h.contractSvc.GetByID(r.Context(), contractID)
+	if err != nil || contract == nil {
+		log.Printf("budget index get contract %s: %v", contractID, err)
+		http.Error(w, "Договор не найден", http.StatusNotFound)
+		return
+	}
 
 	editMode := r.URL.Query().Get("edit") == "1"
 
@@ -91,21 +97,9 @@ func (h *BudgetHandler) Index(w http.ResponseWriter, r *http.Request) {
 		stagesMap[s.GUID] = s
 	}
 	workKinds, _ := h.stageSvc.WorkKinds(r.Context())
-	// Собираем доступные виды работ для каждого этапа
-	costs, _ := h.costSvc.GetAllCostsForContract(r.Context(), contractID)
-	stageWorkKinds := make(map[string][]string)
-	for _, c := range costs {
-		found := false
-		for _, wk := range stageWorkKinds[c.StageGUID] {
-			if wk == c.WorkKind {
-				found = true
-				break
-			}
-		}
-		if !found {
-			stageWorkKinds[c.StageGUID] = append(stageWorkKinds[c.StageGUID], c.WorkKind)
-		}
-	}
+
+	// Собираем доступные виды работ для каждого этапа через хелпер
+	stageWorkKinds := h.buildStageWorkKinds(r.Context(), contractID, stages)
 
 	stageWorkKindsJSON, _ := json.Marshal(stageWorkKinds)
 	workKindsJSON, _ := json.Marshal(workKinds)
@@ -144,28 +138,7 @@ func (h *BudgetHandler) Generate(w http.ResponseWriter, r *http.Request) {
 	note := r.FormValue("note")
 
 	// 1. СОХРАНЯЕМ НАСТРОЙКИ
-	startDate, _ := time.Parse("2006-01-02", r.FormValue("project_start_date"))
-	endDateStr := r.FormValue("project_end_date")
-	var endDate *time.Time
-	if endDateStr != "" {
-		if d, err := time.Parse("2006-01-02", endDateStr); err == nil {
-			endDate = &d
-		}
-	}
-	delayDays, _ := strconv.Atoi(r.FormValue("payment_delay_days"))
-	equipPct, _ := strconv.ParseFloat(r.FormValue("equip_payment_percent"), 64)
-	equipDelay, _ := strconv.Atoi(r.FormValue("equip_payment_delay"))
-	overhead, _ := strconv.ParseFloat(r.FormValue("overhead_rate"), 64)
-
-	settings := models.BudgetSettings{
-		ContractID:          contractID,
-		ProjectStartDate:    startDate,
-		ProjectEndDate:      endDate,
-		PaymentDelayDays:    delayDays,
-		EquipPaymentPercent: equipPct,
-		EquipPaymentDelay:   equipDelay,
-		OverheadRate:        overhead,
-	}
+	settings := parseSettingsFromForm(r, contractID)
 
 	if err := h.svc.SaveSettings(r.Context(), settings); err != nil {
 		log.Printf("save settings before generate: %v", err)
@@ -203,7 +176,12 @@ func (h *BudgetHandler) Generate(w http.ResponseWriter, r *http.Request) {
 // NewVersion отображает страницу создания новой версии плана
 func (h *BudgetHandler) NewVersion(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "id")
-	contract, _ := h.contractSvc.GetByID(r.Context(), contractID)
+	contract, err := h.contractSvc.GetByID(r.Context(), contractID)
+	if err != nil || contract == nil {
+		log.Printf("budget new version get contract %s: %v", contractID, err)
+		http.Error(w, "Договор не найден", http.StatusNotFound)
+		return
+	}
 
 	settings, _, _ := h.svc.GetSettings(r.Context(), contractID)
 	costs, _ := h.costSvc.GetAllCostsForContract(r.Context(), contractID)
@@ -270,30 +248,7 @@ func (h *BudgetHandler) SaveSettings(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "id")
 	_ = r.ParseForm()
 
-	startDate, _ := time.Parse("2006-01-02", r.FormValue("project_start_date"))
-	endDateStr := r.FormValue("project_end_date")
-
-	var endDate *time.Time
-	if endDateStr != "" {
-		if d, err := time.Parse("2006-01-02", endDateStr); err == nil {
-			endDate = &d
-		}
-	}
-
-	delayDays, _ := strconv.Atoi(r.FormValue("payment_delay_days"))
-	equipPct, _ := strconv.ParseFloat(r.FormValue("equip_payment_percent"), 64)
-	equipDelay, _ := strconv.Atoi(r.FormValue("equip_payment_delay"))
-	overhead, _ := strconv.ParseFloat(r.FormValue("overhead_rate"), 64)
-
-	s := models.BudgetSettings{
-		ContractID:          contractID,
-		ProjectStartDate:    startDate,
-		ProjectEndDate:      endDate,
-		PaymentDelayDays:    delayDays,
-		EquipPaymentPercent: equipPct,
-		EquipPaymentDelay:   equipDelay,
-		OverheadRate:        overhead,
-	}
+	s := parseSettingsFromForm(r, contractID)
 
 	if err := h.svc.SaveSettings(r.Context(), s); err != nil {
 		log.Printf("save settings: %v", err)
@@ -360,8 +315,20 @@ func (h *BudgetHandler) UnapproveSnapshot(w http.ResponseWriter, r *http.Request
 // FactIndex отображает страницу ФинФакта.
 func (h *BudgetHandler) FactIndex(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "id")
-	contract, _ := h.contractSvc.GetByID(r.Context(), contractID)
-	stages, _ := h.stageSvc.List(r.Context(), contractID)
+	contract, err := h.contractSvc.GetByID(r.Context(), contractID)
+	if err != nil || contract == nil {
+		log.Printf("budget fact get contract %s: %v", contractID, err)
+		http.Error(w, "Договор не найден", http.StatusNotFound)
+		return
+	}
+
+	stages, err := h.stageSvc.List(r.Context(), contractID)
+	if err != nil {
+		log.Printf("budget fact get stages %s: %v", contractID, err)
+		http.Error(w, "Ошибка загрузки этапов", http.StatusInternalServerError)
+		return
+	}
+
 	stagesMap := make(map[string]models.Stage)
 	for _, s := range stages {
 		stagesMap[s.GUID] = s
@@ -373,22 +340,36 @@ func (h *BudgetHandler) FactIndex(w http.ResponseWriter, r *http.Request) {
 		lines = nil
 	}
 
-	groupedLines := make(map[string][]models.BudgetFactLine)
-	var groupOrder []string
+	// Справочник порядка групп (чтобы "Платежи" были выше "Зарплаты")
 	orderMap := map[string]int{
 		"Платежи по договору": 1, "Закупка по договору": 2, "Зарплата сотрудникам": 3,
 		"Накладные": 4, "Командировки": 5, "Субподрядчики": 6, "Комиссия": 7, "Другое (расходы)": 8,
 	}
 
+	groupedLines := make(map[string][]models.BudgetFactLine)
+	seenTypes := make(map[string]bool)
+	var groupOrder []string
+
 	for _, l := range lines {
-		if _, exists := groupedLines[l.OperationType]; !exists {
-			groupOrder = append(groupOrder, l.OperationType)
+		opType := l.OperationType
+		if !seenTypes[opType] {
+			seenTypes[opType] = true
+			groupOrder = append(groupOrder, opType)
 		}
-		groupedLines[l.OperationType] = append(groupedLines[l.OperationType], l)
+		groupedLines[opType] = append(groupedLines[opType], l)
 	}
 
+	// Безопасная сортировка: если тип операции неизвестен, ставим его в конец (99)
 	sort.Slice(groupOrder, func(i, j int) bool {
-		return orderMap[groupOrder[i]] < orderMap[groupOrder[j]]
+		w1, ok1 := orderMap[groupOrder[i]]
+		if !ok1 {
+			w1 = 99
+		}
+		w2, ok2 := orderMap[groupOrder[j]]
+		if !ok2 {
+			w2 = 99
+		}
+		return w1 < w2
 	})
 
 	checkData, _ := h.svc.GetFactCheckData(r.Context(), contractID)
@@ -413,21 +394,9 @@ func (h *BudgetHandler) FactIndex(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	workKinds, _ := h.stageSvc.WorkKinds(r.Context())
-	// Собираем доступные виды работ для каждого этапа
-	costs, _ := h.costSvc.GetAllCostsForContract(r.Context(), contractID)
-	stageWorkKinds := make(map[string][]string)
-	for _, c := range costs {
-		found := false
-		for _, wk := range stageWorkKinds[c.StageGUID] {
-			if wk == c.WorkKind {
-				found = true
-				break
-			}
-		}
-		if !found {
-			stageWorkKinds[c.StageGUID] = append(stageWorkKinds[c.StageGUID], c.WorkKind)
-		}
-	}
+
+	// Собираем доступные виды работ для каждого этапа через хелпер
+	stageWorkKinds := h.buildStageWorkKinds(r.Context(), contractID, stages)
 
 	stageWorkKindsJSON, _ := json.Marshal(stageWorkKinds)
 	workKindsJSON, _ := json.Marshal(workKinds)
@@ -542,11 +511,6 @@ func (h *BudgetHandler) FactSaveBatch(w http.ResponseWriter, r *http.Request) {
 func (h *BudgetHandler) FactSaveForm(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "id")
 	_ = r.ParseForm()
-	log.Println("=== FactSaveForm CALLED ===")
-	log.Printf("DEBUG: ids=%d, stageGUIDs=%d", len(r.Form["fact_id[]"]), len(r.Form["stage_guid[]"]))
-	for i := 0; i < len(r.Form["fact_id[]"]); i++ {
-		log.Printf("DEBUG[%d]: id='%s', stage_guid='%s'", i, r.Form["fact_id[]"][i], r.Form["stage_guid[]"][i])
-	}
 
 	ids := r.Form["fact_id[]"]
 	names := r.Form["name[]"]
@@ -557,16 +521,9 @@ func (h *BudgetHandler) FactSaveForm(w http.ResponseWriter, r *http.Request) {
 	incExpenses := r.Form["fact_expense[]"]
 	workKinds := r.Form["work_kind[]"]
 	opTypes := r.Form["operation_type[]"]
-	stageGUIDs := r.Form["stage_guid[]"]
-	log.Printf("DEBUG: Received %d fact_ids, %d stage_guids", len(ids), len(stageGUIDs))
-	for i := 0; i < len(ids); i++ {
-		id := ids[i]
-		sg := ""
-		if i < len(stageGUIDs) {
-			sg = stageGUIDs[i]
-		}
-		log.Printf("DEBUG[%d]: fact_id='%s', stage_guid='%s'", i, id, sg)
-	}
+	stageNumbers := r.Form["stage_number[]"]
+	stageNames := r.Form["stage_name[]"]
+
 	n := len(ids)
 
 	pad := func(arr []string) []string {
@@ -589,17 +546,9 @@ func (h *BudgetHandler) FactSaveForm(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	for i := 0; i < len(ids); i++ {
-		wk := ""
-		if i < len(workKinds) {
-			wk = workKinds[i]
-		}
-		log.Printf("DEBUG[%d]: work_kind='%s'", i, wk)
-	}
-
 	err := h.svc.BatchUpdateFactLines(
 		r.Context(), contractID,
-		ids, pad(names), pad(workKinds), pad(opTypes), pad(stageGUIDs),
+		ids, pad(names), pad(workKinds), pad(opTypes), pad(stageNumbers), pad(stageNames),
 		pad(opDates), pad(delayDays), pad(payDates),
 		pad(incIncomes), pad(incExpenses), confirms,
 	)
@@ -653,10 +602,9 @@ func parseCostsFromBudgetForm(r *http.Request) []models.StageCost {
 		return ""
 	}
 
+	// Локальная обертка, чтобы не обрабатывать ошибку каждый раз (при ошибке вернет 0)
 	parseMoney := func(s string) float64 {
-		s = strings.ReplaceAll(s, " ", "")
-		s = strings.ReplaceAll(s, ",", ".")
-		v, _ := strconv.ParseFloat(s, 64)
+		v, _ := services.ParseMoney(s)
 		return v
 	}
 
@@ -683,16 +631,79 @@ func parseCostsFromBudgetForm(r *http.Request) []models.StageCost {
 	return res
 }
 
+// parseSettingsFromForm собирает настройки бюджета из формы
+func parseSettingsFromForm(r *http.Request, contractID string) models.BudgetSettings {
+	startDate, _ := time.Parse("2006-01-02", r.FormValue("project_start_date"))
+
+	endDateStr := r.FormValue("project_end_date")
+	var endDate *time.Time
+	if endDateStr != "" {
+		if d, err := time.Parse("2006-01-02", endDateStr); err == nil {
+			endDate = &d
+		}
+	}
+
+	delayDays, _ := strconv.Atoi(r.FormValue("payment_delay_days"))
+	equipPct, _ := strconv.ParseFloat(r.FormValue("equip_payment_percent"), 64)
+	equipDelay, _ := strconv.Atoi(r.FormValue("equip_payment_delay"))
+	overhead, _ := strconv.ParseFloat(r.FormValue("overhead_rate"), 64)
+
+	return models.BudgetSettings{
+		ContractID:          contractID,
+		ProjectStartDate:    startDate,
+		ProjectEndDate:      endDate,
+		PaymentDelayDays:    delayDays,
+		EquipPaymentPercent: equipPct,
+		EquipPaymentDelay:   equipDelay,
+		OverheadRate:        overhead,
+	}
+}
+
+// buildStageWorkKinds собирает список доступных видов работ для каждого этапа
+// по его номеру (StageNumber). Возвращает map[НомерЭтапа][]КодВидаРаботы.
+func (h *BudgetHandler) buildStageWorkKinds(ctx context.Context, contractID string, stages []models.Stage) map[string][]string {
+	stagesMap := make(map[string]models.Stage)
+	for _, s := range stages {
+		stagesMap[s.GUID] = s
+	}
+
+	costs, _ := h.costSvc.GetAllCostsForContract(ctx, contractID)
+	stageWorkKinds := make(map[string][]string)
+	for _, c := range costs {
+		if st, ok := stagesMap[c.StageGUID]; ok && st.StageNumber != "" {
+			// Проверяем, нет ли уже такого вида работ (чтобы не было дублей)
+			found := false
+			for _, wk := range stageWorkKinds[st.StageNumber] {
+				if wk == c.WorkKind {
+					found = true
+					break
+				}
+			}
+			if !found {
+				stageWorkKinds[st.StageNumber] = append(stageWorkKinds[st.StageNumber], c.WorkKind)
+			}
+		}
+	}
+	return stageWorkKinds
+}
+
 func (h *BudgetHandler) GetSummaryChart(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "id")
 	selectedSnapshotID := r.URL.Query().Get("snapshot")
 
 	var lines []models.BudgetPlanLine
+	var err error
 
 	if selectedSnapshotID != "" {
-		_, lines, _ = h.svc.GetPlanByID(r.Context(), selectedSnapshotID)
+		_, lines, err = h.svc.GetPlanByID(r.Context(), selectedSnapshotID)
 	} else {
-		_, lines, _ = h.svc.GetLatestPlan(r.Context(), contractID)
+		_, lines, err = h.svc.GetLatestPlan(r.Context(), contractID)
+	}
+
+	if err != nil {
+		log.Printf("get summary chart lines: %v", err)
+		http.Error(w, "Ошибка загрузки данных для графиков", http.StatusInternalServerError)
+		return
 	}
 
 	expenseSums := make(map[string]float64)
@@ -705,23 +716,26 @@ func (h *BudgetHandler) GetSummaryChart(w http.ResponseWriter, r *http.Request) 
 		totalIncome += l.Income
 		totalExpense += l.Expense
 
+		// В график затрат не включаем поступления от клиента (Платежи по договору)
 		if l.OperationType != "Платежи по договору" && l.Expense > 0 {
 			expenseSums[l.OperationType] += l.Expense
 			deptSums[l.WorkKind] += l.Expense
 		}
 	}
 
+	// Добавляем "Прибыль" в график затрат (как остаток)
 	profit := totalIncome - totalExpense
 	if profit != 0 {
 		expenseSums["Прибыль"] = profit
 	}
 
+	// Формируем ответ
 	resp := struct {
 		ExpensesChart    ChartData `json:"expenses_chart"`
 		DepartmentsChart ChartData `json:"departments_chart"`
 	}{
-		ExpensesChart:    ChartData{Labels: []string{}, Data: []float64{}},
-		DepartmentsChart: ChartData{Labels: []string{}, Data: []float64{}},
+		ExpensesChart:    ChartData{Labels: make([]string, 0, len(expenseSums)), Data: make([]float64, 0, len(expenseSums))},
+		DepartmentsChart: ChartData{Labels: make([]string, 0, len(deptSums)), Data: make([]float64, 0, len(deptSums))},
 	}
 
 	for k, v := range expenseSums {
@@ -735,7 +749,9 @@ func (h *BudgetHandler) GetSummaryChart(w http.ResponseWriter, r *http.Request) 
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		log.Printf("encode summary chart: %v", err)
+	}
 }
 
 type ChartData struct {
@@ -745,7 +761,12 @@ type ChartData struct {
 
 func (h *BudgetHandler) PlanFactIndex(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "id")
-	contract, _ := h.contractSvc.GetByID(r.Context(), contractID)
+	contract, err := h.contractSvc.GetByID(r.Context(), contractID)
+	if err != nil || contract == nil {
+		log.Printf("plan fact get contract %s: %v", contractID, err)
+		http.Error(w, "Договор не найден", http.StatusNotFound)
+		return
+	}
 
 	// Определяем режим (по умолчанию - только подтвержденные)
 	factMode := r.URL.Query().Get("fact")
@@ -761,7 +782,12 @@ func (h *BudgetHandler) PlanFactIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	workKinds, _ := h.stageSvc.WorkKinds(r.Context())
+	workKinds, err := h.stageSvc.WorkKinds(r.Context())
+	if err != nil {
+		log.Printf("get work kinds: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
 
 	// Группируем данные по видам работ для графика и итогов
 	type WorkKindSummary struct {
@@ -772,16 +798,18 @@ func (h *BudgetHandler) PlanFactIndex(w http.ResponseWriter, r *http.Request) {
 		Deviation  float64
 	}
 
-	// Считаем прибыль по видам работ (Сумма всех Балансов по этому виду работ)
+	// Справочник для перевода кода в имя
+	wkNameMap := make(map[string]string)
+	for _, wk := range workKinds {
+		wkNameMap[wk.Code] = wk.Name
+	}
+
 	wkMap := make(map[string]*WorkKindSummary)
 	for _, row := range summary {
 		if _, ok := wkMap[row.WorkKind]; !ok {
 			name := row.WorkKind
-			for _, wk := range workKinds {
-				if wk.Code == row.WorkKind {
-					name = wk.Name
-					break
-				}
+			if n, exists := wkNameMap[row.WorkKind]; exists {
+				name = n
 			}
 			wkMap[row.WorkKind] = &WorkKindSummary{Code: row.WorkKind, Name: name}
 		}
@@ -790,31 +818,27 @@ func (h *BudgetHandler) PlanFactIndex(w http.ResponseWriter, r *http.Request) {
 		wkMap[row.WorkKind].Deviation += row.Deviation
 	}
 
-	// Сортируем виды работ (по порядку как в Excel: ПИР, ППО, СМР, ПНР, Сборка, Продажа)
+	// Сортируем виды работ
 	order := map[string]int{"ПИР": 1, "ППО": 2, "СМР": 3, "ПНР": 4, "Сборка": 5, "Продажа": 6}
 
-	var wkList []*WorkKindSummary
+	wkList := make([]*WorkKindSummary, 0, len(wkMap))
 	for _, v := range wkMap {
 		wkList = append(wkList, v)
 	}
 
 	sort.Slice(wkList, func(i, j int) bool {
-		// Получаем вес (если кода нет в списке, ставим 99)
-		w1, ok1 := order[wkList[i].Code]
-		if !ok1 {
+		w1 := order[wkList[i].Code]
+		if w1 == 0 {
 			w1 = 99
 		}
-
-		w2, ok2 := order[wkList[j].Code]
-		if !ok2 {
+		w2 := order[wkList[j].Code]
+		if w2 == 0 {
 			w2 = 99
 		}
 
-		// Если веса разные — сортируем по весу
 		if w1 != w2 {
 			return w1 < w2
 		}
-		// Если веса одинаковые (например, оба 99) — сортируем по алфавиту (имени)
 		return wkList[i].Name < wkList[j].Name
 	})
 
@@ -829,7 +853,9 @@ func (h *BudgetHandler) PlanFactIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.tmpl.ExecuteTemplate(w, "budget_compare.html", data)
+	if err := h.tmpl.ExecuteTemplate(w, "budget_compare.html", data); err != nil {
+		log.Printf("render budget_compare: %v", err)
+	}
 }
 
 func (h *BudgetHandler) FactDeleteRow(w http.ResponseWriter, r *http.Request) {

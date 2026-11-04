@@ -444,7 +444,7 @@
 
     let currentStage = { contractID: '', stageGUID: '', manual: true };
 
-    function renderSummary(header, contractID, stageGUID) {
+        function renderSummary(header, contractID, stageGUID) {
         if (!header || !header.stage_guid) {
             closedInput.value = '';
             return;
@@ -456,8 +456,8 @@
         };
 
         // Заполняем поле
-        if (window.formatMoney) {
-            closedInput.value = window.formatMoney(String(header.closed_by_acts.toFixed(2)));
+        if (window.inputMoney) {
+            closedInput.value = window.inputMoney(header.closed_by_acts.toFixed(2));
         } else {
             closedInput.value = header.closed_by_acts.toFixed(2);
         }
@@ -508,8 +508,8 @@
                 .then(r => r.json())
                 .then(data => {
                     currentStage.manual = !!data.closed_by_acts_manual;
-                    if (window.formatMoney) {
-                        closedInput.value = window.formatMoney(String(data.closed_by_acts.toFixed(2)));
+                    if (window.inputMoney) {
+                        closedInput.value = window.inputMoney(data.closed_by_acts.toFixed(2));
                     } else {
                         closedInput.value = data.closed_by_acts.toFixed(2);
                     }

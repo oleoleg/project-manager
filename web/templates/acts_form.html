@@ -337,7 +337,7 @@
                 if (remaining <= 0) return;
 
                 input.value = remaining.toFixed(2);
-                if (window.formatMoney) input.value = window.formatMoney(input.value);
+                if (window.inputMoney) input.value = window.inputMoney(input.value);
                 recalc();
                 return;
             }

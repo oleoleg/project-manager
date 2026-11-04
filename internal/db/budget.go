@@ -15,6 +15,17 @@ import (
 	"github.com/oleoleg/project-manager/internal/models"
 )
 
+const (
+	OpTypePayment     = "Платежи по договору"
+	OpTypePurchase    = "Закупка по договору"
+	OpTypeSalary      = "Зарплата сотрудникам"
+	OpTypeOverhead    = "Накладные"
+	OpTypeTravel      = "Командировки"
+	OpTypeSubcontract = "Субподрядчики"
+	OpTypeCommission  = "Комиссия"
+	OpTypeOther       = "Другое (расходы)"
+)
+
 type BudgetRepo struct {
 	pool *pgxpool.Pool
 }
@@ -123,12 +134,6 @@ func (r *BudgetRepo) CreateSnapshotWithLines(ctx context.Context, contractID str
 		stageMap[s.GUID] = s
 	}
 	for i := range lines {
-		if lines[i].StageGUID != nil {
-			if st, ok := stageMap[*lines[i].StageGUID]; ok {
-				lines[i].StageNumber = st.StageNumber
-				lines[i].StageName = st.Name
-			}
-		}
 		// Пересчитываем баланс для сохранения в JSON
 		lines[i].Balance = lines[i].Income - lines[i].Expense
 	}
@@ -152,15 +157,15 @@ func (r *BudgetRepo) CreateSnapshotWithLines(ctx context.Context, contractID str
 	// 3. Вставляем строки в активную таблицу
 	insertQuery := `
 		INSERT INTO budget_plan_lines (
-			contract_id, stage_guid, work_kind, name, operation_date, delay_days, 
+			contract_id, stage_number, stage_name, work_kind, name, operation_date, delay_days, 
 			payment_date, income, expense, operation_type, note
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 	`
 
 	for _, l := range lines {
 		_, err := tx.Exec(ctx, insertQuery,
-			contractID, // <--- Передаем ID договора
-			l.StageGUID, l.WorkKind, l.Name, l.OperationDate, l.DelayDays,
+			contractID, l.StageNumber, l.StageName,
+			l.WorkKind, l.Name, l.OperationDate, l.DelayDays,
 			l.PaymentDate, l.Income, l.Expense, l.OperationType, l.Note,
 		)
 		if err != nil {
@@ -179,23 +184,7 @@ func (r *BudgetRepo) CreateSnapshotWithLines(ctx context.Context, contractID str
 	}
 
 	// 5. Перепривязываем ФинФакт к новому плану
-	_, err = tx.Exec(ctx, `UPDATE budget_fact_lines SET plan_line_id = NULL WHERE contract_id = $1`, contractID)
-	if err != nil {
-		return "", err
-	}
-
-	// Привязываем строго по 4 параметрам: Тип операции, Этап, Вид работы, Наименование
-	_, err = tx.Exec(ctx, `
-		UPDATE budget_fact_lines f
-		SET plan_line_id = p.id
-		FROM budget_plan_lines p
-		WHERE f.contract_id = $1
-		  AND p.contract_id = $1
-		  AND p.operation_type = f.operation_type
-		  AND p.work_kind = f.work_kind
-		  AND COALESCE(p.stage_guid, '') = COALESCE(f.stage_guid, '')
-		  AND p.name = f.name
-	`, contractID)
+	err = relinkFactToPlan(ctx, tx, contractID)
 	if err != nil {
 		return "", err
 	}
@@ -227,7 +216,7 @@ func (r *BudgetRepo) RestoreFromSnapshot(ctx context.Context, contractID string,
 	_ = json.Unmarshal(costsJSON, &costs)
 	_ = json.Unmarshal(planJSON, &lines)
 
-	// 1. Удаляем все текущие этапы (кроме тех, что есть в снимке, их обновим)
+	// 1. Удаляем все текущие этапы (кроме тех, что есть в снимке)
 	keepGUIDs := make(map[string]bool)
 	for _, s := range stages {
 		keepGUIDs[s.GUID] = true
@@ -238,9 +227,7 @@ func (r *BudgetRepo) RestoreFromSnapshot(ctx context.Context, contractID string,
 	}
 	for _, es := range existingStages {
 		if !keepGUIDs[es.GUID] {
-			// Обнуляем ссылки, чтобы не было ошибок внешнего ключа
-			_, _ = tx.Exec(ctx, `UPDATE budget_fact_lines SET stage_guid = NULL WHERE contract_id = $1 AND stage_guid = $2`, contractID, es.GUID)
-			_, _ = tx.Exec(ctx, `UPDATE budget_plan_lines SET stage_guid = NULL WHERE stage_guid = $1`, es.GUID)
+			// Удаляем затраты и сам этап
 			_, _ = tx.Exec(ctx, `DELETE FROM stage_costs WHERE stage_guid = $1`, es.GUID)
 			_, _ = tx.Exec(ctx, `DELETE FROM stages WHERE guid = $1`, es.GUID)
 		}
@@ -295,32 +282,16 @@ func (r *BudgetRepo) RestoreFromSnapshot(ctx context.Context, contractID string,
 	for _, l := range lines {
 		_, err = tx.Exec(ctx, `
 			INSERT INTO budget_plan_lines (
-				contract_id, stage_guid, work_kind, name, operation_date, delay_days, payment_date, income, expense, operation_type, note
-			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-		`, contractID, l.StageGUID, l.WorkKind, l.Name, l.OperationDate, l.DelayDays, l.PaymentDate, l.Income, l.Expense, l.OperationType, l.Note)
+				contract_id, stage_number, stage_name, work_kind, name, operation_date, delay_days, payment_date, income, expense, operation_type, note
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		`, contractID, l.StageNumber, l.StageName, l.WorkKind, l.Name, l.OperationDate, l.DelayDays, l.PaymentDate, l.Income, l.Expense, l.OperationType, l.Note)
 		if err != nil {
 			return err
 		}
 	}
 
 	// 5. Перепривязываем ФинФакт к новому плану
-	_, err = tx.Exec(ctx, `UPDATE budget_fact_lines SET plan_line_id = NULL WHERE contract_id = $1`, contractID)
-	if err != nil {
-		return err
-	}
-
-	// Привязываем строго по 4 параметрам: Тип операции, Этап, Вид работы, Наименование
-	_, err = tx.Exec(ctx, `
-		UPDATE budget_fact_lines f
-		SET plan_line_id = p.id
-		FROM budget_plan_lines p
-		WHERE f.contract_id = $1
-		  AND p.contract_id = $1
-		  AND p.operation_type = f.operation_type
-		  AND p.work_kind = f.work_kind
-		  AND COALESCE(p.stage_guid, '') = COALESCE(f.stage_guid, '')
-		  AND p.name = f.name
-	`, contractID)
+	err = relinkFactToPlan(ctx, tx, contractID)
 	if err != nil {
 		return err
 	}
@@ -416,18 +387,49 @@ func (r *BudgetRepo) GetAllSnapshots(ctx context.Context, contractID string) ([]
 }
 
 // DeleteSnapshot удаляет снимок (строки плана не трогаем, так как они активные)
+// В db/budget.go
 func (r *BudgetRepo) DeleteSnapshot(ctx context.Context, snapshotID string) error {
-	_, err := r.pool.Exec(ctx, `DELETE FROM budget_plan_snapshots WHERE id = $1`, snapshotID)
-	return err
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	// Узнаем, к какому договору относится этот снимок
+	var contractID string
+	err = tx.QueryRow(ctx, `SELECT contract_id FROM budget_plan_snapshots WHERE id = $1`, snapshotID).Scan(&contractID)
+	if err != nil {
+		return err // Если снимок не найден, выходим
+	}
+
+	// Удаляем сам снимок
+	_, err = tx.Exec(ctx, `DELETE FROM budget_plan_snapshots WHERE id = $1`, snapshotID)
+	if err != nil {
+		return err
+	}
+
+	// Проверяем, остались ли снимки у этого договора
+	var count int
+	err = tx.QueryRow(ctx, `SELECT COUNT(*) FROM budget_plan_snapshots WHERE contract_id = $1`, contractID).Scan(&count)
+	if err != nil {
+		return fmt.Errorf("count snapshots: %w", err)
+	}
+
+	// Если снимков больше нет — чистим активные строки плана для этого договора
+	if count == 0 {
+		_, _ = tx.Exec(ctx, `DELETE FROM budget_plan_lines WHERE contract_id = $1`, contractID)
+	}
+
+	return tx.Commit(ctx)
 }
 
 // GetPlanLines возвращает строки активного плана для конкретного договора
 func (r *BudgetRepo) GetPlanLines(ctx context.Context, contractID string) ([]models.BudgetPlanLine, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT l.id, l.contract_id, l.stage_guid, COALESCE(s.stage_number, ''), COALESCE(s.name, ''), l.work_kind, l.name, 
-		       l.operation_date, l.delay_days, l.payment_date, l.income, l.expense, l.operation_type, l.note
+		SELECT l.id, l.contract_id, l.stage_number, l.stage_name, COALESCE(s.row_order, 0) as stage_row_order, 
+		       l.work_kind, l.name, l.operation_date, l.delay_days, l.payment_date, l.income, l.expense, l.operation_type, l.note
 		FROM budget_plan_lines l
-		LEFT JOIN stages s ON s.guid = l.stage_guid
+		LEFT JOIN stages s ON s.contract_id = l.contract_id AND s.stage_number = l.stage_number
 		WHERE l.contract_id = $1
 		ORDER BY l.operation_date, l.id
 	`, contractID)
@@ -440,7 +442,7 @@ func (r *BudgetRepo) GetPlanLines(ctx context.Context, contractID string) ([]mod
 	for rows.Next() {
 		var l models.BudgetPlanLine
 		if err := rows.Scan(
-			&l.ID, &l.ContractID, &l.StageGUID, &l.StageNumber, &l.StageName, &l.WorkKind, &l.Name,
+			&l.ID, &l.ContractID, &l.StageNumber, &l.StageName, &l.StageRowOrder, &l.WorkKind, &l.Name,
 			&l.OperationDate, &l.DelayDays, &l.PaymentDate, &l.Income, &l.Expense,
 			&l.OperationType, &l.Note,
 		); err != nil {
@@ -489,49 +491,6 @@ func (r *BudgetRepo) GetSnapshotByID(ctx context.Context, snapshotID string) (*m
 	s.ApprovedBy = approvedBy
 	s.ApprovedAt = approvedAt
 	return &s, nil
-}
-
-// SetActiveSnapshot делает указанный снимок активным.
-func (r *BudgetRepo) SetActiveSnapshot(ctx context.Context, contractID, snapshotID string) error {
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(ctx)
-
-	// 1. Снимаем активность со всех снимков
-	_, err = tx.Exec(ctx, `UPDATE budget_plan_snapshots SET is_active = FALSE WHERE contract_id = $1`, contractID)
-	if err != nil {
-		return err
-	}
-
-	// 2. Делаем выбранный снимок активным
-	_, err = tx.Exec(ctx, `UPDATE budget_plan_snapshots SET is_active = TRUE WHERE id = $1`, snapshotID)
-	if err != nil {
-		return err
-	}
-
-	// 3. Перепривязываем ФинФакт к новому активному плану по имени
-	// Сначала отвязываем всё
-	_, err = tx.Exec(ctx, `UPDATE budget_fact_lines SET plan_line_id = NULL WHERE contract_id = $1`, contractID)
-	if err != nil {
-		return err
-	}
-
-	// Затем привязываем к строкам нового снимка по наименованию
-	_, err = tx.Exec(ctx, `
-		UPDATE budget_fact_lines f
-		SET plan_line_id = p.id
-		FROM budget_plan_lines p
-		WHERE p.snapshot_id = $1 
-		  AND p.name = f.name 
-		  AND f.contract_id = $2
-	`, snapshotID, contractID)
-	if err != nil {
-		return err
-	}
-
-	return tx.Commit(ctx)
 }
 
 // ApproveSnapshot утверждает снимок и делает его единственным утвержденным и активным.
@@ -624,7 +583,7 @@ func (r *BudgetRepo) GenerateFactFromPlan(ctx context.Context, contractID string
 
 	// 3. Получаем строки плана
 	rows, err := tx.Query(ctx, `
-		SELECT id, stage_guid, work_kind, name, operation_date, delay_days, payment_date, operation_type, income, expense
+		SELECT id, stage_number, stage_name, work_kind, name, operation_date, delay_days, payment_date, operation_type, income, expense
 		FROM budget_plan_lines
 		WHERE contract_id = $1
 	`, contractID)
@@ -634,23 +593,25 @@ func (r *BudgetRepo) GenerateFactFromPlan(ctx context.Context, contractID string
 	defer rows.Close()
 
 	type PlanLine struct {
-		ID        string
-		StageGUID *string
-		WorkKind  string
-		Name      string
-		OpDate    time.Time
-		DelayDays int
-		PayDate   time.Time
-		OpType    string
-		Income    float64
-		Expense   float64
+		ID          string
+		StageNumber string
+		StageName   string
+		WorkKind    string
+		Name        string
+		OpDate      time.Time
+		DelayDays   int
+		PayDate     time.Time
+		OpType      string
+		Income      float64
+		Expense     float64
 	}
 	var lines []PlanLine
 	for rows.Next() {
 		var l PlanLine
 		if err := rows.Scan(
 			&l.ID,
-			&l.StageGUID,
+			&l.StageNumber,
+			&l.StageName,
 			&l.WorkKind,
 			&l.Name,
 			&l.OpDate,
@@ -670,34 +631,35 @@ func (r *BudgetRepo) GenerateFactFromPlan(ctx context.Context, contractID string
 	now := time.Now()
 	insertQuery := `
 		INSERT INTO budget_fact_lines (
-			contract_id, plan_line_id, stage_guid, work_kind, name, operation_date, delay_days, payment_date, 
+			contract_id, plan_line_id, stage_number, stage_name, work_kind, name, operation_date, delay_days, payment_date, 
 			operation_type, fact_income, fact_expense, is_confirmed, is_manual_edit
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 	`
 
 	for _, l := range lines {
 		// Логика автоподтверждения для ЗП и Накладных
 		isConfirmed := false
-		if l.OpType == "Зарплата сотрудникам" || l.OpType == "Накладные" {
+		if l.OpType == OpTypeSalary || l.OpType == OpTypeOverhead {
 			if l.OpDate.Before(now) || l.OpDate.Format("2006-01") == now.Format("2006-01") {
 				isConfirmed = true
 			}
 		}
 
 		_, err := tx.Exec(ctx, insertQuery,
-			contractID,  // $1
-			l.ID,        // $2
-			l.StageGUID, // $3
-			l.WorkKind,  // $4
-			l.Name,      // $5
-			l.OpDate,    // $6
-			l.DelayDays, // $7
-			l.PayDate,   // $8
-			l.OpType,    // $9
-			l.Income,    // $10
-			l.Expense,   // $11
-			isConfirmed, // $12
-			false,       // $13
+			contractID,    // $1
+			l.ID,          // $2
+			l.StageNumber, // $3
+			l.StageName,   // $4
+			l.WorkKind,    // $5
+			l.Name,        // $6
+			l.OpDate,      // $7
+			l.DelayDays,   // $8
+			l.PayDate,     // $9
+			l.OpType,      // $10
+			l.Income,      // $11
+			l.Expense,     // $12
+			isConfirmed,   // $13
+			false,         // $14
 		)
 		if err != nil {
 			return err
@@ -710,15 +672,15 @@ func (r *BudgetRepo) GenerateFactFromPlan(ctx context.Context, contractID string
 // Метод получения списка факта
 func (r *BudgetRepo) GetFactLines(ctx context.Context, contractID string) ([]models.BudgetFactLine, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT f.id, f.contract_id, f.plan_line_id, f.stage_guid, COALESCE(s.stage_number, ''), COALESCE(s.name, ''), f.work_kind, f.name,  
-		       f.operation_date, f.delay_days, f.payment_date,
+		SELECT f.id, f.contract_id, f.plan_line_id, f.stage_number, f.stage_name, COALESCE(s.row_order, 0) as stage_row_order, 
+		       f.work_kind, f.name, f.operation_date, f.delay_days, f.payment_date,
 		       TRIM(f.operation_type) as operation_type, 
 		       COALESCE(p.income, 0) as plan_income, 
 		       COALESCE(p.expense, 0) as plan_expense, 
 		       f.fact_income, f.fact_expense, 
 		       f.is_confirmed, f.is_manual_edit, f.created_at, f.updated_at
 		FROM budget_fact_lines f
-		LEFT JOIN stages s ON s.guid = f.stage_guid
+		LEFT JOIN stages s ON s.contract_id = f.contract_id AND s.stage_number = f.stage_number
 		LEFT JOIN budget_plan_lines p ON p.id = f.plan_line_id
 		WHERE f.contract_id = $1
 		ORDER BY 
@@ -733,7 +695,7 @@ func (r *BudgetRepo) GetFactLines(ctx context.Context, contractID string) ([]mod
 				WHEN 'Другое (расходы)' THEN 8
 				ELSE 9
 			END,
-			f.operation_date, f.id
+			s.row_order, f.operation_date, f.id
 	`, contractID)
 	if err != nil {
 		return nil, err
@@ -744,10 +706,9 @@ func (r *BudgetRepo) GetFactLines(ctx context.Context, contractID string) ([]mod
 	for rows.Next() {
 		var l models.BudgetFactLine
 		var planLineID *string
-		var stageGUID *string
 
 		if err := rows.Scan(
-			&l.ID, &l.ContractID, &l.PlanLineID, &l.StageGUID, &l.StageNumber, &l.StageName,
+			&l.ID, &l.ContractID, &l.PlanLineID, &l.StageNumber, &l.StageName, &l.StageRowOrder,
 			&l.WorkKind, &l.Name, &l.OperationDate, &l.DelayDays, &l.PaymentDate,
 			&l.OperationType, &l.PlanIncome, &l.PlanExpense, &l.FactIncome, &l.FactExpense,
 			&l.IsConfirmed, &l.IsManualEdit, &l.CreatedAt, &l.UpdatedAt,
@@ -755,7 +716,6 @@ func (r *BudgetRepo) GetFactLines(ctx context.Context, contractID string) ([]mod
 			return nil, err
 		}
 		l.PlanLineID = planLineID
-		l.StageGUID = stageGUID
 		res = append(res, l)
 	}
 	return res, rows.Err()
@@ -878,7 +838,7 @@ func (r *BudgetRepo) UpdateFactLinesBatch(ctx context.Context, updates []FactUpd
 func (r *BudgetRepo) BatchUpdateFactLines(
 	ctx context.Context,
 	contractID string,
-	ids, names, workKindCodes, opTypes, stageGUIDs []string,
+	ids, names, workKindCodes, opTypes, stageNumbers, stageNames []string,
 	opDates, delayDays, payDates []string,
 	incIncomes, incExpenses, confirms []string,
 ) error {
@@ -917,7 +877,8 @@ func (r *BudgetRepo) BatchUpdateFactLines(
 	for i, id := range ids {
 		opType := getStr(opTypes, i)
 		workKind := getStr(workKindCodes, i)
-		stageGUID := getStr(stageGUIDs, i)
+		stageNumber := getStr(stageNumbers, i)
+		stageName := getStr(stageNames, i)
 		name := getStr(names, i)
 		opDateStr := getStr(opDates, i)
 		delayStr := getStr(delayDays, i)
@@ -940,17 +901,6 @@ func (r *BudgetRepo) BatchUpdateFactLines(
 			workKind = "Комплексный"
 		}
 
-		// Преобразуем пустой GUID в nil (NULL в БД)
-		var stageGUIDPtr *string
-		if len(stageGUID) == 36 { // UUID всегда 36 символов
-			stageGUIDPtr = &stageGUID
-		} else if id != "" {
-			// Если GUID не пришел с фронта (пустой или невалидный), берем текущий из базы, чтобы не затереть
-			var existingGUID *string
-			_ = tx.QueryRow(ctx, `SELECT stage_guid FROM budget_fact_lines WHERE id = $1`, id).Scan(&existingGUID)
-			stageGUIDPtr = existingGUID
-		}
-
 		if id == "" {
 			// Ищем подходящую строку в активном плане для новой строки факта
 			// Строго по 4 параметрам: Тип операции, Этап, Вид работы, Наименование
@@ -961,25 +911,21 @@ func (r *BudgetRepo) BatchUpdateFactLines(
 				WHERE p.contract_id = $1
 				  AND p.operation_type = $2
 				  AND p.work_kind = $3
-				  AND (
-				       (p.stage_guid IS NULL AND $4::text IS NULL)
-				       OR (p.stage_guid = $4::uuid)
-				  )
-				  AND p.name = $5
+				  AND p.name = $4
 				LIMIT 1
-			`, contractID, opType, workKind, stageGUIDPtr, name).Scan(&newPlanLineID)
+			`, contractID, opType, workKind, name).Scan(&newPlanLineID)
 			if err != nil && err != pgx.ErrNoRows {
-				return fmt.Errorf("ошибка поиска плана для новой строки (тип: %s, вид: %s, этап: %v, имя: %s): %w", opType, workKind, stageGUIDPtr, name, err)
+				return fmt.Errorf("ошибка поиска плана для новой строки (тип: %s, вид: %s, этап: %s, имя: %s): %w", opType, workKind, stageNumber, name, err)
 			}
 
 			// НОВАЯ СТРОКА
 			_, err = tx.Exec(ctx, `
 				INSERT INTO budget_fact_lines 
-					(contract_id, plan_line_id, stage_guid, work_kind, name, operation_date, delay_days, payment_date, operation_type, fact_income, fact_expense, is_confirmed)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-			`, contractID, newPlanLineID, stageGUIDPtr, workKind, name, opDate, delay, payDate, opType, inc, exp, confirmMap[id])
+					(contract_id, plan_line_id, stage_number, stage_name, work_kind, name, operation_date, delay_days, payment_date, operation_type, fact_income, fact_expense, is_confirmed)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+			`, contractID, newPlanLineID, stageNumber, stageName, workKind, name, opDate, delay, payDate, opType, inc, exp, confirmMap[id])
 			if err != nil && err != pgx.ErrNoRows {
-				return fmt.Errorf("ошибка поиска плана для новой строки (тип: %s, вид: %s, этап: %v, имя: %s): %w", opType, workKind, stageGUIDPtr, name, err)
+				return fmt.Errorf("ошибка поиска плана для новой строки (тип: %s, вид: %s, этап: %s, имя: %s): %w", opType, workKind, stageNumber, name, err)
 			}
 		} else {
 			// ОБНОВЛЕНИЕ
@@ -991,12 +937,12 @@ func (r *BudgetRepo) BatchUpdateFactLines(
 			_ = tx.QueryRow(ctx, `SELECT name, plan_line_id FROM budget_fact_lines WHERE id = $1`, id).Scan(&oldName, &oldPlanLineID)
 
 			// 2. Обновляем строку
-			_, err := tx.Exec(ctx, `
+			_, err = tx.Exec(ctx, `
 				UPDATE budget_fact_lines 
-				SET stage_guid = $2, work_kind = $3, name = $4, operation_date = $5, delay_days = $6, payment_date = $7,
-					fact_income = $8, fact_expense = $9, is_confirmed = $10, updated_at = NOW()
+				SET stage_number = $2, stage_name = $3, work_kind = $4, name = $5, operation_date = $6, delay_days = $7, payment_date = $8,
+					fact_income = $9, fact_expense = $10, is_confirmed = $11, updated_at = NOW()
 				WHERE id = $1
-			`, id, stageGUIDPtr, workKind, name, opDate, delay, payDate, inc, exp, confirmMap[id])
+			`, id, stageNumber, stageName, workKind, name, opDate, delay, payDate, inc, exp, confirmMap[id])
 			if err != nil {
 				return err
 			}
@@ -1010,15 +956,11 @@ func (r *BudgetRepo) BatchUpdateFactLines(
 					WHERE p.contract_id = $1
 					  AND p.operation_type = $2
 					  AND p.work_kind = $3
-					  AND (
-					       (p.stage_guid IS NULL AND $4::text IS NULL)
-					       OR (p.stage_guid = $4::uuid)
-					  )
-					  AND p.name = $5
+					  AND p.name = $4
 					LIMIT 1
-				`, contractID, opType, workKind, stageGUIDPtr, name).Scan(&newPlanLineID)
+				`, contractID, opType, workKind, name).Scan(&newPlanLineID)
 				if err != nil && err != pgx.ErrNoRows {
-					return fmt.Errorf("ошибка поиска плана при обновлении (тип: %s, вид: %s, этап: %v, имя: %s): %w", opType, workKind, stageGUIDPtr, name, err)
+					return fmt.Errorf("ошибка поиска плана при обновлении (тип: %s, вид: %s, этап: %s, имя: %s): %w", opType, workKind, stageNumber, name, err)
 				}
 
 				if newPlanLineID != nil {
@@ -1124,10 +1066,10 @@ func (r *BudgetRepo) AutoConfirmSalaryAndOverhead(ctx context.Context, contractI
 		UPDATE budget_fact_lines
 		SET is_confirmed = TRUE, updated_at = NOW()
 		WHERE contract_id = $1 
-		  AND operation_type IN ('Зарплата сотрудникам', 'Накладные')
+		  AND operation_type IN ($2, $3)
 		  AND is_confirmed = FALSE
-		  AND operation_date < $2
-	`, contractID, startOfMonth.AddDate(0, 1, 0))
+		  AND operation_date < $4
+	`, contractID, OpTypeSalary, OpTypeOverhead, startOfMonth.AddDate(0, 1, 0))
 
 	if err != nil {
 		return fmt.Errorf("auto confirm salary/overhead: %w", err)
@@ -1160,17 +1102,18 @@ func (r *BudgetRepo) AppendMissingFactLinesFromPlan(ctx context.Context, contrac
 	if err != nil {
 		return err
 	}
-	existingNames := make(map[string]bool)
+	existingNames := make(map[string]struct{})
 	for rows.Next() {
 		var n string
-		_ = rows.Scan(&n)
-		existingNames[n] = true
+		if err := rows.Scan(&n); err == nil {
+			existingNames[n] = struct{}{}
+		}
 	}
 	rows.Close()
 
 	// 3. Получаем строки плана, которых нет в факте
 	planRows, err := tx.Query(ctx, `
-		SELECT id, stage_guid, work_kind, name, operation_date, delay_days, payment_date, operation_type, income, expense
+		SELECT id, stage_number, stage_name, work_kind, name, operation_date, delay_days, payment_date, operation_type, income, expense
 		FROM budget_plan_lines
 		WHERE contract_id = $1
 	`, contractID)
@@ -1180,26 +1123,37 @@ func (r *BudgetRepo) AppendMissingFactLinesFromPlan(ctx context.Context, contrac
 	defer planRows.Close()
 
 	type PlanLine struct {
-		ID        string
-		StageGUID *string
-		WorkKind  string
-		Name      string
-		OpDate    time.Time
-		DelayDays int
-		PayDate   time.Time
-		OpType    string
-		Income    float64
-		Expense   float64
+		ID          string
+		StageNumber string
+		StageName   string
+		WorkKind    string
+		Name        string
+		OpDate      time.Time
+		DelayDays   int
+		PayDate     time.Time
+		OpType      string
+		Income      float64
+		Expense     float64
 	}
 	var lines []PlanLine
 	for planRows.Next() {
 		var l PlanLine
 		if err := planRows.Scan(
-			&l.ID, &l.StageGUID, &l.WorkKind, &l.Name, &l.OpDate, &l.DelayDays, &l.PayDate, &l.OpType, &l.Income, &l.Expense,
+			&l.ID,
+			&l.StageNumber,
+			&l.StageName,
+			&l.WorkKind,
+			&l.Name,
+			&l.OpDate,
+			&l.DelayDays,
+			&l.PayDate,
+			&l.OpType,
+			&l.Income,
+			&l.Expense,
 		); err != nil {
 			return err
 		}
-		if !existingNames[l.Name] {
+		if _, exists := existingNames[l.Name]; !exists {
 			lines = append(lines, l)
 		}
 	}
@@ -1209,33 +1163,34 @@ func (r *BudgetRepo) AppendMissingFactLinesFromPlan(ctx context.Context, contrac
 	now := time.Now()
 	insertQuery := `
 		INSERT INTO budget_fact_lines (
-			contract_id, plan_line_id, stage_guid, work_kind, name, operation_date, delay_days, payment_date, 
+			contract_id, plan_line_id, stage_number, stage_name, work_kind, name, operation_date, delay_days, payment_date, 
 			operation_type, fact_income, fact_expense, is_confirmed, is_manual_edit
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 	`
 
 	for _, l := range lines {
 		isConfirmed := false
-		if l.OpType == "Зарплата сотрудникам" || l.OpType == "Накладные" {
+		if l.OpType == OpTypeSalary || l.OpType == OpTypeOverhead {
 			if l.OpDate.Before(now) || l.OpDate.Format("2006-01") == now.Format("2006-01") {
 				isConfirmed = true
 			}
 		}
 
 		_, err := tx.Exec(ctx, insertQuery,
-			contractID,  // $1
-			l.ID,        // $2
-			l.StageGUID, // $3
-			l.WorkKind,  // $4
-			l.Name,      // $5
-			l.OpDate,    // $6
-			l.DelayDays, // $7
-			l.PayDate,   // $8
-			l.OpType,    // $9
-			l.Income,    // $10
-			l.Expense,   // $11
-			isConfirmed, // $12
-			false,       // $13
+			contractID,    // $1
+			l.ID,          // $2 (plan_line_id)
+			l.StageNumber, // $3 (из плана)
+			l.StageName,   // $4 (из плана)
+			l.WorkKind,    // $5
+			l.Name,        // $6
+			l.OpDate,      // $7
+			l.DelayDays,   // $8
+			l.PayDate,     // $9
+			l.OpType,      // $10
+			l.Income,      // $11
+			l.Expense,     // $12
+			isConfirmed,   // $13
+			false,         // $14
 		)
 		if err != nil {
 			return err
@@ -1293,4 +1248,29 @@ func (r *BudgetRepo) GetPlanCostTotalsByStage(ctx context.Context, contractID st
 		res[guid] = sum
 	}
 	return res, rows.Err()
+}
+
+// relinkFactToPlan перепривязывает строки ФинФакта к активному ФинПлану по 3 параметрам.
+func relinkFactToPlan(ctx context.Context, tx pgx.Tx, contractID string) error {
+	// Отвязываем всё
+	_, err := tx.Exec(ctx, `UPDATE budget_fact_lines SET plan_line_id = NULL WHERE contract_id = $1`, contractID)
+	if err != nil {
+		return fmt.Errorf("unlink fact lines: %w", err)
+	}
+
+	// Привязываем по 3 параметрам: Тип операции, Вид работы, Наименование
+	_, err = tx.Exec(ctx, `
+		UPDATE budget_fact_lines f
+		SET plan_line_id = p.id
+		FROM budget_plan_lines p
+		WHERE f.contract_id = $1
+		  AND p.contract_id = $1
+		  AND p.operation_type = f.operation_type
+		  AND p.work_kind = f.work_kind
+		  AND p.name = f.name
+	`, contractID)
+	if err != nil {
+		return fmt.Errorf("relink fact lines: %w", err)
+	}
+	return nil
 }

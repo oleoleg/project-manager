@@ -127,7 +127,8 @@ func (s *BudgetService) GeneratePlan(ctx context.Context, contractID string, use
 				advSum := st.Cost * (st.AdvancePercent / 100.0)
 				if advSum > 0.01 {
 					lines = append(lines, models.BudgetPlanLine{
-						StageGUID:     &st.GUID,
+						StageNumber:   st.StageNumber,
+						StageName:     st.Name,
 						WorkKind:      st.WorkKind,
 						Name:          fmt.Sprintf("Аванс (%.1f%%). %s", st.AdvancePercent, st.Name),
 						OperationDate: settings.ProjectStartDate,
@@ -146,7 +147,8 @@ func (s *BudgetService) GeneratePlan(ctx context.Context, contractID string, use
 					name = fmt.Sprintf("Оплата по договору (%.1f%%). %s", remainPercent, st.Name)
 				}
 				lines = append(lines, models.BudgetPlanLine{
-					StageGUID:     &st.GUID,
+					StageNumber:   st.StageNumber,
+					StageName:     st.Name,
 					WorkKind:      st.WorkKind,
 					Name:          name,
 					OperationDate: closeDate,
@@ -170,7 +172,8 @@ func (s *BudgetService) GeneratePlan(ctx context.Context, contractID string, use
 				advSum := (st.Cost * (st.AdvancePercent / 100.0)) * ratio
 				if advSum > 0.01 {
 					lines = append(lines, models.BudgetPlanLine{
-						StageGUID:     &st.GUID,
+						StageNumber:   st.StageNumber,
+						StageName:     st.Name,
 						WorkKind:      c.WorkKind,
 						Name:          fmt.Sprintf("Аванс (%.1f%%). %s", st.AdvancePercent, st.Name),
 						OperationDate: settings.ProjectStartDate,
@@ -192,7 +195,8 @@ func (s *BudgetService) GeneratePlan(ctx context.Context, contractID string, use
 					}
 
 					lines = append(lines, models.BudgetPlanLine{
-						StageGUID:     &st.GUID,
+						StageNumber:   st.StageNumber,
+						StageName:     st.Name,
 						WorkKind:      c.WorkKind,
 						Name:          name,
 						OperationDate: closeDate,
@@ -207,7 +211,8 @@ func (s *BudgetService) GeneratePlan(ctx context.Context, contractID string, use
 			if c.FOTPlan > 0 {
 				opDate := closeDate.AddDate(0, 0, -15)
 				lines = append(lines, models.BudgetPlanLine{
-					StageGUID:     &st.GUID,
+					StageNumber:   st.StageNumber,
+					StageName:     st.Name,
 					WorkKind:      c.WorkKind,
 					Name:          "Зарплата сотрудникам. " + st.Name,
 					OperationDate: opDate,
@@ -219,7 +224,8 @@ func (s *BudgetService) GeneratePlan(ctx context.Context, contractID string, use
 
 				overheadSum := c.FOTPlan * settings.OverheadRate
 				lines = append(lines, models.BudgetPlanLine{
-					StageGUID:     &st.GUID,
+					StageNumber:   st.StageNumber,
+					StageName:     st.Name,
 					WorkKind:      c.WorkKind,
 					Name:          "Накладные. " + st.Name,
 					OperationDate: opDate,
@@ -234,7 +240,8 @@ func (s *BudgetService) GeneratePlan(ctx context.Context, contractID string, use
 				prepay := c.EquipmentCost * (settings.EquipPaymentPercent / 100.0)
 				if prepay > 0.01 {
 					lines = append(lines, models.BudgetPlanLine{
-						StageGUID:     &st.GUID,
+						StageNumber:   st.StageNumber,
+						StageName:     st.Name,
 						WorkKind:      c.WorkKind,
 						Name:          fmt.Sprintf("Предоплата за оборудование (%.1f%%). %s", settings.EquipPaymentPercent, st.Name),
 						OperationDate: settings.ProjectStartDate,
@@ -249,7 +256,8 @@ func (s *BudgetService) GeneratePlan(ctx context.Context, contractID string, use
 					postDate := settings.ProjectStartDate.AddDate(0, 0, settings.EquipPaymentDelay)
 					postPercent := 100.0 - settings.EquipPaymentPercent
 					lines = append(lines, models.BudgetPlanLine{
-						StageGUID:     &st.GUID,
+						StageNumber:   st.StageNumber,
+						StageName:     st.Name,
 						WorkKind:      c.WorkKind,
 						Name:          fmt.Sprintf("Постоплата за оборудование (%.1f%%). %s", postPercent, st.Name),
 						OperationDate: postDate,
@@ -263,7 +271,8 @@ func (s *BudgetService) GeneratePlan(ctx context.Context, contractID string, use
 
 			if c.Subcontract > 0 {
 				lines = append(lines, models.BudgetPlanLine{
-					StageGUID:     &st.GUID,
+					StageNumber:   st.StageNumber,
+					StageName:     st.Name,
 					WorkKind:      c.WorkKind,
 					Name:          "Оплата субподрядчику. " + st.Name,
 					OperationDate: closeDate,
@@ -277,7 +286,8 @@ func (s *BudgetService) GeneratePlan(ctx context.Context, contractID string, use
 			if c.TravelExpenses > 0 {
 				opDate := closeDate.AddDate(0, 0, -15)
 				lines = append(lines, models.BudgetPlanLine{
-					StageGUID:     &st.GUID,
+					StageNumber:   st.StageNumber,
+					StageName:     st.Name,
 					WorkKind:      c.WorkKind,
 					Name:          "Командировочные. " + st.Name,
 					OperationDate: opDate,
@@ -290,7 +300,8 @@ func (s *BudgetService) GeneratePlan(ctx context.Context, contractID string, use
 
 			if c.Commission > 0 {
 				lines = append(lines, models.BudgetPlanLine{
-					StageGUID:     &st.GUID,
+					StageNumber:   st.StageNumber,
+					StageName:     st.Name,
 					WorkKind:      c.WorkKind,
 					Name:          "Комиссия. " + st.Name,
 					OperationDate: closeDate,
@@ -303,7 +314,8 @@ func (s *BudgetService) GeneratePlan(ctx context.Context, contractID string, use
 
 			if c.OtherExpenses > 0 {
 				lines = append(lines, models.BudgetPlanLine{
-					StageGUID:     &st.GUID,
+					StageNumber:   st.StageNumber,
+					StageName:     st.Name,
 					WorkKind:      c.WorkKind,
 					Name:          "Расходы разные. " + st.Name,
 					OperationDate: closeDate,
@@ -374,14 +386,14 @@ func (s *BudgetService) UpdateFactLinesBatch(ctx context.Context, updates []db.F
 func (s *BudgetService) BatchUpdateFactLines(
 	ctx context.Context,
 	contractID string,
-	ids, names, workKindCodes, opTypes, stageGUIDs []string,
+	ids, names, workKindCodes, opTypes, stageNumbers, stageNames []string,
 	opDates, delayDays, payDates []string,
 	incIncomes, incExpenses, confirms []string,
 ) error {
 	return s.repo.BatchUpdateFactLines(
 		ctx,
 		contractID,
-		ids, names, workKindCodes, opTypes, stageGUIDs,
+		ids, names, workKindCodes, opTypes, stageNumbers, stageNames,
 		opDates, delayDays, payDates,
 		incIncomes, incExpenses, confirms,
 	)

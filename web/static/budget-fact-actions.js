@@ -43,22 +43,29 @@ function toggleRowInputs(checkbox) {
 // Фильтрация видов работ в зависимости от выбранного этапа
 function filterWorkKinds(selectEl) {
     const row = selectEl.closest('tr');
-    const stageGUID = selectEl.value;
+    const selectedOption = selectEl.options[selectEl.selectedIndex];
+    if (!selectedOption) return;
+
+    const stageNum = selectedOption.getAttribute('data-stage-num') || '';
+    const stageNameText = selectedOption.textContent.split('—').pop().trim();
+    const rowOrder = selectedOption.getAttribute('data-row-order') || '0';
+
+    // Обновляем скрытые поля
+    const hiddenNum = row.querySelector('input[name="stage_number[]"]');
+    if (hiddenNum) hiddenNum.value = stageNum;
+
+    const hiddenName = row.querySelector('input[name="stage_name[]"]');
+    if (hiddenName) hiddenName.value = stageNameText;
+
+    // Обновляем data-атрибуты для сортировки
+    row.dataset.stage = stageNum;
+    row.dataset.stageName = selectEl.options[selectEl.selectedIndex].textContent.trim();
+    row.dataset.order = rowOrder;
     
-    // Обновляем скрытое поле stage_guid
-    const hiddenGuid = row.querySelector('input[name="stage_guid[]"]');
-    if (hiddenGuid) hiddenGuid.value = stageGUID;
-    // Обновляем data-stage и data-stage-name для сортировки
-    if (selectEl.options.length > 0 && selectEl.selectedIndex >= 0) {
-        const opt = selectEl.options[selectEl.selectedIndex];
-        row.dataset.stage = opt.getAttribute('data-stage-num') || '0';
-        row.dataset.stageName = opt.textContent.trim() || '';
-    }
-    
+    // Получаем список видов работ для этого этапа (по номеру)
+    const availableWks = window.stageWorkKinds[stageNum] || [];
     const workKindSelect = row.querySelector('.workkind-select');
     if (!workKindSelect) return;
-
-    const availableWks = window.stageWorkKinds[stageGUID] || [];
     const currentVal = workKindSelect.value;
     
      workKindSelect.innerHTML = '<option value="" disabled selected hidden>— выберите —</option>';
@@ -75,12 +82,24 @@ function filterWorkKinds(selectEl) {
         });
     }
     
-    if (!workKindSelect.value && workKindSelect.options.length > 1) {
-        workKindSelect.selectedIndex = 1; // 0-й это "— выберите —"
+    // Если в этапе только один вид работы, выбираем его и блокируем выбор
+    if (workKindSelect.options.length === 2) { // 1 скрытый + 1 реальный
+        workKindSelect.selectedIndex = 1;
+        workKindSelect.disabled = true;
+    } else if (workKindSelect.options.length > 2) {
+        // Если комплексный, просто выбираем первый доступный
+        workKindSelect.selectedIndex = 1;
+        workKindSelect.disabled = false;
+    } else {
+        // Если видов работ нет, оставляем пустым
+        workKindSelect.selectedIndex = 0;
+        workKindSelect.disabled = false;
     }
 
     const wkhidden = row.querySelector('input[name="work_kind[]"]');
-    if (wkhidden) wkhidden.value = workKindSelect.value;
+    if (wkhidden) {
+        wkhidden.value = workKindSelect.selectedIndex > 0 ? workKindSelect.value : "";
+    }
 }
 
 function deleteRow(btn) {
@@ -153,10 +172,11 @@ function addNewRow(opType, event) {
             <select name="stage_select" class="fact-input stage-select" style="width: 100%; font-size: 12px;" onchange="filterWorkKinds(this)">
                 ${window.stageOptionsHTML}
             </select>
+            <input type="hidden" name="stage_number[]" value="">
+            <input type="hidden" name="stage_name[]" value="">
         </td>
         <td>
             <input type="hidden" name="fact_id[]" value="">
-            <input type="hidden" name="stage_guid[]" value="">
             <input type="hidden" name="work_kind[]" class="workkind-hidden" value="">
             <select class="fact-input workkind-select">
                 ${workKindsHTML}
@@ -212,27 +232,38 @@ function addNewRow(opType, event) {
     
     updatePayDate(dateInput);
 
-    // Автоматически применяем фильтр для первого выбранного этапа
+      // Автоматически применяем фильтр для первого выбранного этапа
     const stageSelect = newRow.querySelector('.stage-select');
     if (stageSelect) {
-        // Принудительно выбираем первый этап и проставляем ему data-атрибуты для сортировки
         if (stageSelect.options.length > 0) {
             stageSelect.selectedIndex = 0;
             newRow.dataset.stage = stageSelect.options[0].getAttribute('data-stage-num') || '0';
+            const rowOrder = stageSelect.options[0].getAttribute('data-row-order') || '0';
+            newRow.dataset.order = rowOrder;
         }
+        
+        // Применяем фильтр видов работ для выбранного этапа
         filterWorkKinds(stageSelect);
         
-        // Принудительно выбираем первый доступный вид работы, если он есть
+        // Логика автовыбора, если вид работы один
         const wkSelect = newRow.querySelector('.workkind-select');
-        if (wkSelect) {
-            if (wkSelect.options.length > 1) {
-                wkSelect.selectedIndex = 1; // 0-й это скрытый "— выберите —"
+        const wkhidden = newRow.querySelector('input[name="work_kind[]"]');
+        
+        if (wkSelect && wkhidden) {
+            // Если доступен только 1 вариант (индекс 1, т.к. 0-й это "— выберите —")
+            if (wkSelect.options.length === 2) {
+                wkSelect.selectedIndex = 1;
+                // Если он не комплексный, можно даже скрыть селект и показать текст
+                wkSelect.disabled = true;
+                wkhidden.value = wkSelect.value;
+            } else if (wkSelect.options.length > 2) {
+                // Если это комплексный этап (вариантов много), выбираем первый
+                wkSelect.selectedIndex = 1; 
+                wkhidden.value = wkSelect.value;
             }
-            const wkhidden = newRow.querySelector('input[name="work_kind[]"]');
-            if (wkhidden) wkhidden.value = wkSelect.value;
         }
     }
-    
+
     // Принудительно обновляем скрытое поле work_kind из селекта
     const wkSelect = newRow.querySelector('.workkind-select');
     const wkhidden = newRow.querySelector('input[name="work_kind[]"]');
@@ -246,7 +277,6 @@ function addNewRow(opType, event) {
 
     recalculateTotals();
 }
-
 
 
 function toggleSalaryRows() {

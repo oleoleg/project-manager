@@ -31,8 +31,8 @@ function sortTable(tableId, field, btnElement, groupConfig) {
 
     allRows.sort((a, b) => {
         if (field === 'stage') {
-            const sA = parseInt(a.dataset.stage) || 0;
-            const sB = parseInt(b.dataset.stage) || 0;
+            const sA = parseInt(a.dataset.order) || 0;
+            const sB = parseInt(b.dataset.order) || 0;
             if (sA !== sB) return sA - sB;
             return parseInt(a.dataset.date) - parseInt(b.dataset.date);
         }
@@ -143,18 +143,4 @@ function sortTable(tableId, field, btnElement, groupConfig) {
         document.getElementById('total-expense').textContent = formatMoney(tableExpense);
         document.getElementById('total-balance').textContent = formatMoney(tableBalance);
     }
-}
-
-function parseMoneyText(text) {
-    if (!text) return 0;
-    const clean = text.replace(/\u00A0/g, ' ').replace(/[^\d.,-]/g, '').replace(',', '.');
-    const val = parseFloat(clean);
-    return isNaN(val) ? 0 : val;
-}
-
-function formatMoney(val) {
-    if (!val && val !== 0) return '';
-    const s = Math.abs(val).toFixed(2);
-    const formatted = s.replace(/\B(?=(\d{3})+(?!\d))/g, '\u00A0');
-    return (val < 0 ? '-' : '') + formatted + ' ₽';
 }

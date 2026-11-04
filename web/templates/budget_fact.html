@@ -80,6 +80,7 @@
             <button type="button" class="btn btn-sm sort-btn" onclick="sortFactTable('stage', this)">По этапам</button>
             <button type="button" class="btn btn-sm sort-btn" onclick="sortFactTable('date', this)">По дате</button>
             <button type="button" class="btn btn-sm sort-btn" onclick="sortFactTable('type', this)">По типу операции</button>
+            <button type="button" class="btn btn-sm sort-btn" onclick="sortFactTable('work', this)">По виду работ</button>
         </div>
  
         <label class="inline-checkbox" style="cursor: pointer;">
@@ -147,6 +148,7 @@
                 {{ range $typeLines }}
                     <tr class="fact-row {{ if $isSalary }}salary-row{{ end }} {{ if .IsConfirmed }}confirmed{{ end }}" 
                         data-type="{{ $type }}" 
+                        data-order="{{ .StageRowOrder }}"
                         data-stage="{{ .StageNumber }}" 
                         data-stage-name="{{ .StageNumber }} — {{ .StageName }}"
                         data-work="{{ .WorkKind }}" 
@@ -155,11 +157,12 @@
                         
                         <td style="text-align: center; color: var(--text-muted);" title="{{ .StageNumber }} — {{ .StageName }}">
                             {{ if .StageNumber }}{{ .StageNumber }}{{ else }}—{{ end }}
+                            <input type="hidden" name="stage_number[]" value="{{ .StageNumber }}">
                         </td>
 
                         <td>
                             <input type="hidden" name="fact_id[]" value="{{ .ID }}">
-                            <input type="hidden" name="stage_guid[]" value="{{ deref .StageGUID }}">
+                            <input type="hidden" name="stage_name[]" value="{{ .StageName }}">
                             <input type="hidden" name="work_kind[]" class="workkind-hidden" value="{{ .WorkKind }}">
                             <span style="padding: 5px; display: inline-block;">{{ .WorkKind }}</span>
                         </td>
@@ -246,7 +249,7 @@
 
 <div id="stage-data" style="display:none;">
     {{ range $i, $stage := .Stages }}
-        <div data-guid="{{ $stage.GUID }}" data-name="{{ $stage.StageNumber }} — {{ $stage.Name }}" {{ if eq $i 0 }}data-selected="true"{{ end }}></div>
+        <div data-stage-num="{{ $stage.StageNumber }}" data-row-order="{{ $stage.RowOrder }}" data-name="{{ $stage.StageNumber }} — {{ $stage.Name }}" {{ if eq $i 0 }}data-selected="true"{{ end }}></div>
     {{ end }}
 </div>
 

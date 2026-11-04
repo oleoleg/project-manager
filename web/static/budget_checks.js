@@ -25,8 +25,8 @@ window.BudgetChecks = (function() {
         else el.value = '';
         
         // Вызываем глобальный форматтер (из app.js), если он есть
-        if (window.formatMoney) {
-            el.value = window.formatMoney(el.value);
+        if (window.inputMoney) {
+            el.value = window.inputMoney(el.value);
         }
     }
 

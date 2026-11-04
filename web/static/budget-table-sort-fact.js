@@ -1,5 +1,23 @@
 // web/static/budget-table-sort-fact.js
 
+function sortFactTable(field, btnElement) {
+    // Порядок видов работ (как в ФинПлане)
+    const workOrder = { "ПИР": 1, "ППО": 2, "СМР": 3, "ПНР": 4, "Продажа": 5, "ТО": 6, "Ремонт": 7, "Сборка": 8, "Комплексный": 9 };
+
+    sortTable('fact-table', field, btnElement, {
+        labelColspan: 4,
+        incIdx: 7,
+        expIdx: 8,
+        balIdx: -1,
+        hasIncome: true,
+        hasExpense: true,
+        hasBalance: false,
+        workOrder: workOrder
+    });
+         
+    recalculateTotals();
+}
+
 function sortTable(tableId, field, btnElement, groupConfig) {
     const table = document.getElementById(tableId);
     if (!table) return;
@@ -27,12 +45,12 @@ function sortTable(tableId, field, btnElement, groupConfig) {
         "Платежи по договору": 1, "Закупка по договору": 2, "Зарплата сотрудникам": 3,
         "Накладные": 4, "Командировки": 5, "Субподрядчики": 6, "Комиссия": 7, "Другое (расходы)": 8
     };
-    const workOrder = { "ПИР": 1, "ППО": 2, "СМР": 3, "ПНР": 4, "Продажа": 5, "ТО": 6, "Ремонт": 7, "Сборка": 8, "Комплексный": 9 };
+    const workOrder = groupConfig.workOrder || {};
 
     allRows.sort((a, b) => {
         if (field === 'stage') {
-            const sA = parseInt(a.dataset.stage) || 0;
-            const sB = parseInt(b.dataset.stage) || 0;
+            const sA = parseInt(a.dataset.order) || 0;
+            const sB = parseInt(b.dataset.order) || 0;
             if (sA !== sB) return sA - sB;
             return parseInt(a.dataset.date) - parseInt(b.dataset.date);
         }
@@ -46,10 +64,19 @@ function sortTable(tableId, field, btnElement, groupConfig) {
             return parseInt(a.dataset.date) - parseInt(b.dataset.date);
         }
         if (field === 'work') {
-            const wDiff = (workOrder[a.dataset.work] || 99) - (workOrder[b.dataset.work] || 99);
-            if (wDiff !== 0) return wDiff;
+            const wA = workOrder[a.dataset.work] || 99;
+            const wB = workOrder[b.dataset.work] || 99;
+            if (wA !== wB) return wA - wB; // Сортируем по весу
+            
+            // Если виды работ одинаковые, сортируем по типу операции
             const tDiff = (typeOrder[a.dataset.type] || 99) - (typeOrder[b.dataset.type] || 99);
             if (tDiff !== 0) return tDiff;
+            
+            // Затем по этапу
+            const sA = parseInt(a.dataset.order) || 0;
+            const sB = parseInt(b.dataset.order) || 0;
+            if (sA !== sB) return sA - sB;
+            
             return parseInt(a.dataset.date) - parseInt(b.dataset.date);
         }
         return 0;
@@ -213,16 +240,3 @@ function sortTable(tableId, field, btnElement, groupConfig) {
     }
 }
 
-function parseMoneyText(text) {
-    if (!text) return 0;
-    const clean = text.replace(/\u00A0/g, ' ').replace(/[^\d.,-]/g, '').replace(',', '.');
-    const val = parseFloat(clean);
-    return isNaN(val) ? 0 : val;
-}
-
-function formatMoney(val) {
-    if (!val && val !== 0) return '';
-    const s = Math.abs(val).toFixed(2);
-    const formatted = s.replace(/\B(?=(\d{3})+(?!\d))/g, '\u00A0');
-    return (val < 0 ? '-' : '') + formatted + ' ₽';
-}

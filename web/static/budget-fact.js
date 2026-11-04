@@ -1,11 +1,7 @@
 
 
 document.addEventListener('DOMContentLoaded', function() {
-
-    
-
-
-        // Читаем JSON из скрытых полей
+    // Читаем JSON из скрытых полей
     const wkInput = document.getElementById('json-work-kinds');
     const swkInput = document.getElementById('json-stage-work-kinds');
     
@@ -21,18 +17,14 @@ document.addEventListener('DOMContentLoaded', function() {
         window.stageWorkKinds = {};
     }
 
-    console.log("WorkKinds loaded:", window.workKinds);
-    console.log("StageWorkKinds loaded:", window.stageWorkKinds);
-
-    // 2. Формируем HTML для выбора этапа
+    // 2. Формируем HTML для выбора этапа (используем номер как value)
     window.stageOptionsHTML = ``;
     const stageNodes = document.querySelectorAll('#stage-data div');
     stageNodes.forEach(node => {
-        const guid = node.getAttribute('data-guid');
         const name = node.getAttribute('data-name');
         const stageNum = name.split('—')[0].trim(); 
         const isSelected = node.hasAttribute('data-selected') ? 'selected' : '';
-        window.stageOptionsHTML += `<option value="${guid}" data-stage-num="${stageNum}" ${isSelected}>${name}</option>`;
+        window.stageOptionsHTML += `<option value="${stageNum}" data-stage-num="${stageNum}" ${isSelected}>${name}</option>`;
     });
 
     // 3. Включаем блокировку полей для уже подтвержденных строк и вешаем обработчики
@@ -53,26 +45,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // 4. Считаем итоги
     recalculateTotals();
 
-    // 5. И только теперь сортируем (по типу операции)
+    // 5. И только теперь сортируем 
     const typeBtn = Array.from(document.querySelectorAll('.filter-bar button')).find(b => b.textContent.includes('По типу операции'));
     if (typeBtn) {
         sortFactTable('type', typeBtn);
     }
 });
-
-function formatMoney(val) {
-    if (!val && val !== 0) return '';
-    const s = Math.abs(val).toFixed(2);
-    const formatted = s.replace(/\B(?=(\d{3})+(?!\d))/g, '\u00A0');
-    return (val < 0 ? '-' : '') + formatted + ' ₽';
-}
-
-function parseMoneyText(text) {
-    if (!text) return 0;
-    const clean = text.replace(/[^\d.,-]/g, '').replace(',', '.');
-    const val = parseFloat(clean);
-    return isNaN(val) ? 0 : val;
-}
 
 function recalculateTotals() {
     const table = document.getElementById('fact-table');
@@ -120,20 +98,4 @@ function recalculateTotals() {
     if (confBalEl) confBalEl.textContent = 'Подтв.: ' + formatMoney(confirmedIncome - confirmedExpense);
 }
 
-function sortFactTable(field, btnElement) {
-    // Для факта колонка с названием — 2 (индекс 2), но т.к. перед ней есть еще № и Вид работы, 
-    // мы передаем colspan 3 (первые 3 колонки: №, Вид, Наименование).
-    // hasBalance: false, так как в факте нет колонки Баланс.
-    sortTable('fact-table', field, btnElement, {
-        labelColspan: 4,
-        incIdx: 7, // Факт (Приход)
-        expIdx: 8, // Факт (Расход)
-        balIdx: -1,
-        hasIncome: true,
-        hasExpense: true,
-        hasBalance: false
-    });
-         
-        recalculateTotals();
-    
-}
+
