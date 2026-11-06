@@ -147,24 +147,52 @@ func handleProtocolURL(raw string) {
 			}
 		}
 	} else if strings.HasPrefix(cleanURL, "pick-file") {
-		pickFileAndSavePath()
+		var initialPath string
+		var filterType string
+
+		// Парсим параметры (path и filter)
+		if idx := strings.Index(cleanURL, "path="); idx != -1 {
+			path := cleanURL[idx+5:]
+			if unescaped, err := url.QueryUnescape(path); err == nil {
+				initialPath = unescaped
+			}
+		}
+
+		if idx := strings.Index(cleanURL, "filter="); idx != -1 {
+			fType := cleanURL[idx+7:]
+			// Отрезаем возможные &param=... после filter
+			if ampIdx := strings.Index(fType, "&"); ampIdx != -1 {
+				fType = fType[:ampIdx]
+			}
+			filterType = fType
+		}
+
+		pickFileAndSavePath(initialPath, filterType)
 	} else if strings.HasPrefix(cleanURL, "pick-dir") {
-		pickDirAndSavePath()
+		// Извлекаем начальный путь (если передан)
+		var initialDir string
+		if idx := strings.Index(cleanURL, "path="); idx != -1 {
+			path := cleanURL[idx+5:]
+			if unescaped, err := url.QueryUnescape(path); err == nil {
+				initialDir = unescaped
+			}
+		}
+		pickDirAndSavePath(initialDir)
 	}
 }
 
 // ---------------- Диалоги и утилиты ----------------
 
-func pickFileAndSavePath() {
-	path, err := openFileDialog()
+func pickFileAndSavePath(initialPath string, filterType string) {
+	path, err := openFileDialog(initialPath, filterType)
 	if err != nil || path == "" {
 		return
 	}
 	savePickedPath(path)
 }
 
-func pickDirAndSavePath() {
-	path, err := openDirDialog()
+func pickDirAndSavePath(initialDir string) {
+	path, err := openDirDialog(initialDir)
 	if err != nil || path == "" {
 		return
 	}

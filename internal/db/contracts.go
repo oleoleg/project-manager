@@ -53,7 +53,7 @@ func (r *ContractRepo) GetByID(ctx context.Context, id string) (*models.Contract
 type ContractFilter struct {
 	Search         string // ищем по id, номеру, названию
 	CounterpartyID string
-	StatusCode     *int16
+	StatusCodes    []int16
 }
 
 func (r *ContractRepo) List(ctx context.Context, f ContractFilter) ([]models.Contract, error) {
@@ -72,11 +72,12 @@ func (r *ContractRepo) List(ctx context.Context, f ContractFilter) ([]models.Con
 		args = append(args, f.CounterpartyID)
 		i++
 	}
-	if f.StatusCode != nil {
-		query += fmt.Sprintf(` AND status_code = $%d`, i)
-		args = append(args, *f.StatusCode)
+	if len(f.StatusCodes) > 0 {
+		query += fmt.Sprintf(` AND status_code = ANY($%d)`, i)
+		args = append(args, f.StatusCodes)
 		i++
 	}
+
 	query += ` ORDER BY id`
 
 	rows, err := r.pool.Query(ctx, query, args...)

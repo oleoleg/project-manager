@@ -23,7 +23,10 @@
             <td>{{ .Name }}</td>
             <td>{{ .ShortName }}</td>
             <td>{{ .Partner }}</td>
-            <td class="actions"><a href="/counterparties/{{ .ID }}" class="btn btn-sm">Открыть</a></td>
+            <td class="actions" style="white-space: nowrap;">
+                <a href="/counterparties/{{ .ID }}" class="btn btn-sm">Открыть</a>
+                <a href="/contracts?counterparty={{ .ID }}&status=0,1,2,4" class="btn btn-sm" title="Договоры в работе">📄 Договоры</a>
+            </td>
         </tr>
     {{ end }}
     </tbody>

@@ -60,12 +60,17 @@ func (h *ContractHandler) List(w http.ResponseWriter, r *http.Request) {
 		Search:         strings.TrimSpace(q.Get("q")),
 		CounterpartyID: strings.TrimSpace(q.Get("counterparty")),
 	}
+
+	// Парсим статусы из URL (например, status=0,1,2)
+	var statusCodes []int16
 	if sc := q.Get("status"); sc != "" {
-		if n, err := strconv.Atoi(sc); err == nil {
-			v := int16(n)
-			f.StatusCode = &v
+		for _, s := range strings.Split(sc, ",") {
+			if n, err := strconv.Atoi(s); err == nil {
+				statusCodes = append(statusCodes, int16(n))
+			}
 		}
 	}
+	f.StatusCodes = statusCodes
 
 	list, err := h.svc.List(r.Context(), f)
 	if err != nil {
@@ -82,11 +87,14 @@ func (h *ContractHandler) List(w http.ResponseWriter, r *http.Request) {
 	data["Counterparties"] = counterparties
 	data["Search"] = f.Search
 	data["FilterCounterparty"] = f.CounterpartyID
-	if f.StatusCode != nil {
-		data["FilterStatus"] = *f.StatusCode
-	} else {
-		data["FilterStatus"] = -1
+
+	// Передаем выбранные статусы строкой (например, "0,1,2") для инициализации чекбоксов в JS
+	var selectedStatuses []string
+	for _, code := range statusCodes {
+		selectedStatuses = append(selectedStatuses, strconv.Itoa(int(code)))
 	}
+	data["SelectedStatuses"] = strings.Join(selectedStatuses, ",")
+
 	data["Flash"] = q.Get("flash")
 	h.render(w, "contracts_list.html", data)
 }

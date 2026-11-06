@@ -20,14 +20,23 @@
         {{ end }}
     </select>
 
-    <select name="status">
-        <option value="">— все статусы —</option>
-        {{ range .Statuses }}
-            <option value="{{ .Code }}" {{ if eq .Code $.FilterStatus }}selected{{ end }}>
-                {{ .Code }} — {{ .Name }}
-            </option>
-        {{ end }}
-    </select>
+    <!-- Кастомный выпадающий список со статусами -->
+    <div class="custom-select-wrapper" style="position: relative;">
+        <button type="button" class="btn" id="status-dropdown-btn" style="min-width: 200px; text-align: left; background: var(--surface); border: 1px solid var(--border); color: var(--text);">
+            — все статусы — ▼
+        </button>
+        
+        <div id="status-dropdown-menu" style="display: none; position: absolute; z-index: 100; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 10px; min-width: 220px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            {{ range .Statuses }}
+            <label style="display: block; margin-bottom: 5px; cursor: pointer; white-space: nowrap;">
+                <input type="checkbox" class="status-checkbox" value="{{ .Code }}"> {{ .Code }} — {{ .Name }}
+            </label>
+            {{ end }}
+        </div>
+    </div>
+
+    <!-- Скрытое поле для отправки выбранных статусов -->
+    <input type="hidden" name="status" id="status-hidden-input" value="{{ .SelectedStatuses }}">
 
     <button type="submit" class="btn">Фильтр</button>
     <a href="/contracts" class="btn btn-ghost-dark">Сбросить</a>
@@ -66,6 +75,8 @@
 {{ else }}
 <p class="empty">Договоров не найдено.</p>
 {{ end }}
+
+<script src="/static/contracts_filter.js"></script>
 
 {{ template "layout_footer" . }}
 {{ end }}

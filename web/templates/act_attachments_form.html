@@ -94,7 +94,16 @@
 
         if (btn) {
             btn.addEventListener('click', () => {
-                window.location.href = 'pm-agent://pick-file'; // ИСПРАВЛЕНО
+                // Берем текущий путь из поля
+                let currentPath = field.value.trim();
+                
+                // Формируем URL протокола с параметром path
+                let url = 'pm-agent://pick-file?filter=pdf';
+                if (currentPath) {
+                    url += '?path=' + encodeURIComponent(currentPath);
+                }
+
+                window.location.href = url;
                 if (pollTimer) clearInterval(pollTimer);
                 pollStartedAt = Date.now();
                 pollTimer = setInterval(checkPickedPath, 800);

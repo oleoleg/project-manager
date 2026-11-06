@@ -3,16 +3,22 @@
 {{ $c := .Counterparty }}
 
 <div class="page-header">
-    <h2>Контрагент {{ $c.ID }}</h2>
+    <div class="contract-title">
+        <h2>Контрагент {{ $c.ID }}</h2>
+        <p class="contract-subtitle">{{ $c.Name }}</p>
+
+        <div class="breadcrumb" style="margin-bottom: 16px;">
+            <a href="/counterparties">Контрагенты</a>
+            &rarr; <span style="color: var(--text-soft);">Контрагент {{ $c.ID }}</span>
+            &rarr; <a href="/contracts?counterparty={{ $c.ID }}&status=0,1,2,4">Договоры в работе</a>
+        </div>
+    </div>
+
     <div class="actions">
+        <a href="/contracts?counterparty={{ $c.ID }}&status=0,1,2,4" class="btn" style="background-color: #337ab7; color: white;">📄 Договоры в работе</a>
+        
         {{ if or (eq .User.RoleCode "admin") (eq .User.RoleCode "rp_chief") (eq .User.RoleCode "rp") (eq .User.RoleCode "director") }}
             <a href="/counterparties/{{ $c.ID }}/edit" class="btn btn-primary">Изменить</a>
-        {{ end }}
-        {{ if or (eq .User.RoleCode "admin") (eq .User.RoleCode "rp_chief") }}
-            <form method="post" action="/counterparties/{{ $c.ID }}/delete"
-                  onsubmit="return confirm('Удалить контрагента {{ $c.ID }}?');" class="inline">
-                <button type="submit" class="btn btn-danger">Удалить</button>
-            </form>
         {{ end }}
     </div>
 </div>
@@ -31,7 +37,18 @@
     <dt>Обновлён</dt>      <dd>{{ $c.UpdatedAt.Format "02.01.2006 15:04" }}</dd>
 </dl>
 
-<p><a href="/counterparties">← К списку</a></p>
+{{ if or (eq .User.RoleCode "admin") (eq .User.RoleCode "rp_chief") }}
+<section class="danger-zone" style="margin-top: 40px;">
+    <h3>Опасная зона</h3>
+    <p class="muted">Действие необратимо. Удалятся все данные контрагента.</p>
+    <form method="post" action="/counterparties/{{ $c.ID }}/delete"
+          onsubmit="return confirm('Удалить контрагента {{ $c.ID }}?');">
+        <button type="submit" class="btn btn-danger">Удалить контрагента</button>
+    </form>
+</section>
+{{ end }}
+
+<p style="margin-top: 20px;"><a href="/counterparties">← К списку контрагентов</a></p>
 
 {{ template "layout_footer" . }}
 {{ end }}

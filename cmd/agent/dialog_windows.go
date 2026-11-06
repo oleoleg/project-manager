@@ -4,6 +4,10 @@ package main
 
 import (
 	"errors"
+	"fmt"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"unsafe"
 	// Подключаем обертку
@@ -49,24 +53,51 @@ type openFileNameW struct {
 }
 
 // openFileDialog открывает стандартный Windows-диалог «Открыть файл».
-func openFileDialog() (string, error) {
+// filterType: "pdf", "excel" или "" (все файлы).
+func openFileDialog(initialPath string, filterType string) (string, error) {
 	buf := make([]uint16, 4096)
 
-	filter := "Все файлы\x00*.*\x00PDF\x00*.pdf\x00\x00"
-	filterUTF16, _ := syscall.UTF16FromString(filter)
+	// Формируем фильтр в зависимости от переданного типа
+	var filterStr string
+	switch filterType {
+	case "pdf":
+		filterStr = "PDF файлы\x00*.pdf\x00Все файлы\x00*.*\x00\x00"
+	case "excel":
+		filterStr = "Excel файлы\x00*.xlsx;*.xls\x00Все файлы\x00*.*\x00\x00"
+	default:
+		filterStr = "Все файлы\x00*.*\x00\x00"
+	}
+
 	filterRunes := []uint16{}
-	for _, part := range []string{"Все файлы", "*.*", "PDF", "*.pdf", ""} {
+	for _, part := range strings.Split(filterStr, "\x00") {
 		u, _ := syscall.UTF16FromString(part)
 		filterRunes = append(filterRunes, u...)
 	}
-	copy(filterUTF16, filterRunes)
+	// Добавляем финальный двойной ноль
+	filterRunes = append(filterRunes, 0)
+
+	var initialDirPtr *uint16
+
+	if initialPath != "" {
+		dir := filepath.Dir(initialPath)
+		if dir != "." && dir != "" {
+			initialDirPtr, _ = syscall.UTF16PtrFromString(dir)
+		}
+
+		fileName := filepath.Base(initialPath)
+		if fileName != "." && fileName != "" {
+			u, _ := syscall.UTF16FromString(fileName)
+			copy(buf, u)
+		}
+	}
 
 	ofn := openFileNameW{
-		lStructSize: uint32(unsafe.Sizeof(openFileNameW{})),
-		lpstrFilter: &filterRunes[0],
-		lpstrFile:   &buf[0],
-		nMaxFile:    uint32(len(buf)),
-		Flags:       OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_EXPLORER | OFN_LONGNAMES,
+		lStructSize:     uint32(unsafe.Sizeof(openFileNameW{})),
+		lpstrFilter:     &filterRunes[0],
+		lpstrFile:       &buf[0],
+		nMaxFile:        uint32(len(buf)),
+		lpstrInitialDir: initialDirPtr,
+		Flags:           OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_EXPLORER | OFN_LONGNAMES,
 	}
 
 	ret, _, _ := procGetOpenFileNameW.Call(uintptr(unsafe.Pointer(&ofn)))
@@ -85,90 +116,105 @@ var (
 	// Используем строковый CLSID для точности.
 )
 
-// openDirDialog открывает НАСТОЯЩИЙ современный диалог выбора папки Windows.
+// openDirDialog открывает проверенный временем классический Windows-диалог выбора папки.
 // func openDirDialog() (string, error) {
-// 	// Создаем конфигурацию для диалога выбора папок
-// 	config := cfd.DialogConfig{
-// 		Title: "Выбор папки проекта",
-// 		Role:  "ProjectFolderPicker", // Позволяет Windows запоминать последнюю выбранную папку
+// 	buf := make([]uint16, 4096)
+
+// 	// Стандартные флаги Windows для классического диалога
+// 	const (
+// 		BIF_RETURNONLYFSDIRS = 0x00000001 // Выбирать только папки файловой системы
+// 		BIF_NEWDIALOGSTYLE   = 0x00000040 // Добавляет кнопку создания папок и делает окно растягиваемым
+// 		BIF_EDITBOX          = 0x00000010 // Добавляет текстовое поле ввода пути сверху
+// 	)
+
+// 	type browseInfoW struct {
+// 		hwndOwner      uintptr
+// 		pidlRoot       uintptr
+// 		pszDisplayName *uint16
+// 		lpszTitle      *uint16
+// 		ulFlags        uint32
+// 		lpfn           uintptr
+// 		lParam         uintptr
+// 		iImage         int32
 // 	}
 
-// 	// Инициализируем современный нативный диалог
-// 	dialog, err := cfd.NewSelectFolderDialog(config)
-// 	if err != nil {
-// 		return "", err
-// 	}
-// 	// Гарантируем освобождение системных ресурсов COM при выходе из функции
-// 	defer dialog.Release()
+// 	title, _ := syscall.UTF16PtrFromString("Выбор папки проекта")
 
-// 	// Выводим полноценное окно Проводника на экран
-// 	path, err := dialog.ShowAndGetResult()
-// 	if err != nil {
-// 		// Если пользователь просто закрыл окно крестиком или нажав "Отмена"
-// 		if err.Error() == "The operation was canceled by the user." {
-// 			return "", errors.New("folder dialog cancelled")
-// 		}
-// 		return "", err
+// 	bi := browseInfoW{
+// 		hwndOwner:      0,
+// 		pidlRoot:       0,
+// 		pszDisplayName: &buf[0],
+// 		lpszTitle:      title,
+// 		ulFlags:        BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE | BIF_EDITBOX,
+// 		lpfn:           0,
+// 		lParam:         0,
+// 		iImage:         0,
 // 	}
 
-// 	return path, nil
+// 	shell32 := syscall.NewLazyDLL("shell32.dll")
+// 	procSHBrowseForFolderW := shell32.NewProc("SHBrowseForFolderW")
+// 	procSHGetPathFromIDListW := shell32.NewProc("SHGetPathFromIDListW")
+
+// 	// Открываем диалоговое окно
+// 	pidl, _, _ := procSHBrowseForFolderW.Call(uintptr(unsafe.Pointer(&bi)))
+// 	if pidl == 0 {
+// 		return "", errors.New("folder dialog cancelled")
+// 	}
+// 	defer func() {
+// 		ole32 := syscall.NewLazyDLL("ole32.dll")
+// 		procCoTaskMemFree := ole32.NewProc("CoTaskMemFree")
+// 		procCoTaskMemFree.Call(pidl)
+// 	}()
+
+// 	// Извлекаем текстовый путь из структуры Windows IDList
+// 	ret, _, _ := procSHGetPathFromIDListW.Call(pidl, uintptr(unsafe.Pointer(&buf[0])))
+// 	if ret == 0 {
+// 		return "", errors.New("could not get path from dialog")
+// 	}
+
+// 	return syscall.UTF16ToString(buf), nil
 // }
 
-// openDirDialog открывает проверенный временем классический Windows-диалог выбора папки.
-func openDirDialog() (string, error) {
-	buf := make([]uint16, 4096)
+// openDirDialog открывает современный диалог выбора папки через встроенный PowerShell.
+func openDirDialog(initialDir string) (string, error) {
+	// Скрипт PowerShell
+	psScript := `
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+Add-Type -AssemblyName System.Windows.Forms
+$dialog = New-Object System.Windows.Forms.OpenFileDialog
+$dialog.ValidateNames = $false
+$dialog.CheckFileExists = $false
+$dialog.CheckPathExists = $true
+$dialog.FileName = "Выберите папку"
+$dialog.Title = "Выберите папку проекта"
+$dialog.Filter = "Папки|*.*"
+`
 
-	// Стандартные флаги Windows для классического диалога
-	const (
-		BIF_RETURNONLYFSDIRS = 0x00000001 // Выбирать только папки файловой системы
-		BIF_NEWDIALOGSTYLE   = 0x00000040 // Добавляет кнопку создания папок и делает окно растягиваемым
-		BIF_EDITBOX          = 0x00000010 // Добавляет текстовое поле ввода пути сверху
-	)
-
-	type browseInfoW struct {
-		hwndOwner      uintptr
-		pidlRoot       uintptr
-		pszDisplayName *uint16
-		lpszTitle      *uint16
-		ulFlags        uint32
-		lpfn           uintptr
-		lParam         uintptr
-		iImage         int32
+	if initialDir != "" {
+		// Экранируем одинарные кавычки для PowerShell
+		safePath := strings.ReplaceAll(initialDir, "'", "''")
+		psScript += fmt.Sprintf("$dialog.InitialDirectory = '%s'\n", safePath)
 	}
 
-	title, _ := syscall.UTF16PtrFromString("Выбор папки проекта")
+	psScript += `
+if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+    # Возвращаем папку, в которой находится выбранный "файл"
+    Write-Output (Split-Path $dialog.FileName -Parent)
+}
+`
 
-	bi := browseInfoW{
-		hwndOwner:      0,
-		pidlRoot:       0,
-		pszDisplayName: &buf[0],
-		lpszTitle:      title,
-		ulFlags:        BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE | BIF_EDITBOX,
-		lpfn:           0,
-		lParam:         0,
-		iImage:         0,
+	cmd := exec.Command("powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", psScript)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
 	}
 
-	shell32 := syscall.NewLazyDLL("shell32.dll")
-	procSHBrowseForFolderW := shell32.NewProc("SHBrowseForFolderW")
-	procSHGetPathFromIDListW := shell32.NewProc("SHGetPathFromIDListW")
-
-	// Открываем диалоговое окно
-	pidl, _, _ := procSHBrowseForFolderW.Call(uintptr(unsafe.Pointer(&bi)))
-	if pidl == 0 {
+	path := strings.TrimSpace(string(out))
+	if path == "" || path == "Выберите папку" {
 		return "", errors.New("folder dialog cancelled")
 	}
-	defer func() {
-		ole32 := syscall.NewLazyDLL("ole32.dll")
-		procCoTaskMemFree := ole32.NewProc("CoTaskMemFree")
-		procCoTaskMemFree.Call(pidl)
-	}()
 
-	// Извлекаем текстовый путь из структуры Windows IDList
-	ret, _, _ := procSHGetPathFromIDListW.Call(pidl, uintptr(unsafe.Pointer(&buf[0])))
-	if ret == 0 {
-		return "", errors.New("could not get path from dialog")
-	}
-
-	return syscall.UTF16ToString(buf), nil
+	return path, nil
 }

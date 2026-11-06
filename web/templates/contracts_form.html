@@ -166,8 +166,14 @@
             e.preventDefault(); // Предотвращаем стандартное поведение
 
             // Создаем невидимую ссылку и кликаем по ней (браузеры это любят больше)
+            let currentPath = field.value.trim();
+            let url = 'pm-agent://pick-dir';
+            if (currentPath) {
+                url += '?path=' + encodeURIComponent(currentPath);
+            }
+
             const a = document.createElement('a');
-            a.href = 'pm-agent://pick-dir';
+            a.href = url;
             a.style.display = 'none';
             document.body.appendChild(a);
             a.click();
