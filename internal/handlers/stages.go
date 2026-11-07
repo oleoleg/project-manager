@@ -202,7 +202,7 @@ func (h *StageHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.Redirect(w, r, "/contracts/"+contractID+"/stages?flash="+url.QueryEscape("Этап создан"), http.StatusSeeOther)
+	http.Redirect(w, r, "/contracts/"+contractID+"/stages/"+st.GUID+"/edit?costs=1&flash="+url.QueryEscape("Этап создан. Теперь заполните затраты."), http.StatusSeeOther)
 }
 
 // ---------- Edit / Update ----------
@@ -520,19 +520,139 @@ func (h *StageHandler) CostsIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	stages, _ := h.svc.List(r.Context(), contractID)
-	workKinds, _ := h.svc.WorkKinds(r.Context())
 
-	stagesMap := make(map[string]models.Stage)
+	// Группируем затраты по GUID этапа
+	costsByStage := make(map[string][]models.StageCost)
+	for _, c := range costs {
+		costsByStage[c.StageGUID] = append(costsByStage[c.StageGUID], c)
+	}
+
+	// Формируем плоский список для вывода (как в budget_new)
+	type CostRow struct {
+		IsHeader bool
+		Stage    models.Stage
+		Cost     models.StageCost
+	}
+	var displayRows []CostRow
+
 	for _, s := range stages {
-		stagesMap[s.GUID] = s
+		stageCosts := costsByStage[s.GUID]
+
+		// Добавляем заголовок этапа
+		displayRows = append(displayRows, CostRow{
+			IsHeader: true,
+			Stage:    s,
+		})
+
+		if len(stageCosts) == 0 {
+			// Если затрат нет, добавляем пустую строку для возможности ввода
+			displayRows = append(displayRows, CostRow{
+				IsHeader: false,
+				Stage:    s,
+				Cost:     models.StageCost{StageGUID: s.GUID, WorkKind: s.WorkKind},
+			})
+		} else {
+			for _, c := range stageCosts {
+				displayRows = append(displayRows, CostRow{
+					IsHeader: false,
+					Stage:    s,
+					Cost:     c,
+				})
+			}
+		}
+	}
+
+	// Получаем настройки бюджета (для процента накладных)
+	var overheadRate float64 = 1.2 // Значение по умолчанию
+	var hasActivePlan bool
+
+	settings, hasSettings, _ := h.budgetSvc.GetSettings(r.Context(), contractID)
+	if hasSettings {
+		overheadRate = settings.OverheadRate
+	}
+
+	// Проверяем, есть ли активный план
+	snapshots, _ := h.budgetSvc.GetAllSnapshots(r.Context(), contractID)
+	for _, snap := range snapshots {
+		if snap.IsActive {
+			hasActivePlan = true
+			break
+		}
 	}
 
 	data := h.commonData(r, "Затраты этапов договора "+contractID)
 	data["Contract"] = contract
-	data["Costs"] = costs
-	data["StagesMap"] = stagesMap
-	data["WorkKinds"] = workKinds
+	data["DisplayRows"] = displayRows
+	data["Stages"] = stages
 	data["Flash"] = r.URL.Query().Get("flash")
+	data["OverheadRate"] = overheadRate
+	data["HasActivePlan"] = hasActivePlan
 
 	h.render(w, "stage_costs_index.html", data)
+}
+
+func (h *StageHandler) CostsSave(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "id")
+	_ = r.ParseForm()
+
+	stageGUIDs := r.Form["cost_stage_guid[]"]
+	workKinds := r.Form["cost_work_kind[]"]
+	amounts := r.Form["cost_amount[]"]
+	fotPlans := r.Form["cost_fot_plan[]"]
+	days := r.Form["cost_labor_days[]"]
+	rates := r.Form["cost_rate_per_day[]"]
+	travels := r.Form["cost_travel[]"]
+	eqSales := r.Form["cost_equipment_sale[]"]
+	eqCosts := r.Form["cost_equipment_cost[]"]
+	subs := r.Form["cost_subcontract[]"]
+	comms := r.Form["cost_commission[]"]
+	others := r.Form["cost_other[]"]
+	lockedFields := r.Form["cost_locked[]"]
+
+	// Группируем по StageGUID, так как ReplaceForStage работает со срезом затрат для одного этапа
+	costsByStage := make(map[string][]models.StageCost)
+
+	getStr := func(arr []string, i int) string {
+		if i < len(arr) {
+			return arr[i]
+		}
+		return ""
+	}
+
+	parseMoney := func(s string) float64 {
+		v, _ := services.ParseMoney(s)
+		return v
+	}
+
+	for i := 0; i < len(stageGUIDs); i++ {
+		sg := getStr(stageGUIDs, i)
+		if sg == "" {
+			continue
+		}
+		costsByStage[sg] = append(costsByStage[sg], models.StageCost{
+			StageGUID:      sg,
+			WorkKind:       getStr(workKinds, i),
+			Cost:           parseMoney(getStr(amounts, i)),
+			FOTPlan:        parseMoney(getStr(fotPlans, i)),
+			LaborDays:      parseMoney(getStr(days, i)),
+			RatePerDay:     parseMoney(getStr(rates, i)),
+			TravelExpenses: parseMoney(getStr(travels, i)),
+			EquipmentSale:  parseMoney(getStr(eqSales, i)),
+			EquipmentCost:  parseMoney(getStr(eqCosts, i)),
+			Subcontract:    parseMoney(getStr(subs, i)),
+			Commission:     parseMoney(getStr(comms, i)),
+			OtherExpenses:  parseMoney(getStr(others, i)),
+			LockedField:    getStr(lockedFields, i),
+		})
+	}
+
+	for sg, costs := range costsByStage {
+		if err := h.costSvc.ReplaceForStage(r.Context(), sg, costs); err != nil {
+			log.Printf("save costs index: %v", err)
+			http.Error(w, "Ошибка сохранения: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	http.Redirect(w, r, "/contracts/"+contractID+"/stages/costs?flash=Изменения+сохранены", http.StatusSeeOther)
 }

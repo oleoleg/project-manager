@@ -189,6 +189,9 @@ func startHTTPServer(stopCh <-chan struct{}) {
 		"add": func(a, b float64) float64 {
 			return a + b
 		},
+		"mul": func(a, b float64) float64 {
+			return a * b
+		},
 		"list": func(items ...string) []string {
 			return items
 		},
@@ -333,6 +336,7 @@ func startHTTPServer(stopCh <-chan struct{}) {
 			r.Post("/contracts/{id}/acts/{actGuid}/attachments", actH.CreateAttachment)
 			r.Post("/contracts/{id}/attachments/{attGuid}", actH.UpdateAttachment)
 			r.Post("/contracts/{id}/attachments/{attGuid}/delete", actH.DeleteAttachment)
+			r.Post("/contracts/{id}/stages/costs/save", stageH.CostsSave)
 
 			// Бюджет (План)
 			r.Get("/contracts/{id}/budget", budgetH.Index)

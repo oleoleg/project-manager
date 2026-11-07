@@ -49,67 +49,127 @@
         <strong id="total-fot">0,00 ₽</strong>
     </div>
     <div class="total-card">
-        <span>Общие затраты (Себестоимость)</span>
-        <strong id="total-cost">0,00 ₽</strong>
+        <span>Стоимость работ (Продажа)</span>
+        <strong id="total-sale">0,00 ₽</strong>
+    </div>
+    <div class="total-card">
+        <span>Общая себестоимость <br><small style="font-size: 0.8em; color: #888;">(ФОТп + командир. + себест. обор. + субподряд + комиссия + другое + накладные)</small></span>
+        <strong id="total-cost" style="color: #ff6384;">0,00 ₽</strong>
+        {{ if .HasActivePlan }}
+        <div class="vat-hint">Накладные: {{ printf "%.1f" (mul .OverheadRate 100) }}%</div>
+        {{ end }}
     </div>
 </div>
 
-<div class="table-scroll">
-    <table class="data-table costs-table" style="min-width: 1200px;">
-        <thead>
-        <tr>
-            <th>Этап</th>
-            <th>Вид работы</th>
-            <th class="num">Стоимость работ</th>
-            <th class="num">ФОТп</th>
-            <th class="num">Коэф.</th>
-            <th class="num">Т/з, дни</th>
-            <th class="num">Ставка/день</th>
-            <th class="num">Командир.</th>
-            <th class="num">Обор. (прод.)</th>
-            <th class="num">Обор. (себест.)</th>
-            <th class="num">Субподряд</th>
-            <th class="num">Комиссия</th>
-            <th class="num">Другое</th>
-        </tr>
-        </thead>
-        <tbody>
-        {{ range .Costs }}
-            {{ $stage := index $.StagesMap .StageGUID }}
-            <tr>
-                <td style="text-align: center;">
-                    {{ if $stage }}
-                        <a href="/contracts/{{ $c.ID }}/stages/{{ $stage.GUID }}/edit" title="Редактировать этап">{{ $stage.StageNumber }}</a>
-                    {{ else }}
-                        —
-                    {{ end }}
-                </td>
-                <td>{{ .WorkKind }}</td>
-                <td class="num">{{ money .Cost }}</td>
-                <td class="num">{{ money .FOTPlan }}</td>
-                <td class="num" style="color: var(--text-muted);">
-                    {{ if gt .Cost 0.0 }}{{ printf "%.2f" (div .FOTPlan .Cost) }}{{ else }}—{{ end }}
-                </td>
-                <td class="num">{{ printf "%.0f" .LaborDays }}</td>
-                <td class="num">{{ money0 .RatePerDay }}</td>
-                <td class="num">{{ money0 .TravelExpenses }}</td>
-                <td class="num">{{ money0 .EquipmentSale }}</td>
-                <td class="num">{{ money0 .EquipmentCost }}</td>
-                <td class="num">{{ money0 .Subcontract }}</td>
-                <td class="num">{{ money0 .Commission }}</td>
-                <td class="num">{{ money0 .OtherExpenses }}</td>
-            </tr>
-        {{ else }}
-            <tr>
-                <td colspan="13" style="text-align: center; padding: 20px; color: var(--text-muted);">
-                    У этого договора пока нет добавленных затрат по этапам.
-                </td>
-            </tr>
-        {{ end }}
-        </tbody>
-    </table>
+<!-- Кнопка сохранения -->
+<div style="margin-bottom: 15px;">
+    <button type="submit" form="costs-edit-form" class="btn btn-primary">💾 Сохранить изменения</button>
 </div>
 
+<div class="filter-bar" style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center;">
+    <span>Сортировать:</span>
+    <button type="button" class="btn btn-sm sort-btn" onclick="sortCostsTable('stage', this)">По этапам</button>
+    <button type="button" class="btn btn-sm sort-btn" onclick="sortCostsTable('work', this)">По видам работ</button>
+</div>
+
+ <form id="costs-edit-form" method="post" action="/contracts/{{ $c.ID }}/stages/costs/save">
+    <div class="table-scroll">
+        <table class="data-table costs-table" style="min-width: 1200px;">
+            <thead>
+            <tr>
+                <th>Этап</th>
+                <th>Вид работы</th>
+                <th class="num">Стоимость работ</th>
+                <th class="num">ФОТп</th>
+                <th class="num">Коэф.</th>
+                <th class="num">Т/з, дни</th>
+                <th class="num">Ставка/день</th>
+                <th class="num">Командир.</th>
+                <th class="num">Обор. (прод.)</th>
+                <th class="num">Обор. (себест.)</th>
+                <th class="num">Субподряд</th>
+                <th class="num">Комиссия</th>
+                <th class="num">Другое</th>
+            </tr>
+            </thead>
+            <tbody>
+            {{ range $i, $row := .DisplayRows }}
+                {{ if $row.IsHeader }}
+                    <!-- ЗАГОЛОВОК ЭТАПА -->
+                    <tr class="stage-header-row" style="background: var(--surface-alt);">
+                        <td style="font-weight: bold; color: var(--accent); text-align: center;">{{ $row.Stage.StageNumber }}</td>
+                        <td colspan="12" style="font-weight: bold; font-size: 1.1em; color: var(--accent);">
+                            {{ $row.Stage.Name }}
+                            <span class="muted" style="font-size: 12px; font-weight: normal; margin-left: 10px;">
+                                Стоимость этапа: {{ money $row.Stage.Cost }} | Аванс: {{ printf "%.1f" $row.Stage.AdvancePercent }}%
+                            </span>
+                        </td>
+                    </tr>
+                {{ else }}
+                    <!-- СТРОКА ЗАТРАТ -->
+                    {{ $cost := $row.Cost }}
+                    <tr class="cost-row" data-stage-guid="{{ $cost.StageGUID }}">
+                        <input type="hidden" name="cost_stage_guid[]" value="{{ $cost.StageGUID }}">
+                        <input type="hidden" name="cost_work_kind[]" value="{{ $cost.WorkKind }}">
+                        
+                        <td></td>
+                        <td>{{ $cost.WorkKind }}</td>
+                        
+                        <td class="num"><input type="text" name="cost_amount[]" class="money-input fact-input" value="{{ if $cost.Cost }}{{ printf "%.2f" $cost.Cost }}{{ end }}"></td>
+                        
+                        <td class="num cell-fot" style="position: relative;">
+                            <input type="text" name="cost_fot_plan[]" class="money-input fact-input" value="{{ if $cost.FOTPlan }}{{ printf "%.2f" $cost.FOTPlan }}{{ end }}">
+                            <button type="button" class="lock-btn {{ if containsLock $cost.LockedField "fot_plan" }}locked{{ end }}" data-field="fot_plan" title="Зафиксировать ФОТп">🔓</button>
+                            <input type="hidden" name="cost_locked[]" value="{{ $cost.LockedField }}">
+                        </td>
+                        
+                        <td class="num cell-ratio">
+                            <input type="text" class="ratio-display fact-input" value="{{ if and $cost.Cost $cost.FOTPlan }}{{ printf "%.2f" (div $cost.FOTPlan $cost.Cost) }}{{ end }}" readonly tabindex="-1" style="background: transparent; border: none;">
+                        </td>
+                        
+                        <td class="num cell-days" style="position: relative;">
+                            <input type="text" name="cost_labor_days[]" class="days-input fact-input" value="{{ printf "%.0f" $cost.LaborDays }}">
+                            <button type="button" class="lock-btn {{ if containsLock $cost.LockedField "labor_days" }}locked{{ end }}" data-field="labor_days" title="Зафиксировать т/з">🔓</button>
+                        </td>
+                        
+                        <td class="num cell-rate" style="position: relative;">
+                            <input type="text" name="cost_rate_per_day[]" class="money-input fact-input" value="{{ if $cost.RatePerDay }}{{ printf "%.2f" $cost.RatePerDay }}{{ end }}">
+                            <button type="button" class="lock-btn {{ if containsLock $cost.LockedField "rate_per_day" }}locked{{ end }}" data-field="rate_per_day" title="Зафиксировать ставку">🔓</button>
+                        </td>
+                        
+                        <td class="num"><input type="text" name="cost_travel[]" class="money-input fact-input" value="{{ if $cost.TravelExpenses }}{{ printf "%.2f" $cost.TravelExpenses }}{{ end }}"></td>
+                        <td class="num"><input type="text" name="cost_equipment_sale[]" class="money-input fact-input" value="{{ if $cost.EquipmentSale }}{{ printf "%.2f" $cost.EquipmentSale }}{{ end }}"></td>
+                        <td class="num"><input type="text" name="cost_equipment_cost[]" class="money-input fact-input" value="{{ if $cost.EquipmentCost }}{{ printf "%.2f" $cost.EquipmentCost }}{{ end }}"></td>
+                        <td class="num"><input type="text" name="cost_subcontract[]" class="money-input fact-input" value="{{ if $cost.Subcontract }}{{ printf "%.2f" $cost.Subcontract }}{{ end }}"></td>
+                        <td class="num"><input type="text" name="cost_commission[]" class="money-input fact-input" value="{{ if $cost.Commission }}{{ printf "%.2f" $cost.Commission }}{{ end }}"></td>
+                        <td class="num"><input type="text" name="cost_other[]" class="money-input fact-input" value="{{ if $cost.OtherExpenses }}{{ printf "%.2f" $cost.OtherExpenses }}{{ end }}"></td>
+                    </tr>
+                {{ end }}
+            {{ end }}
+            </tbody>
+            <tfoot>
+                <tr style="background: var(--surface-alt); font-weight: bold;">
+                    <td colspan="2" style="text-align: right; padding: 10px;">ИТОГО:</td>
+                    <td class="num" id="foot-total-sale">0,00 ₽</td> <!-- Стоимость работ -->
+                    <td class="num" id="foot-total-fot">0,00 ₽</td>
+                    <td></td> <!-- Коэф не суммируем -->
+                    <td class="num" id="foot-total-days">0</td>
+                    <td></td> <!-- Ставку НЕ суммируем -->
+                    <td class="num" id="foot-total-travel">0,00 ₽</td>
+                    <td class="num" id="foot-total-eq-sale">0,00 ₽</td>
+                    <td class="num" id="foot-total-eq-cost">0,00 ₽</td>
+                    <td class="num" id="foot-total-sub">0,00 ₽</td>
+                    <td class="num" id="foot-total-comm">0,00 ₽</td>
+                    <td class="num" id="foot-total-other">0,00 ₽</td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</form>
+
+<div id="calc-data" data-overhead="{{ .OverheadRate }}" hidden></div>
+
+<script src="/static/stage_costs_checks.js"></script>
 <script src="/static/stage_costs.js"></script>
 
 {{ template "layout_footer" . }}

@@ -190,5 +190,12 @@ document.addEventListener('DOMContentLoaded', function() {
     if (urlParams.get('costs') === '1' && costsBlock) {
         // Прокручиваем страницу к этому блоку
         costsBlock.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        
+        // Дополнительно убедимся, что он развернут
+        const body = costsBlock.querySelector('.collapsible-body');
+        if (body && body.style.display === 'none') {
+            const btn = costsBlock.querySelector('.toggle-btn');
+            if (btn) btn.click(); // Имитируем клик, чтобы развернуть
+        }
     }
 });

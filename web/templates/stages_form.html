@@ -173,8 +173,12 @@
                             </td>
 
                             <td>
+                                {{ $costVal := $cost.Cost }}
+                                {{ if and (eq $i 0) (eq $costVal 0.0) }}
+                                    {{ $costVal = $s.Cost }} <!-- Если затрат нет, подставляем стоимость этапа -->
+                                {{ end }}
                                 <input type="text" name="cost_amount" class="money-input"
-                                    value="{{ if $cost.Cost }}{{ printf "%.2f" $cost.Cost }}{{ end }}">
+                                    value="{{ if $costVal }}{{ printf "%.2f" $costVal }}{{ end }}">
                             </td>
 
                             <td class="cell-fot">
