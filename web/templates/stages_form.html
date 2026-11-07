@@ -116,124 +116,134 @@
         <textarea name="note" rows="3">{{ $s.Note }}</textarea>
     </label>
 
-    <h3 class="form-section-title">Затраты этапа</h3>
-    <p class="hint">
-        ФОТп = Ставка × т/з. Коэф = ФОТп / Стоимость работ — вычисляется автоматически.
-        Замок 🔒 фиксирует поле; можно зафиксировать любое одно или два из трёх: ФОТп, т/з, ставка.
-    </p>
+    {{ if not $isNew }}
+    <section class="collapsible" id="section-costs" style="margin-top: 30px;">
+        <header class="collapsible-header">
+            <h3 class="form-section-title">Затраты этапа</h3>
+            <div class="collapsible-actions">
+                <button type="button" class="toggle-btn" onclick="toggleSection('section-costs')">Свернуть</button>
+            </div>
+        </header>
+        <div class="collapsible-body">
+            <p class="hint">
+                ФОТп = Ставка × т/з. Коэф = ФОТп / Стоимость работ — вычисляется автоматически.
+                Замок 🔒 фиксирует поле; можно зафиксировать любое одно или два из трёх: ФОТп, т/з, ставка.
+            </p>
 
-    <div class="costs-toolbar">
-        <label class="inline-checkbox">
-            <input type="checkbox" id="costs-compact-toggle">
-            Компактный вид (скрыть коэф / т/з / ставка)
-        </label>
-    </div>
-
-    <div class="costs-table-wrapper">
-        <table class="costs-table" id="costs-table">
-            <thead>
-            <tr>
-                <th>Вид работы</th>
-                <th>Стоимость работ<br><small class="th-sub">продажа, ₽</small></th>
-                <th>ФОТп</th>
-                <th class="col-optional">коэф</th>
-                <th class="col-optional">т/з, дни</th>
-                <th class="col-optional">Ставка ₽/день</th>
-                <th>Командир.</th>
-                <th class="col-optional">Обор. (прод.)</th>
-                <th>Обор. (себест.)</th>
-                <th>Субподряд</th>
-                <th>Комиссия</th>
-                <th>Другое</th>
-                <th></th>
-            </tr>
-            </thead>
-            <tbody id="costs-body">
-            {{ range $i, $cost := .Costs }}
-                <tr class="cost-row">
-                    <td>
-                        {{ if eq $s.WorkKind "Комплексный" }}
-                            <select name="cost_work_kind">
-                                <option value="">—</option>
-                                {{ range $.CostWorkKinds }}
-                                    <option value="{{ .Code }}" {{ if eq .Code $cost.WorkKind }}selected{{ end }}>{{ .Name }}</option>
+            <div class="costs-toolbar">
+                <label class="inline-checkbox">
+                    <input type="checkbox" id="costs-compact-toggle">
+                    Компактный вид (скрыть коэф / т/з / ставка)
+                </label>
+            </div>
+            <div class="costs-table-wrapper">
+                <table class="costs-table" id="costs-table">
+                    <thead>
+                    <tr>
+                        <th>Вид работы</th>
+                        <th>Стоимость работ<br><small class="th-sub">продажа, ₽</small></th>
+                        <th>ФОТп</th>
+                        <th class="col-optional">коэф</th>
+                        <th class="col-optional">т/з, дни</th>
+                        <th class="col-optional">Ставка ₽/день</th>
+                        <th>Командир.</th>
+                        <th class="col-optional">Обор. (прод.)</th>
+                        <th>Обор. (себест.)</th>
+                        <th>Субподряд</th>
+                        <th>Комиссия</th>
+                        <th>Другое</th>
+                        <th></th>
+                    </tr>
+                    </thead>
+                    <tbody id="costs-body">
+                    {{ range $i, $cost := .Costs }}
+                        <tr class="cost-row">
+                            <td>
+                                {{ if eq $s.WorkKind "Комплексный" }}
+                                    <select name="cost_work_kind">
+                                        <option value="">—</option>
+                                        {{ range $.CostWorkKinds }}
+                                            <option value="{{ .Code }}" {{ if eq .Code $cost.WorkKind }}selected{{ end }}>{{ .Name }}</option>
+                                        {{ end }}
+                                    </select>
+                                {{ else }}
+                                    <input type="hidden" name="cost_work_kind" value="{{ $s.WorkKind }}">
+                                    <span class="cost-workkind-static">{{ $s.WorkKind }}</span>
                                 {{ end }}
-                            </select>
-                        {{ else }}
-                            <input type="hidden" name="cost_work_kind" value="{{ $s.WorkKind }}">
-                            <span class="cost-workkind-static">{{ $s.WorkKind }}</span>
-                        {{ end }}
-                    </td>
+                            </td>
 
-                    <td>
-                        <input type="text" name="cost_amount" class="money-input"
-                               value="{{ if $cost.Cost }}{{ printf "%.2f" $cost.Cost }}{{ end }}">
-                    </td>
+                            <td>
+                                <input type="text" name="cost_amount" class="money-input"
+                                    value="{{ if $cost.Cost }}{{ printf "%.2f" $cost.Cost }}{{ end }}">
+                            </td>
 
-                    <td class="cell-fot">
-                        <input type="text" name="cost_fot_plan" class="money-input"
-                               value="{{ if $cost.FOTPlan }}{{ printf "%.2f" $cost.FOTPlan }}{{ end }}">
-                        <button type="button"
-                                class="lock-btn {{ if containsLock $cost.LockedField "fot_plan" }}locked{{ end }}"
-                                data-field="fot_plan"
-                                title="Зафиксировать ФОТп">🔓</button>
-                        <input type="hidden" name="cost_locked" value="{{ $cost.LockedField }}">
-                    </td>
+                            <td class="cell-fot">
+                                <input type="text" name="cost_fot_plan" class="money-input"
+                                    value="{{ if $cost.FOTPlan }}{{ printf "%.2f" $cost.FOTPlan }}{{ end }}">
+                                <button type="button"
+                                        class="lock-btn {{ if containsLock $cost.LockedField "fot_plan" }}locked{{ end }}"
+                                        data-field="fot_plan"
+                                        title="Зафиксировать ФОТп">🔓</button>
+                                <input type="hidden" name="cost_locked" value="{{ $cost.LockedField }}">
+                            </td>
 
-                    <td class="cell-ratio col-lockable">
-                        <input type="text" class="ratio-display"
-                               value="{{ if and $cost.Cost $cost.FOTPlan }}{{ printf "%.2f" (div $cost.FOTPlan $cost.Cost) }}{{ end }}"
-                               readonly tabindex="-1">
-                    </td>
+                            <td class="cell-ratio col-lockable">
+                                <input type="text" class="ratio-display"
+                                    value="{{ if and $cost.Cost $cost.FOTPlan }}{{ printf "%.2f" (div $cost.FOTPlan $cost.Cost) }}{{ end }}"
+                                    readonly tabindex="-1">
+                            </td>
 
-                    <td class="cell-days col-lockable">
-                        <input type="text" name="cost_labor_days" class="days-input"
-                               value="{{ if $cost.LaborDays }}{{ printf "%.0f" $cost.LaborDays }}{{ end }}">
-                        <button type="button"
-                                class="lock-btn {{ if containsLock $cost.LockedField "labor_days" }}locked{{ end }}"
-                                data-field="labor_days"
-                                title="Зафиксировать т/з">🔓</button>
-                    </td>
+                            <td class="cell-days col-lockable">
+                                <input type="text" name="cost_labor_days" class="days-input"
+                                    value="{{ if $cost.LaborDays }}{{ printf "%.0f" $cost.LaborDays }}{{ end }}">
+                                <button type="button"
+                                        class="lock-btn {{ if containsLock $cost.LockedField "labor_days" }}locked{{ end }}"
+                                        data-field="labor_days"
+                                        title="Зафиксировать т/з">🔓</button>
+                            </td>
 
-                    <td class="cell-rate col-lockable">
-                        <input type="text" name="cost_rate_per_day" class="money-input"
-                               value="{{ if $cost.RatePerDay }}{{ printf "%.2f" $cost.RatePerDay }}{{ end }}">
-                        <button type="button"
-                                class="lock-btn {{ if containsLock $cost.LockedField "rate_per_day" }}locked{{ end }}"
-                                data-field="rate_per_day"
-                                title="Зафиксировать ставку">🔓</button>
-                    </td>
+                            <td class="cell-rate col-lockable">
+                                <input type="text" name="cost_rate_per_day" class="money-input"
+                                    value="{{ if $cost.RatePerDay }}{{ printf "%.2f" $cost.RatePerDay }}{{ end }}">
+                                <button type="button"
+                                        class="lock-btn {{ if containsLock $cost.LockedField "rate_per_day" }}locked{{ end }}"
+                                        data-field="rate_per_day"
+                                        title="Зафиксировать ставку">🔓</button>
+                            </td>
 
-                    <td><input type="text" name="cost_travel" class="money-input" value="{{ if $cost.TravelExpenses }}{{ printf "%.2f" $cost.TravelExpenses }}{{ end }}"></td>
-                    <td class="col-optional col-lockable"><input type="text" name="cost_equipment_sale" class="money-input" value="{{ if $cost.EquipmentSale }}{{ printf "%.2f" $cost.EquipmentSale }}{{ end }}"></td>
-                    <td><input type="text" name="cost_equipment_cost" class="money-input" value="{{ if $cost.EquipmentCost }}{{ printf "%.2f" $cost.EquipmentCost }}{{ end }}"></td>
-                    <td><input type="text" name="cost_subcontract" class="money-input" value="{{ if $cost.Subcontract }}{{ printf "%.2f" $cost.Subcontract }}{{ end }}"></td>
-                    <td><input type="text" name="cost_commission" class="money-input" value="{{ if $cost.Commission }}{{ printf "%.2f" $cost.Commission }}{{ end }}"></td>
-                    <td><input type="text" name="cost_other" class="money-input" value="{{ if $cost.OtherExpenses }}{{ printf "%.2f" $cost.OtherExpenses }}{{ end }}"></td>
-                    <td>
-                        <button type="button" class="btn btn-sm btn-danger cost-remove" title="Удалить">×</button>
-                    </td>
-                </tr>
+                            <td><input type="text" name="cost_travel" class="money-input" value="{{ if $cost.TravelExpenses }}{{ printf "%.2f" $cost.TravelExpenses }}{{ end }}"></td>
+                            <td class="col-optional col-lockable"><input type="text" name="cost_equipment_sale" class="money-input" value="{{ if $cost.EquipmentSale }}{{ printf "%.2f" $cost.EquipmentSale }}{{ end }}"></td>
+                            <td><input type="text" name="cost_equipment_cost" class="money-input" value="{{ if $cost.EquipmentCost }}{{ printf "%.2f" $cost.EquipmentCost }}{{ end }}"></td>
+                            <td><input type="text" name="cost_subcontract" class="money-input" value="{{ if $cost.Subcontract }}{{ printf "%.2f" $cost.Subcontract }}{{ end }}"></td>
+                            <td><input type="text" name="cost_commission" class="money-input" value="{{ if $cost.Commission }}{{ printf "%.2f" $cost.Commission }}{{ end }}"></td>
+                            <td><input type="text" name="cost_other" class="money-input" value="{{ if $cost.OtherExpenses }}{{ printf "%.2f" $cost.OtherExpenses }}{{ end }}"></td>
+                            <td>
+                                <button type="button" class="btn btn-sm btn-danger cost-remove" title="Удалить">×</button>
+                            </td>
+                        </tr>
+                    {{ end }}
+                    </tbody>
+                </table>
+            </div>
+
+            <p class="hint">
+                Стоимость работ — продажа по виду работ (без НДС).
+                Для некомплексного этапа должна быть равна стоимости этапа.
+                Затраты (ФОТп, командировочные, оборудование себест., субподряд, комиссия, другое) — себестоимость.
+            </p>
+
+            <div class="warning" id="costs-overrun-warning" style="display: none;"></div>
+            <div class="warning" id="costs-sale-mismatch-warning" style="display: none;"></div>
+
+            {{ if eq $s.WorkKind "Комплексный" }}
+            <p>
+                <button type="button" class="btn btn-sm" id="cost-add">+ Добавить строку</button>
+            </p>
             {{ end }}
-            </tbody>
-        </table>
-    </div>
 
-    <p class="hint">
-        Стоимость работ — продажа по виду работ (без НДС).
-        Для некомплексного этапа должна быть равна стоимости этапа.
-        Затраты (ФОТп, командировочные, оборудование себест., субподряд, комиссия, другое) — себестоимость.
-    </p>
-
-    <div class="warning" id="costs-overrun-warning" style="display: none;"></div>
-    <div class="warning" id="costs-sale-mismatch-warning" style="display: none;"></div>
-
-    {{ if eq $s.WorkKind "Комплексный" }}
-    <p>
-        <button type="button" class="btn btn-sm" id="cost-add">+ Добавить строку</button>
-    </p>
+        </div>
+    </section>
     {{ end }}
-
     <div class="form-actions">
         <button type="submit" class="btn btn-primary">Сохранить</button>
         <a href="/contracts/{{ .Contract.ID }}/stages" class="btn">Отмена</a>
@@ -241,191 +251,7 @@
 </form>
 
 <script src="/static/budget_checks.js"></script>
-
-<script>
-    // 1. Скрытие столбцов
-    (function () {
-        const toggle = document.getElementById('costs-compact-toggle');
-        const table = document.getElementById('costs-table');
-        if (toggle && table) {
-            toggle.addEventListener('change', () => {
-                table.classList.toggle('compact', toggle.checked);
-            });
-        }
-    })();
-
-    // 2. Инициализация замочков
-    (function () {
-        const body = document.getElementById('costs-body');
-        if (body) {
-            BudgetChecks.initLocks(body);
-        }
-    })();
-
-    // 3. Пересчет и проверки
-    (function () {
-        const body = document.getElementById('costs-body');
-        if (!body) return;
-
-        function checkWarnings() {
-            const stageCostEl = document.querySelector('input[name="cost"]');
-            const stageCost = BudgetChecks.num(stageCostEl ? stageCostEl.value : 0);
-            
-            let totalSale = 0;
-            let totalExpenses = 0;
-
-            body.querySelectorAll('.cost-row').forEach(r => {
-                totalSale += 
-                    BudgetChecks.num(r.querySelector('[name="cost_amount"]').value) +
-                    BudgetChecks.num(r.querySelector('[name="cost_equipment_sale"]').value);
-                
-                totalExpenses += 
-                    BudgetChecks.num(r.querySelector('[name="cost_fot_plan"]').value) +
-                    BudgetChecks.num(r.querySelector('[name="cost_travel"]').value) +
-                    BudgetChecks.num(r.querySelector('[name="cost_equipment_cost"]').value) +
-                    BudgetChecks.num(r.querySelector('[name="cost_subcontract"]').value) +
-                    BudgetChecks.num(r.querySelector('[name="cost_commission"]').value) +
-                    BudgetChecks.num(r.querySelector('[name="cost_other"]').value);
-            });
-
-            const w1 = document.getElementById('costs-overrun-warning');
-            if (w1) {
-                if (stageCost > 0 && totalExpenses > stageCost) {
-                    w1.textContent = 'Внимание: затраты (' + totalExpenses.toFixed(2) + ' ₽) превышают стоимость этапа (' + stageCost.toFixed(2) + ' ₽). Этап убыточный.';
-                    w1.style.display = 'block';
-                } else {
-                    w1.style.display = 'none';
-                }
-            }
-
-            const w2 = document.getElementById('costs-sale-mismatch-warning');
-            if (w2) {
-                if (stageCost > 0 && totalSale > 0 && Math.abs(stageCost - totalSale) > 0.01) {
-                    w2.textContent = 'Внимание: сумма разложения по строкам (' + totalSale.toFixed(2) + ' ₽) не совпадает со стоимостью этапа (' + stageCost.toFixed(2) + ' ₽).';
-                    w2.style.display = 'block';
-                } else {
-                    w2.style.display = 'none';
-                }
-            }
-        }
-
-        body.addEventListener('input', (e) => {
-            const row = e.target.closest('.cost-row');
-            if (!row) return;
-            BudgetChecks.recalcRow(row, e.target.name);
-            checkWarnings();
-        });
-
-        body.addEventListener('change', (e) => {
-            const row = e.target.closest('.cost-row');
-            if (!row) return;
-            BudgetChecks.recalcRow(row, e.target.name);
-            checkWarnings();
-        });
-
-        body.addEventListener('recalc-request', (e) => {
-            const row = e.target.closest('.cost-row');
-            if (!row) return;
-            BudgetChecks.recalcRow(row, '');
-        });
-
-        const stageCostEl = document.querySelector('input[name="cost"]');
-        if (stageCostEl) stageCostEl.addEventListener('input', checkWarnings);
-
-        body.querySelectorAll('.cost-row').forEach(row => BudgetChecks.recalcRow(row, ''));
-        checkWarnings();
-    })();
-
-    // 4. Добавление / удаление строк
-    (function () {
-        const body = document.getElementById('costs-body');
-        const addBtn = document.getElementById('cost-add');
-        if (!body) return;
-
-        function makeRow() {
-            const tpl = body.querySelector('.cost-row');
-            const row = tpl ? tpl.cloneNode(true) : document.createElement('tr');
-            row.querySelectorAll('input').forEach(i => {
-                if (i.type === 'hidden') { i.value = ''; return; }
-                i.value = '';
-            });
-            row.querySelectorAll('select').forEach(s => { s.selectedIndex = 0; });
-            row.querySelectorAll('.lock-btn').forEach(b => {
-                b.classList.remove('locked');
-                b.textContent = '🔓';
-            });
-            row.querySelector('.ratio-display') && (row.querySelector('.ratio-display').value = '');
-            row.classList.add('cost-row');
-            return row;
-        }
-
-        function reattachMoneyInputs(scope) {
-            if (window.attachMoneyInput) {
-                scope.querySelectorAll('input.money-input').forEach(window.attachMoneyInput);
-            }
-        }
-
-        if (addBtn) {
-            addBtn.addEventListener('click', () => {
-                const row = makeRow();
-                body.appendChild(row);
-                reattachMoneyInputs(row);
-            });
-        }
-
-        body.addEventListener('click', (e) => {
-            if (e.target.classList.contains('cost-remove')) {
-                const rows = body.querySelectorAll('.cost-row');
-                if (rows.length > 1) {
-                    e.target.closest('tr').remove();
-                } else {
-                    alert('Должна остаться хотя бы одна строка затрат.');
-                }
-            }
-        });
-    })();
-
-    // 5. Переключатель Закрыто по актам
-    (function () {
-        const btn      = document.getElementById('closed-by-acts-lock');
-        const checkbox = document.getElementById('closed-by-acts-manual');
-        const input    = document.getElementById('closed-by-acts-input');
-        if (!btn || !checkbox || !input) return;
-
-        btn.addEventListener('click', () => {
-            checkbox.checked = !checkbox.checked;
-
-            if (checkbox.checked) {
-                input.readOnly = false;
-                btn.textContent = '🔒';
-                btn.classList.add('locked');
-                btn.title = 'Сейчас ручной ввод. Нажмите, чтобы подтягивать из актов';
-            } else {
-                input.readOnly = true;
-                btn.textContent = '🔗';
-                btn.classList.remove('locked');
-                btn.title = 'Сейчас подтяжка из актов. Нажмите для ручного ввода';
-                loadActSum(input);
-            }
-        });
-
-        function loadActSum(input) {
-            const url = btn.dataset.actSumUrl;
-            if (!url) return;
-            fetch(url)
-                .then(r => r.json())
-                .then(data => {
-                    const sum = data.sum || 0;
-                    if (window.inputMoney) {
-                        input.value = window.inputMoney(String(sum.toFixed(2)));
-                    } else {
-                        input.value = sum.toFixed(2);
-                    }
-                })
-                .catch((err) => console.error('Ошибка загрузки суммы актов:', err));
-        }
-    })();
-</script>
+<script src="/static/stage_form.js"></script>
 
 {{ template "layout_footer" . }}
 {{ end }}

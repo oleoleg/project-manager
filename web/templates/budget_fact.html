@@ -43,9 +43,7 @@
             </form>
         {{ end }}
         {{ if .FactLines }}
-            <form method="post" action="/contracts/{{ $c.ID }}/budget/fact/append" style="display:inline;" onsubmit="return confirm('Добавить в факт недостающие строки из активного плана?');">
-                <button type="submit" class="btn btn-primary">➕ Дозаполнить из плана</button>
-            </form>
+            <button type="button" class="btn btn-primary" id="btn-append-plan">➕ Дозаполнить из плана</button>
         {{ end }}
 
         {{ if not .FactLines }}
@@ -266,5 +264,27 @@
     }
 </script>
 
+<!-- ======================= МОДАЛЬНОЕ ОКНО: Дозаполнить из плана ======================= -->
+<div class="modal-backdrop" id="append-modal" style="display: none;">
+    <div class="modal" style="max-width: 800px; width: 90%;">
+        <header class="modal-header">
+            <h3>Дозаполнить факт из плана</h3>
+            <button type="button" class="modal-close" id="append-modal-close">×</button>
+        </header>
+        <div class="modal-body">
+            <p class="hint">Выберите строки из плана, которые нужно добавить в факт.</p>
+            <div id="append-modal-list" style="max-height: 400px; overflow-y: auto; margin-bottom: 20px;">
+                <p class="muted">Загрузка…</p>
+            </div>
+            <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" class="btn" id="append-modal-cancel">Отмена</button>
+                <button type="button" class="btn btn-primary" id="append-modal-save">Добавить выбранные</button>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- =================================================================================== -->
+
+<script src="/static/budget-fact-modal.js"></script>
 {{ template "layout_footer" . }}
 {{ end }}

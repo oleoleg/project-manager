@@ -353,6 +353,8 @@ func startHTTPServer(stopCh <-chan struct{}) {
 			r.Post("/contracts/{id}/budget/fact/delete-row", budgetH.FactDeleteRow)
 			r.Post("/contracts/{id}/budget/fact/auto-confirm", budgetH.FactAutoConfirmAutoRows)
 			r.Post("/contracts/{id}/budget/fact/append", budgetH.FactAppendFromPlan)
+			r.Post("/contracts/{id}/budget/fact/append-preview", budgetH.FactAppendPreview)
+			r.Post("/contracts/{id}/budget/fact/append-selected", budgetH.FactAppendSelected)
 
 			// Сравнить Бюджет Факт vs План
 			r.Get("/contracts/{id}/budget/compare", budgetH.PlanFactIndex)

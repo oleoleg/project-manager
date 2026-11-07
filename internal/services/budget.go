@@ -426,3 +426,11 @@ func (s *BudgetService) GetFactCostTotalsByStage(ctx context.Context, contractID
 func (s *BudgetService) GetPlanCostTotalsByStage(ctx context.Context, contractID string) (map[string]float64, error) {
 	return s.repo.GetPlanCostTotalsByStage(ctx, contractID)
 }
+
+func (s *BudgetService) GetMissingPlanLines(ctx context.Context, contractID string) ([]models.BudgetPlanLine, error) {
+	return s.repo.GetMissingPlanLines(ctx, contractID)
+}
+
+func (s *BudgetService) AppendSelectedFactLines(ctx context.Context, contractID string, planLineIDs []string) error {
+	return s.repo.AppendSelectedFactLines(ctx, contractID, planLineIDs)
+}

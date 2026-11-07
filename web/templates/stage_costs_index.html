@@ -110,41 +110,7 @@
     </table>
 </div>
 
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    let totalFot = 0;
-    let totalCost = 0;
-    
-    // Считаем суммы
-    document.querySelectorAll('.costs-table tbody tr').forEach(tr => {
-        const cells = tr.querySelectorAll('td');
-        if (cells.length > 5) {
-            // Парсим ФОТп (4-я колонка) и Стоимость (3-я колонка)
-            const costVal = parseMoneyText(cells[2].textContent);
-            const fotVal = parseMoneyText(cells[3].textContent);
-            totalCost += costVal;
-            totalFot += fotVal;
-        }
-    });
-
-    function formatMoney(val) {
-        if (!val && val !== 0) return '';
-        const s = Math.abs(val).toFixed(2);
-        const formatted = s.replace(/\B(?=(\d{3})+(?!\d))/g, '\u00A0');
-        return (val < 0 ? '-' : '') + formatted + ' ₽';
-    }
-
-    function parseMoneyText(text) {
-        if (!text) return 0;
-        const clean = text.replace(/[^\d.,-]/g, '').replace(',', '.');
-        const val = parseFloat(clean);
-        return isNaN(val) ? 0 : val;
-    }
-
-    document.getElementById('total-fot').textContent = formatMoney(totalFot);
-    document.getElementById('total-cost').textContent = formatMoney(totalCost);
-});
-</script>
+<script src="/static/stage_costs.js"></script>
 
 {{ template "layout_footer" . }}
 {{ end }}

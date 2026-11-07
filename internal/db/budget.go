@@ -1274,3 +1274,132 @@ func relinkFactToPlan(ctx context.Context, tx pgx.Tx, contractID string) error {
 	}
 	return nil
 }
+
+// GetMissingPlanLines возвращает строки активного плана, которых нет в факте.
+func (r *BudgetRepo) GetMissingPlanLines(ctx context.Context, contractID string) ([]models.BudgetPlanLine, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT p.id, p.stage_number, p.stage_name, p.work_kind, p.name, p.operation_date, 
+		       p.payment_date, p.operation_type, p.income, p.expense
+		FROM budget_plan_lines p
+		WHERE p.contract_id = $1
+		  AND NOT EXISTS (
+		      SELECT 1 FROM budget_fact_lines f
+		      WHERE f.contract_id = $1
+		        AND f.operation_type = p.operation_type
+		        AND f.work_kind = p.work_kind
+		        AND f.name = p.name
+		  )
+	`, contractID)
+	if err != nil {
+		return nil, fmt.Errorf("get missing plan lines: %w", err)
+	}
+	defer rows.Close()
+
+	var lines []models.BudgetPlanLine
+	for rows.Next() {
+		var l models.BudgetPlanLine
+		if err := rows.Scan(
+			&l.ID, &l.StageNumber, &l.StageName, &l.WorkKind, &l.Name,
+			&l.OperationDate, &l.PaymentDate, &l.OperationType, &l.Income, &l.Expense,
+		); err != nil {
+			return nil, err
+		}
+		lines = append(lines, l)
+	}
+	return lines, rows.Err()
+}
+
+// AppendSelectedFactLines добавляет в факт только выбранные строки плана.
+func (r *BudgetRepo) AppendSelectedFactLines(ctx context.Context, contractID string, planLineIDs []string) error {
+	if len(planLineIDs) == 0 {
+		return nil
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	// 1. Получаем данные выбранных строк плана (добавили delay_days)
+	rows, err := tx.Query(ctx, `
+		SELECT id, stage_number, stage_name, work_kind, name, operation_date, delay_days, payment_date, operation_type, income, expense
+		FROM budget_plan_lines
+		WHERE id = ANY($1)
+	`, planLineIDs)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	type PlanLineData struct {
+		ID          string
+		StageNumber string
+		StageName   string
+		WorkKind    string
+		Name        string
+		OpDate      time.Time
+		DelayDays   int
+		PayDate     time.Time
+		OpType      string
+		Income      float64
+		Expense     float64
+	}
+
+	var lines []PlanLineData
+
+	for rows.Next() {
+		var l PlanLineData
+		if err := rows.Scan(
+			&l.ID, &l.StageNumber, &l.StageName, &l.WorkKind, &l.Name,
+			&l.OpDate, &l.DelayDays, &l.PayDate, &l.OpType, &l.Income, &l.Expense,
+		); err != nil {
+			return err
+		}
+		lines = append(lines, l)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	rows.Close()
+
+	// 2. Вставляем в факт
+	now := time.Now()
+	insertQuery := `
+		INSERT INTO budget_fact_lines (
+			contract_id, plan_line_id, stage_number, stage_name, work_kind, name, operation_date, delay_days, payment_date, 
+			operation_type, fact_income, fact_expense, is_confirmed, is_manual_edit
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, false)
+	`
+
+	for _, l := range lines {
+		// Автоподтверждение для ЗП и Накладных
+		isConfirmed := false
+		if l.OpType == OpTypeSalary || l.OpType == OpTypeOverhead {
+			if l.OpDate.Before(now) || l.OpDate.Format("2006-01") == now.Format("2006-01") {
+				isConfirmed = true
+			}
+		}
+
+		_, err := tx.Exec(ctx, insertQuery,
+			contractID,    // $1
+			l.ID,          // $2
+			l.StageNumber, // $3
+			l.StageName,   // $4
+			l.WorkKind,    // $5
+			l.Name,        // $6
+			l.OpDate,      // $7
+			l.DelayDays,   // $8
+			l.PayDate,     // $9
+			l.OpType,      // $10
+			l.Income,      // $11 (План приход -> Факт приход)
+			l.Expense,     // $12 (План расход -> Факт расход)
+			isConfirmed,   // $13
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit(ctx)
+}

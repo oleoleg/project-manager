@@ -884,3 +884,37 @@ func (h *BudgetHandler) FactAppendFromPlan(w http.ResponseWriter, r *http.Reques
 	}
 	http.Redirect(w, r, "/contracts/"+contractID+"/budget/fact?flash=Факт+дозаполнен+из+активного+плана", http.StatusSeeOther)
 }
+
+// FactAppendPreview отдает JSON со списком недостающих строк
+func (h *BudgetHandler) FactAppendPreview(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "id")
+	lines, err := h.svc.GetMissingPlanLines(r.Context(), contractID)
+	if err != nil {
+		log.Printf("get missing lines: %v", err)
+		http.Error(w, "Error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(lines)
+}
+
+// FactAppendSelected принимает список ID и добавляет их в факт
+func (h *BudgetHandler) FactAppendSelected(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "id")
+
+	var payload struct {
+		IDs []string `json:"ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.svc.AppendSelectedFactLines(r.Context(), contractID, payload.IDs); err != nil {
+		log.Printf("ОШИБКА APPEND SELECTED: %v", err)
+		http.Error(w, "Error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
