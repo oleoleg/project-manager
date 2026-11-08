@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"math"
 	"strings"
 
 	"github.com/oleoleg/project-manager/internal/db"
@@ -44,52 +45,37 @@ func (s *StageCostService) Validate(c *models.StageCost) error {
 	return nil
 }
 
-func (s *StageCostService) Recalculate(c *models.StageCost) {
-	locks := parseLocks(c.LockedField)
+// RecalculateCosts пересчитывает одно из трех полей (ФОТп, дни, ставка)
+// на основе двух других, в зависимости от того, какое поле указано в CalcField.
+func (s *StageCostService) RecalculateCosts(costs []models.StageCost) {
+	for i := range costs {
+		c := &costs[i]
 
-	hasFOT := locks["fot_plan"]
-	hasDays := locks["labor_days"]
-	hasRate := locks["rate_per_day"]
+		// Если ничего не вычисляется, пропускаем
+		if c.CalcField == "" {
+			continue
+		}
 
-	switch {
-	case hasFOT && hasDays:
-		if c.LaborDays > 0 {
-			c.RatePerDay = c.FOTPlan / c.LaborDays
-		}
-	case hasFOT && hasRate:
-		if c.RatePerDay > 0 {
-			c.LaborDays = c.FOTPlan / c.RatePerDay
-		}
-	case hasDays && hasRate:
-		c.FOTPlan = c.LaborDays * c.RatePerDay
-	case hasFOT:
-		if c.LaborDays > 0 {
-			c.RatePerDay = c.FOTPlan / c.LaborDays
-		}
-	case hasDays:
-		if c.LaborDays > 0 {
-			c.RatePerDay = c.FOTPlan / c.LaborDays
-		}
-	case hasRate:
-		if c.LaborDays > 0 {
+		switch c.CalcField {
+		case "fot_plan":
+			// Вычисляем ФОТп = Ставка * Дни
 			c.FOTPlan = c.RatePerDay * c.LaborDays
-		}
-	default:
-		if c.RatePerDay > 0 && c.LaborDays > 0 {
-			c.FOTPlan = c.RatePerDay * c.LaborDays
+		case "labor_days":
+			// Вычисляем Дни = ФОТп / Ставка
+			if c.RatePerDay > 0 {
+				c.LaborDays = math.Round(c.FOTPlan / c.RatePerDay)
+			} else {
+				c.LaborDays = 0
+			}
+		case "rate_per_day":
+			// Вычисляем Ставку = ФОТп / Дни
+			if c.LaborDays > 0 {
+				c.RatePerDay = c.FOTPlan / c.LaborDays
+			} else {
+				c.RatePerDay = 0
+			}
 		}
 	}
-}
-
-func parseLocks(s string) map[string]bool {
-	res := map[string]bool{}
-	for _, part := range strings.Split(s, ",") {
-		part = strings.TrimSpace(part)
-		if part != "" {
-			res[part] = true
-		}
-	}
-	return res
 }
 
 func (s *StageCostService) ReplaceForStage(ctx context.Context, stageGUID string, costs []models.StageCost) error {
@@ -101,8 +87,10 @@ func (s *StageCostService) ReplaceForStage(ctx context.Context, stageGUID string
 		seen[c.WorkKind] = true
 	}
 
+	// Вызываем пересчет
+	s.RecalculateCosts(costs)
+
 	for i := range costs {
-		s.Recalculate(&costs[i])
 		if err := s.Validate(&costs[i]); err != nil {
 			return err
 		}

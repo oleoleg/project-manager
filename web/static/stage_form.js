@@ -1,46 +1,119 @@
-// 1. Скрытие столбцов
-(function () {
-    const toggle = document.getElementById('costs-compact-toggle');
-    const table = document.getElementById('costs-table');
-    if (toggle && table) {
-        toggle.addEventListener('change', () => {
-            table.classList.toggle('compact', toggle.checked);
-        });
-    }
-})();
-
-// 2. Инициализация замочков
-(function () {
-    const body = document.getElementById('costs-body');
-    if (body) {
-        BudgetChecks.initLocks(body);
-    }
-})();
-
-// 3. Пересчет и проверки
-(function () {
+document.addEventListener('DOMContentLoaded', function() {
     const body = document.getElementById('costs-body');
     if (!body) return;
 
+    // 1. Функция обновления визуального состояния (auto / не auto)
+    function updateRowAutoState(row) {
+        const calcFieldHidden = row.querySelector('input[name="cost_calc_field"]');
+        const calcField = calcFieldHidden ? calcFieldHidden.value : '';
+
+        const fields = {
+            'fot_plan': row.querySelector('input[name="cost_fot_plan"]'),
+            'labor_days': row.querySelector('input[name="cost_labor_days"]'),
+            'rate_per_day': row.querySelector('input[name="cost_rate_per_day"]')
+        };
+
+        // Снимаем readonly и классы со всех
+        Object.values(fields).forEach(el => {
+            if (!el) return;
+            el.readOnly = false;
+            el.classList.remove('is-auto');
+            el.removeAttribute('tabindex');
+        });
+
+        // Убираем активные классы со всех кнопок
+        row.querySelectorAll('.auto-toggle-btn').forEach(b => b.classList.remove('active'));
+
+        // Применяем к выбранному полю
+        if (fields[calcField]) {
+            fields[calcField].readOnly = true;
+            fields[calcField].setAttribute('tabindex', '-1');
+            fields[calcField].classList.add('is-auto');
+            
+            const btn = fields[calcField].parentNode.querySelector('.auto-toggle-btn');
+            if (btn) btn.classList.add('active');
+        }
+    }
+
+    // 2. Логика переключения "auto" при клике на кнопку [A]
+    body.addEventListener('click', (e) => {
+        const btn = e.target.closest('.auto-toggle-btn');
+        if (!btn) return;
+
+        e.preventDefault();
+        const row = btn.closest('.cost-row');
+        const calcFieldHidden = row.querySelector('input[name="cost_calc_field"]');
+        if (!calcFieldHidden) return;
+
+        const td = btn.closest('td');
+        const input = td.querySelector('input:not([type="hidden"])');
+        if (!input) return;
+        
+        const fieldName = input.name;
+
+        if (btn.classList.contains('active')) {
+            calcFieldHidden.value = ''; 
+        } else {
+            if (fieldName === 'cost_fot_plan') calcFieldHidden.value = 'fot_plan';
+            else if (fieldName === 'cost_labor_days') calcFieldHidden.value = 'labor_days';
+            else if (fieldName === 'cost_rate_per_day') calcFieldHidden.value = 'rate_per_day';
+        }
+
+        updateRowAutoState(row);
+        
+        if (window.StageCostsChecks) {
+            StageCostsChecks.recalcRow(row);
+        }
+        checkWarnings();
+    });
+
+    // 3. Пересчет при вводе в поле (если оно не readonly)
+    body.addEventListener('input', (e) => {
+        const row = e.target.closest('.cost-row');
+        if (!row) return;
+        if (e.target.readOnly) return;
+
+        setTimeout(() => {
+            if (window.StageCostsChecks) {
+                StageCostsChecks.recalcRow(row);
+            }
+            updateRowDisplay(row);
+        }, 0);
+    });
+
+    // 4. Обновление коэффициента и предупреждений
+    function updateRowDisplay(row) {
+        const amountEl = row.querySelector('input[name="cost_amount"]');
+        const fotEl = row.querySelector('input[name="cost_fot_plan"]');
+        const ratioEl = row.querySelector('.ratio-display');
+        
+        if (ratioEl && amountEl && fotEl) {
+            const amount = parseMoneyText(amountEl.value);
+            const fot = parseMoneyText(fotEl.value);
+            ratioEl.value = amount > 0 ? (fot / amount).toFixed(2) : '';
+        }
+        checkWarnings();
+    }
+
     function checkWarnings() {
         const stageCostEl = document.querySelector('input[name="cost"]');
-        const stageCost = BudgetChecks.num(stageCostEl ? stageCostEl.value : 0);
+        const stageCost = parseMoneyText(stageCostEl ? stageCostEl.value : 0);
         
         let totalSale = 0;
         let totalExpenses = 0;
 
         body.querySelectorAll('.cost-row').forEach(r => {
             totalSale += 
-                BudgetChecks.num(r.querySelector('[name="cost_amount"]').value) +
-                BudgetChecks.num(r.querySelector('[name="cost_equipment_sale"]').value);
+                parseMoneyText(r.querySelector('[name="cost_amount"]').value) +
+                parseMoneyText(r.querySelector('[name="cost_equipment_sale"]').value);
             
             totalExpenses += 
-                BudgetChecks.num(r.querySelector('[name="cost_fot_plan"]').value) +
-                BudgetChecks.num(r.querySelector('[name="cost_travel"]').value) +
-                BudgetChecks.num(r.querySelector('[name="cost_equipment_cost"]').value) +
-                BudgetChecks.num(r.querySelector('[name="cost_subcontract"]').value) +
-                BudgetChecks.num(r.querySelector('[name="cost_commission"]').value) +
-                BudgetChecks.num(r.querySelector('[name="cost_other"]').value);
+                parseMoneyText(r.querySelector('[name="cost_fot_plan"]').value) +
+                parseMoneyText(r.querySelector('[name="cost_travel"]').value) +
+                parseMoneyText(r.querySelector('[name="cost_equipment_cost"]').value) +
+                parseMoneyText(r.querySelector('[name="cost_subcontract"]').value) +
+                parseMoneyText(r.querySelector('[name="cost_commission"]').value) +
+                parseMoneyText(r.querySelector('[name="cost_other"]').value);
         });
 
         const w1 = document.getElementById('costs-overrun-warning');
@@ -64,105 +137,84 @@
         }
     }
 
-    body.addEventListener('input', (e) => {
-        const row = e.target.closest('.cost-row');
-        if (!row) return;
-        BudgetChecks.recalcRow(row, e.target.name);
-        checkWarnings();
-    });
-
-    body.addEventListener('change', (e) => {
-        const row = e.target.closest('.cost-row');
-        if (!row) return;
-        BudgetChecks.recalcRow(row, e.target.name);
-        checkWarnings();
-    });
-
-    body.addEventListener('recalc-request', (e) => {
-        const row = e.target.closest('.cost-row');
-        if (!row) return;
-        BudgetChecks.recalcRow(row, '');
-    });
-
-    const stageCostEl = document.querySelector('input[name="cost"]');
-    if (stageCostEl) stageCostEl.addEventListener('input', checkWarnings);
-
-    body.querySelectorAll('.cost-row').forEach(row => BudgetChecks.recalcRow(row, ''));
-    checkWarnings();
-})();
-
-// 4. Добавление / удаление строк
-(function () {
-    const body = document.getElementById('costs-body');
+    // 5. Добавление строк
     const addBtn = document.getElementById('cost-add');
-    if (!body) return;
-
-    function makeRow() {
-        const tpl = body.querySelector('.cost-row');
-        const row = tpl ? tpl.cloneNode(true) : document.createElement('tr');
-        row.querySelectorAll('input').forEach(i => {
-            if (i.type === 'hidden') { i.value = ''; return; }
-            i.value = '';
-        });
-        row.querySelectorAll('select').forEach(s => { s.selectedIndex = 0; });
-        row.querySelectorAll('.lock-btn').forEach(b => {
-            b.classList.remove('locked');
-            b.textContent = '🔓';
-        });
-        row.querySelector('.ratio-display') && (row.querySelector('.ratio-display').value = '');
-        row.classList.add('cost-row');
-        return row;
-    }
-
-    function reattachMoneyInputs(scope) {
-        if (window.attachMoneyInput) {
-            scope.querySelectorAll('input.money-input').forEach(window.attachMoneyInput);
-        }
-    }
-
     if (addBtn) {
         addBtn.addEventListener('click', () => {
-            const row = makeRow();
+            const tpl = body.querySelector('.cost-row');
+            const row = tpl ? tpl.cloneNode(true) : document.createElement('tr');
+            
+            row.querySelectorAll('input').forEach(i => {
+                if (i.type === 'hidden' && i.name === 'cost_calc_field') {
+                    i.value = 'fot_plan';
+                } else if (i.type === 'hidden') {
+                    i.value = '';
+                } else {
+                    i.value = '';
+                }
+            });
+            row.querySelectorAll('select').forEach(s => { s.selectedIndex = 0; });
+            
+            row.querySelectorAll('input').forEach(el => el.classList.remove('is-auto'));
+            row.querySelectorAll('.auto-toggle-btn').forEach(b => b.classList.remove('active'));
+            
+            const fotInput = row.querySelector('input[name="cost_fot_plan"]');
+            const fotBtn = row.querySelector('.cell-fot .auto-toggle-btn');
+            if (fotInput && fotBtn) {
+                fotInput.readOnly = true;
+                fotInput.classList.add('is-auto');
+                fotBtn.classList.add('active');
+            }
+            
+            row.querySelector('.ratio-display') && (row.querySelector('.ratio-display').value = '');
+            
             body.appendChild(row);
-            reattachMoneyInputs(row);
+            
+            if (window.attachMoneyInput) {
+                row.querySelectorAll('input.money-input').forEach(window.attachMoneyInput);
+            }
+            
+            if (window.StageCostsChecks) {
+                StageCostsChecks.recalcRow(row);
+            }
+            checkWarnings();
         });
     }
 
+    // 6. Удаление строк
     body.addEventListener('click', (e) => {
         if (e.target.classList.contains('cost-remove')) {
             const rows = body.querySelectorAll('.cost-row');
             if (rows.length > 1) {
                 e.target.closest('tr').remove();
+                checkWarnings();
             } else {
                 alert('Должна остаться хотя бы одна строка затрат.');
             }
         }
     });
-})();
 
-// 5. Переключатель Закрыто по актам
-(function () {
-    const btn      = document.getElementById('closed-by-acts-lock');
+    // 7. Переключатель "Закрыто по актам" (ВАШ КОД)
+    const btn = document.getElementById('closed-by-acts-lock');
     const checkbox = document.getElementById('closed-by-acts-manual');
-    const input    = document.getElementById('closed-by-acts-input');
-    if (!btn || !checkbox || !input) return;
-
-    btn.addEventListener('click', () => {
-        checkbox.checked = !checkbox.checked;
-
-        if (checkbox.checked) {
-            input.readOnly = false;
-            btn.textContent = '🔒';
-            btn.classList.add('locked');
-            btn.title = 'Сейчас ручной ввод. Нажмите, чтобы подтягивать из актов';
-        } else {
-            input.readOnly = true;
-            btn.textContent = '🔗';
-            btn.classList.remove('locked');
-            btn.title = 'Сейчас подтяжка из актов. Нажмите для ручного ввода';
-            loadActSum(input);
-        }
-    });
+    const input = document.getElementById('closed-by-acts-input');
+    if (btn && checkbox && input) {
+        btn.addEventListener('click', () => {
+            checkbox.checked = !checkbox.checked;
+            if (checkbox.checked) {
+                input.readOnly = false;
+                btn.textContent = '🔒';
+                btn.classList.add('locked');
+                btn.title = 'Сейчас ручной ввод. Нажмите, чтобы подтягивать из актов';
+            } else {
+                input.readOnly = true;
+                btn.textContent = '🔗';
+                btn.classList.remove('locked');
+                btn.title = 'Сейчас подтяжка из актов. Нажмите для ручного ввода';
+                loadActSum(input);
+            }
+        });
+    }
 
     function loadActSum(input) {
         const url = btn.dataset.actSumUrl;
@@ -179,23 +231,27 @@
             })
             .catch((err) => console.error('Ошибка загрузки суммы актов:', err));
     }
-})();
-
-// 6. Автоматическое раскрытие блока затрат, если в URL есть ?costs=1
-document.addEventListener('DOMContentLoaded', function() {
+    
+    // 8. Раскрытие блока при ?costs=1
     const urlParams = new URLSearchParams(window.location.search);
     const costsBlock = document.getElementById('section-costs');
-    
-    // Если в URL есть ?costs=1 и блок с затратами существует
     if (urlParams.get('costs') === '1' && costsBlock) {
-        // Прокручиваем страницу к этому блоку
         costsBlock.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        
-        // Дополнительно убедимся, что он развернут
-        const body = costsBlock.querySelector('.collapsible-body');
-        if (body && body.style.display === 'none') {
-            const btn = costsBlock.querySelector('.toggle-btn');
-            if (btn) btn.click(); // Имитируем клик, чтобы развернуть
-        }
     }
+
+    // ПЕРВОНАЧАЛЬНАЯ ИНИЦИАЛИЗАЦИЯ (в том числе для НОВОГО этапа)
+    body.querySelectorAll('.cost-row').forEach(row => {
+        // Если calc_field пустой, ставим fot_plan (по умолчанию)
+        const calcFieldHidden = row.querySelector('input[name="cost_calc_field"]');
+        if (calcFieldHidden && calcFieldHidden.value === '') {
+            calcFieldHidden.value = 'fot_plan';
+        }
+
+        updateRowAutoState(row);
+        if (window.StageCostsChecks) {
+            StageCostsChecks.recalcRow(row);
+        }
+        updateRowDisplay(row);
+    });
+    checkWarnings();
 });

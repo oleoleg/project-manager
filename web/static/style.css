@@ -1300,3 +1300,106 @@ html[data-theme="dark"] .cost-row.row-error {
 /* В темной теме сделаем их чуть ярче */
 html[data-theme="dark"] .text-success { color: #4cd137 !important; }
 html[data-theme="dark"] .text-danger { color: #ff6b6b !important; }
+
+/* Стили для новых и удаляемых строк в таблице затрат */
+/* Стили для новых и удаляемых строк */
+.cost-row.is-new {
+    background-color: rgba(40, 167, 69, 0.1) !important;
+    border-left: 3px solid #28a745;
+}
+
+.cost-row.is-deleted td {
+    text-decoration: line-through;
+    opacity: 0.5;
+}
+
+.cost-row.is-deleted input, 
+.cost-row.is-deleted select {
+    pointer-events: none;
+    background: transparent;
+    border-color: transparent;
+}
+
+.cost-row.row-error {
+    background-color: var(--error-bg) !important;
+}
+
+.stage-header-row.row-error {
+    background-color: var(--error-bg) !important;
+}
+
+ /* Стили для поля, которое вычисляется автоматически (auto) */
+.costs-table input.is-auto {
+    background: transparent !important;
+    border: 1px solid transparent !important; /* Рамки нет */
+    color: var(--text) !important; /* Обычный белый (или черный) цвет */
+    font-weight: 500;
+}
+
+.costs-table input.is-auto:hover {
+    background: var(--surface-soft) !important;
+    border-color: var(--accent) !important;
+}
+
+/* Стили для подписи "auto" */
+.auto-label {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 10px;
+    color: var(--accent); /* Синий цвет для заметности */
+    text-transform: uppercase;
+    font-weight: bold;
+    pointer-events: none; /* Чтобы клик проходил на поле ввода */
+}
+
+
+/* Кнопка переключения режима "auto" */
+.auto-toggle-btn {
+    position: absolute;
+    right: -5px; /* Чуть выступает за край */
+    top: 50%;
+    transform: translateY(-50%);
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-soft);
+    font-size: 10px;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    z-index: 2;
+    transition: all 0.2s;
+}
+
+.auto-toggle-btn:hover {
+    background: var(--surface-soft);
+    color: var(--accent);
+    border-color: var(--accent);
+}
+
+/* Активное состояние (когда поле вычисляется) */
+.auto-toggle-btn.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+    opacity: 0.8;
+}
+
+.auto-toggle-btn.active:hover {
+    opacity: 1;
+}
+
+/* Поле, которое сейчас "auto" */
+.costs-table input.is-auto {
+    background: transparent !important;
+    border: 1px solid transparent !important;
+    color: var(--text) !important;
+    padding-right: 25px; /* Оставляем место для кнопки */
+}

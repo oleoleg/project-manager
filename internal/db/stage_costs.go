@@ -21,7 +21,7 @@ const stageCostColumns = `
 	sc.guid, sc.stage_guid, sc.work_kind, sc.cost, sc.fot_plan, 
 	sc.labor_days, sc.rate_per_day, sc.travel_expenses,
 	sc.equipment_sale, sc.equipment_cost, sc.subcontract, sc.commission, sc.other_expenses,
-	sc.locked_field, sc.created_at, sc.updated_at
+	sc.calc_field, sc.created_at, sc.updated_at
 `
 
 func scanStageCost(row interface {
@@ -31,7 +31,7 @@ func scanStageCost(row interface {
 		&c.GUID, &c.StageGUID, &c.WorkKind, &c.Cost, &c.FOTPlan,
 		&c.LaborDays, &c.RatePerDay, &c.TravelExpenses,
 		&c.EquipmentSale, &c.EquipmentCost, &c.Subcontract, &c.Commission, &c.OtherExpenses,
-		&c.LockedField, &c.CreatedAt, &c.UpdatedAt,
+		&c.CalcField, &c.CreatedAt, &c.UpdatedAt,
 	)
 }
 
@@ -74,12 +74,12 @@ func (r *StageCostRepo) ReplaceForStage(ctx context.Context, stageGUID string, c
 			INSERT INTO stage_costs (
 				stage_guid, work_kind, cost, fot_plan, 
 				labor_days, rate_per_day, travel_expenses,
-				equipment_sale, equipment_cost, subcontract, commission, other_expenses, locked_field
+				equipment_sale, equipment_cost, subcontract, commission, other_expenses, calc_field
 			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
 		`,
 			stageGUID, c.WorkKind, c.Cost, c.FOTPlan,
 			c.LaborDays, c.RatePerDay, c.TravelExpenses,
-			c.EquipmentSale, c.EquipmentCost, c.Subcontract, c.Commission, c.OtherExpenses, c.LockedField,
+			c.EquipmentSale, c.EquipmentCost, c.Subcontract, c.Commission, c.OtherExpenses, c.CalcField,
 		)
 		if err != nil {
 			return fmt.Errorf("insert stage cost: %w", err)

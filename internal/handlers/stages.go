@@ -431,7 +431,7 @@ func parseStageCostsForm(r *http.Request) []models.StageCost {
 	subs := r.Form["cost_subcontract"]
 	comms := r.Form["cost_commission"]
 	others := r.Form["cost_other"]
-	locked := r.Form["cost_locked"]
+	calcFields := r.Form["cost_calc_field[]"]
 
 	n := len(workKinds)
 	res := make([]models.StageCost, 0, n)
@@ -441,7 +441,7 @@ func parseStageCostsForm(r *http.Request) []models.StageCost {
 			continue
 		}
 		res = append(res, models.StageCost{
-			WorkKind:       wc, // <-- ИЗМЕНЕНО
+			WorkKind:       wc,
 			Cost:           parseMoneyOrZero(getSlice(amounts, i)),
 			FOTPlan:        parseMoneyOrZero(getSlice(fotPlans, i)),
 			LaborDays:      parseMoneyOrZero(getSlice(days, i)),
@@ -452,7 +452,7 @@ func parseStageCostsForm(r *http.Request) []models.StageCost {
 			Subcontract:    parseMoneyOrZero(getSlice(subs, i)),
 			Commission:     parseMoneyOrZero(getSlice(comms, i)),
 			OtherExpenses:  parseMoneyOrZero(getSlice(others, i)),
-			LockedField:    getSlice(locked, i),
+			CalcField:      getSlice(calcFields, i),
 		})
 	}
 	return res
@@ -607,7 +607,7 @@ func (h *StageHandler) CostsSave(w http.ResponseWriter, r *http.Request) {
 	subs := r.Form["cost_subcontract[]"]
 	comms := r.Form["cost_commission[]"]
 	others := r.Form["cost_other[]"]
-	lockedFields := r.Form["cost_locked[]"]
+	CalcFields := r.Form["cost_calc_field[]"]
 
 	// Группируем по StageGUID, так как ReplaceForStage работает со срезом затрат для одного этапа
 	costsByStage := make(map[string][]models.StageCost)
@@ -629,6 +629,21 @@ func (h *StageHandler) CostsSave(w http.ResponseWriter, r *http.Request) {
 		if sg == "" {
 			continue
 		}
+
+		wc := getStr(workKinds, i)
+		// Пропускаем строки, в которых не выбран вид работы
+		if wc == "" {
+			continue
+		}
+
+		// (Опционально) Пропускаем пустые строки, где нет ни одной суммы
+		costAmt := parseMoney(getStr(amounts, i))
+		eqSales_ := parseMoney(getStr(eqSales, i))
+		if costAmt == 0 && eqSales_ == 0 {
+			// Если пользователь добавил строку, но ничего в неё не ввел, игнорируем её
+			continue
+		}
+
 		costsByStage[sg] = append(costsByStage[sg], models.StageCost{
 			StageGUID:      sg,
 			WorkKind:       getStr(workKinds, i),
@@ -642,7 +657,7 @@ func (h *StageHandler) CostsSave(w http.ResponseWriter, r *http.Request) {
 			Subcontract:    parseMoney(getStr(subs, i)),
 			Commission:     parseMoney(getStr(comms, i)),
 			OtherExpenses:  parseMoney(getStr(others, i)),
-			LockedField:    getStr(lockedFields, i),
+			CalcField:      getStr(CalcFields, i),
 		})
 	}
 
@@ -651,6 +666,28 @@ func (h *StageHandler) CostsSave(w http.ResponseWriter, r *http.Request) {
 			log.Printf("save costs index: %v", err)
 			http.Error(w, "Ошибка сохранения: "+err.Error(), http.StatusInternalServerError)
 			return
+		}
+	}
+
+	// Обновляем вид работы у этапов в зависимости от количества строк затрат
+	for stageGUID, costs := range costsByStage {
+		stage, err := h.svc.GetByID(r.Context(), stageGUID)
+		if err != nil {
+			continue
+		}
+
+		var newWorkKind string
+		if len(costs) == 1 && costs[0].WorkKind != "" {
+			// Если одна строка — берем вид работы из неё
+			newWorkKind = costs[0].WorkKind
+		} else {
+			// Если несколько — этап становится комплексным
+			newWorkKind = "Комплексный"
+		}
+
+		if stage.WorkKind != newWorkKind {
+			stage.WorkKind = newWorkKind
+			_ = h.svc.Update(r.Context(), stage)
 		}
 	}
 

@@ -16,7 +16,7 @@ type StageCost struct {
 	Subcontract    float64
 	Commission     float64
 	OtherExpenses  float64
-	LockedField    string
+	CalcField      string // Поле, которое вычисляется автоматически (fot_plan, labor_days, rate_per_day)
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 }

@@ -38,26 +38,34 @@
 
 {{ if .Flash }}<div class="info-box" style="background-color: #e6f4ea; color: #1e8e3e; margin-bottom: 15px;">{{ .Flash }}</div>{{ end }}
 
-<div class="info-box" style="margin-bottom: 20px;">
-    <strong>Внимание:</strong> В этой таблице отображаются все затраты по всем этапам договора. 
-    Для редактирования конкретного этапа нажмите на его номер.
+<div id="costs-warning-box" style="display: none; background: var(--error-bg); color: var(--error-text); padding: 12px; border-left: 4px solid #c0392b; border-radius: 4px; margin-bottom: 15px;">
+    <strong>Внимание! Обнаружены ошибки:</strong>
+    <ul id="costs-warning-list" style="margin: 5px 0 0 20px; padding: 0;"></ul>
 </div>
 
 <div class="totals" id="fact-totals" style="margin-bottom: 20px;">
     <div class="total-card">
+        <span>Продажа работ и оборудования</span>
+        <strong id="total-sale-and-eq" style="color: #28a745;">0,00 ₽</strong>
+        <div class="vat-hint">(должна равняется стоимости договора)</div>
+    </div>
+    <div class="total-card">
         <span>Сумма ФОТп</span>
         <strong id="total-fot">0,00 ₽</strong>
+        <div class="vat-hint">(зарплата своим сотрудникам)</div>
+    </div>
+        <div class="total-card">
+        <span>Себестоимость Оборудования</span>
+        <strong id="total-eq-cost">0,00 ₽</strong>
+        <div class="vat-hint">(закупки)</div>
     </div>
     <div class="total-card">
-        <span>Стоимость работ (Продажа)</span>
-        <strong id="total-sale">0,00 ₽</strong>
-    </div>
-    <div class="total-card">
-        <span>Общая себестоимость <br><small style="font-size: 0.8em; color: #888;">(ФОТп + командир. + себест. обор. + субподряд + комиссия + другое + накладные)</small></span>
+        <span>Полная себестоимость</span>
         <strong id="total-cost" style="color: #ff6384;">0,00 ₽</strong>
         {{ if .HasActivePlan }}
         <div class="vat-hint">Накладные: {{ printf "%.1f" (mul .OverheadRate 100) }}%</div>
         {{ end }}
+        <div class="vat-hint">(ФОТп + командир. + себест. обор. + субподряд + комиссия + другое + накладные)</div>
     </div>
 </div>
 
@@ -90,19 +98,27 @@
                 <th class="num">Субподряд</th>
                 <th class="num">Комиссия</th>
                 <th class="num">Другое</th>
+                <th style="width: 50px;"></th>
             </tr>
             </thead>
             <tbody>
             {{ range $i, $row := .DisplayRows }}
                 {{ if $row.IsHeader }}
                     <!-- ЗАГОЛОВОК ЭТАПА -->
-                    <tr class="stage-header-row" style="background: var(--surface-alt);">
-                        <td style="font-weight: bold; color: var(--accent); text-align: center;">{{ $row.Stage.StageNumber }}</td>
-                        <td colspan="12" style="font-weight: bold; font-size: 1.1em; color: var(--accent);">
+                    <tr class="stage-header-row" style="background: var(--surface-alt);" data-stage-guid="{{ $row.Stage.GUID }}" data-work-kind="{{ $row.Stage.WorkKind }}" data-stage-cost="{{ $row.Stage.Cost }}">
+                        <td style="font-weight: bold; text-align: center;">
+                            <a href="/contracts/{{ $c.ID }}/stages/{{ $row.Stage.GUID }}/edit" title="Редактировать этап" style="color: var(--accent); text-decoration: none;">
+                                {{ $row.Stage.StageNumber }}
+                            </a>
+                        </td>
+                        <td colspan="11" style="font-weight: bold; font-size: 1.1em; color: var(--accent);">
                             {{ $row.Stage.Name }}
                             <span class="muted" style="font-size: 12px; font-weight: normal; margin-left: 10px;">
                                 Стоимость этапа: {{ money $row.Stage.Cost }} | Аванс: {{ printf "%.1f" $row.Stage.AdvancePercent }}%
                             </span>
+                        </td>
+                        <td style="text-align: right;">
+                            <button type="button" class="btn btn-sm add-cost-btn" title="Добавить строку затрат">+ Добавить</button>
                         </td>
                     </tr>
                 {{ else }}
@@ -117,32 +133,60 @@
                         
                         <td class="num"><input type="text" name="cost_amount[]" class="money-input fact-input" value="{{ if $cost.Cost }}{{ printf "%.2f" $cost.Cost }}{{ end }}"></td>
                         
+                        <!-- ФОТп -->
                         <td class="num cell-fot" style="position: relative;">
-                            <input type="text" name="cost_fot_plan[]" class="money-input fact-input" value="{{ if $cost.FOTPlan }}{{ printf "%.2f" $cost.FOTPlan }}{{ end }}">
-                            <button type="button" class="lock-btn {{ if containsLock $cost.LockedField "fot_plan" }}locked{{ end }}" data-field="fot_plan" title="Зафиксировать ФОТп">🔓</button>
-                            <input type="hidden" name="cost_locked[]" value="{{ $cost.LockedField }}">
+                            <input type="text" name="cost_fot_plan[]" class="money-input fact-input {{ if eq $cost.CalcField "fot_plan" }}is-auto{{ end }}" 
+                                value="{{ if $cost.FOTPlan }}{{ printf "%.2f" $cost.FOTPlan }}{{ end }}"
+                                {{ if eq $cost.CalcField "fot_plan" }} readonly tabindex="-1" {{ end }}>
+                            <input type="hidden" name="cost_calc_field[]" value="{{ $cost.CalcField }}">
+                            
+                            {{ if eq $cost.CalcField "fot_plan" }}
+                                <button type="button" class="auto-toggle-btn active" title="Вычисляется автоматически">A</button>
+                            {{ else }}
+                                <button type="button" class="auto-toggle-btn" title="Сделать вычисляемым">A</button>
+                            {{ end }}
                         </td>
-                        
+
+                        <!-- Коэф (всегда только чтение) -->
                         <td class="num cell-ratio">
                             <input type="text" class="ratio-display fact-input" value="{{ if and $cost.Cost $cost.FOTPlan }}{{ printf "%.2f" (div $cost.FOTPlan $cost.Cost) }}{{ end }}" readonly tabindex="-1" style="background: transparent; border: none;">
                         </td>
-                        
+
+                        <!-- Т/з, дни -->
                         <td class="num cell-days" style="position: relative;">
-                            <input type="text" name="cost_labor_days[]" class="days-input fact-input" value="{{ printf "%.0f" $cost.LaborDays }}">
-                            <button type="button" class="lock-btn {{ if containsLock $cost.LockedField "labor_days" }}locked{{ end }}" data-field="labor_days" title="Зафиксировать т/з">🔓</button>
+                            <input type="text" name="cost_labor_days[]" class="days-input fact-input {{ if eq $cost.CalcField "labor_days" }}is-auto{{ end }}" 
+                                value="{{ printf "%.0f" $cost.LaborDays }}"
+                                {{ if eq $cost.CalcField "labor_days" }} readonly tabindex="-1" {{ end }}>
+                            
+                            {{ if eq $cost.CalcField "labor_days" }}
+                                <button type="button" class="auto-toggle-btn active" title="Вычисляется автоматически">A</button>
+                            {{ else }}
+                                <button type="button" class="auto-toggle-btn" title="Сделать вычисляемым">A</button>
+                            {{ end }}
                         </td>
-                        
+
+                        <!-- Ставка -->
                         <td class="num cell-rate" style="position: relative;">
-                            <input type="text" name="cost_rate_per_day[]" class="money-input fact-input" value="{{ if $cost.RatePerDay }}{{ printf "%.2f" $cost.RatePerDay }}{{ end }}">
-                            <button type="button" class="lock-btn {{ if containsLock $cost.LockedField "rate_per_day" }}locked{{ end }}" data-field="rate_per_day" title="Зафиксировать ставку">🔓</button>
+                            <input type="text" name="cost_rate_per_day[]" class="money-input fact-input {{ if eq $cost.CalcField "rate_per_day" }}is-auto{{ end }}" 
+                                value="{{ if $cost.RatePerDay }}{{ printf "%.2f" $cost.RatePerDay }}{{ end }}"
+                                {{ if eq $cost.CalcField "rate_per_day" }} readonly tabindex="-1" {{ end }}>
+                            
+                            {{ if eq $cost.CalcField "rate_per_day" }}
+                                <button type="button" class="auto-toggle-btn active" title="Вычисляется автоматически">A</button>
+                            {{ else }}
+                                <button type="button" class="auto-toggle-btn" title="Сделать вычисляемым">A</button>
+                            {{ end }}
                         </td>
-                        
+                                            
                         <td class="num"><input type="text" name="cost_travel[]" class="money-input fact-input" value="{{ if $cost.TravelExpenses }}{{ printf "%.2f" $cost.TravelExpenses }}{{ end }}"></td>
                         <td class="num"><input type="text" name="cost_equipment_sale[]" class="money-input fact-input" value="{{ if $cost.EquipmentSale }}{{ printf "%.2f" $cost.EquipmentSale }}{{ end }}"></td>
                         <td class="num"><input type="text" name="cost_equipment_cost[]" class="money-input fact-input" value="{{ if $cost.EquipmentCost }}{{ printf "%.2f" $cost.EquipmentCost }}{{ end }}"></td>
                         <td class="num"><input type="text" name="cost_subcontract[]" class="money-input fact-input" value="{{ if $cost.Subcontract }}{{ printf "%.2f" $cost.Subcontract }}{{ end }}"></td>
                         <td class="num"><input type="text" name="cost_commission[]" class="money-input fact-input" value="{{ if $cost.Commission }}{{ printf "%.2f" $cost.Commission }}{{ end }}"></td>
                         <td class="num"><input type="text" name="cost_other[]" class="money-input fact-input" value="{{ if $cost.OtherExpenses }}{{ printf "%.2f" $cost.OtherExpenses }}{{ end }}"></td>
+                         <td style="text-align: center;">
+                            <button type="button" class="btn btn-sm btn-danger remove-cost-btn" title="Удалить строку">×</button>
+                        </td>
                     </tr>
                 {{ end }}
             {{ end }}
@@ -161,6 +205,7 @@
                     <td class="num" id="foot-total-sub">0,00 ₽</td>
                     <td class="num" id="foot-total-comm">0,00 ₽</td>
                     <td class="num" id="foot-total-other">0,00 ₽</td>
+                    <td></td>
                 </tr>
             </tfoot>
         </table>

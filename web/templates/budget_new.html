@@ -96,8 +96,8 @@
                                 </td>
                                 <td class="cell-fot" style="position: relative;">
                                     <input type="text" name="cost_fot_plan[]" class="money-input fact-input" value="{{ if $row.Cost.FOTPlan }}{{ printf "%.2f" $row.Cost.FOTPlan }}{{ end }}">
-                                    <button type="button" class="lock-btn {{ if containsLock $row.Cost.LockedField "fot_plan" }}locked{{ end }}" data-field="fot_plan" title="Зафиксировать ФОТп">🔓</button>
-                                    <input type="hidden" name="cost_locked[]" value="{{ $row.Cost.LockedField }}">
+                                    <button type="button" class="lock-btn {{ if containsLock $row.Cost.CalcField "fot_plan" }}locked{{ end }}" data-field="fot_plan" title="Зафиксировать ФОТп">🔓</button>
+                                    <input type="hidden" name="cost_locked[]" value="{{ $row.Cost.CalcField }}">
                                 </td>
                                 <!-- НОВАЯ ЯЧЕЙКА: Коэф -->
                                 <td class="cell-ratio" style="position: relative;">
@@ -105,11 +105,11 @@
                                 </td>
                                 <td class="cell-days" style="position: relative;">
                                     <input type="text" name="cost_labor_days[]" class="days-input fact-input" value="{{ if $row.Cost.LaborDays }}{{ printf "%.0f" $row.Cost.LaborDays }}{{ end }}">
-                                    <button type="button" class="lock-btn {{ if containsLock $row.Cost.LockedField "labor_days" }}locked{{ end }}" data-field="labor_days" title="Зафиксировать т/з">🔓</button>
+                                    <button type="button" class="lock-btn {{ if containsLock $row.Cost.CalcField "labor_days" }}locked{{ end }}" data-field="labor_days" title="Зафиксировать т/з">🔓</button>
                                 </td>
                                 <td class="cell-rate" style="position: relative;">
                                     <input type="text" name="cost_rate_per_day[]" class="money-input fact-input" value="{{ if $row.Cost.RatePerDay }}{{ printf "%.2f" $row.Cost.RatePerDay }}{{ end }}">
-                                    <button type="button" class="lock-btn {{ if containsLock $row.Cost.LockedField "rate_per_day" }}locked{{ end }}" data-field="rate_per_day" title="Зафиксировать ставку">🔓</button>
+                                    <button type="button" class="lock-btn {{ if containsLock $row.Cost.CalcField "rate_per_day" }}locked{{ end }}" data-field="rate_per_day" title="Зафиксировать ставку">🔓</button>
                                 </td>
                                 <td><input type="text" name="cost_travel[]" class="money-input fact-input" value="{{ if $row.Cost.TravelExpenses }}{{ printf "%.2f" $row.Cost.TravelExpenses }}{{ end }}"></td>
                                 <!-- НОВОЕ ПОЛЕ: Обор. (прод.) -->

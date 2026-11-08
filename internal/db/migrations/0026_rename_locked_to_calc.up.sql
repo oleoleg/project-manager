@@ -1,0 +1,1 @@
+ALTER TABLE stage_costs RENAME COLUMN locked_field TO calc_field;

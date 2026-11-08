@@ -265,10 +265,10 @@ func (r *BudgetRepo) RestoreFromSnapshot(ctx context.Context, contractID string,
 		_, err = tx.Exec(ctx, `
 			INSERT INTO stage_costs (
 				stage_guid, work_kind, cost, fot_plan, labor_days, rate_per_day, travel_expenses,
-				equipment_sale, equipment_cost, subcontract, commission, other_expenses, locked_field
+				equipment_sale, equipment_cost, subcontract, commission, other_expenses, calc_field 
 			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
 		`, c.StageGUID, c.WorkKind, c.Cost, c.FOTPlan, c.LaborDays, c.RatePerDay, c.TravelExpenses,
-			c.EquipmentSale, c.EquipmentCost, c.Subcontract, c.Commission, c.OtherExpenses, c.LockedField)
+			c.EquipmentSale, c.EquipmentCost, c.Subcontract, c.Commission, c.OtherExpenses, c.CalcField)
 		if err != nil {
 			return err
 		}
