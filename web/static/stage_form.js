@@ -51,13 +51,15 @@ document.addEventListener('DOMContentLoaded', function() {
         
         const fieldName = input.name;
 
+        // Если кнопка уже активна (auto уже стоит здесь) — ничего не делаем
         if (btn.classList.contains('active')) {
-            calcFieldHidden.value = ''; 
-        } else {
-            if (fieldName === 'cost_fot_plan') calcFieldHidden.value = 'fot_plan';
-            else if (fieldName === 'cost_labor_days') calcFieldHidden.value = 'labor_days';
-            else if (fieldName === 'cost_rate_per_day') calcFieldHidden.value = 'rate_per_day';
+            return;
         }
+
+        // Иначе переносим auto на это поле
+        if (fieldName === 'cost_fot_plan') calcFieldHidden.value = 'fot_plan';
+        else if (fieldName === 'cost_labor_days') calcFieldHidden.value = 'labor_days';
+        else if (fieldName === 'cost_rate_per_day') calcFieldHidden.value = 'rate_per_day';
 
         updateRowAutoState(row);
         

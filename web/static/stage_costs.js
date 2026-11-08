@@ -166,15 +166,15 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!input) return;
         const fieldName = input.name.replace('[]', '');
 
-        // Если это поле уже активно (auto), то сбрасываем auto (пустая строка)
+       // Если кнопка уже активна (auto уже стоит здесь) — ничего не делаем
         if (btn.classList.contains('active')) {
-            calcFieldHidden.value = ''; // Ничего не вычисляется
-        } else {
-            // Иначе делаем это поле вычисляемым
-            if (fieldName === 'cost_fot_plan') calcFieldHidden.value = 'fot_plan';
-            else if (fieldName === 'cost_labor_days') calcFieldHidden.value = 'labor_days';
-            else if (fieldName === 'cost_rate_per_day') calcFieldHidden.value = 'rate_per_day';
+            return;
         }
+
+        // Иначе переносим auto на это поле
+        if (fieldName === 'cost_fot_plan') calcFieldHidden.value = 'fot_plan';
+        else if (fieldName === 'cost_labor_days') calcFieldHidden.value = 'labor_days';
+        else if (fieldName === 'cost_rate_per_day') calcFieldHidden.value = 'rate_per_day';
 
         // Перерисовываем строку (переключаем классы и readonly)
         updateRowAutoState(row);
