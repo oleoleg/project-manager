@@ -446,6 +446,14 @@ func (h *BudgetHandler) FactIndex(w http.ResponseWriter, r *http.Request) {
 	stageWorkKindsJSON, _ := json.Marshal(stageWorkKinds)
 	workKindsJSON, _ := json.Marshal(workKinds)
 
+	// Определяем фильтр (по умолчанию - только подтвержденные)
+	factMode := r.URL.Query().Get("fact_mode")
+	if factMode == "" {
+		factMode = "confirmed" // или "all"
+	}
+	onlyConfirmed := factMode == "confirmed"
+	factCostRows := h.buildFactCostsRows(r.Context(), contractID, onlyConfirmed)
+
 	cp, _ := h.cpSvc.GetByID(r.Context(), contract.CounterpartyID)
 
 	data := map[string]any{
@@ -463,6 +471,8 @@ func (h *BudgetHandler) FactIndex(w http.ResponseWriter, r *http.Request) {
 		"Stages":             stages,
 		"StageWorkKindsJSON": string(stageWorkKindsJSON),
 		"WorkKindsJSON":      string(workKindsJSON),
+		"FactCostRows":       factCostRows,
+		"FactMode":           factMode,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -1097,4 +1107,155 @@ func (h *BudgetHandler) GetTimelineChartData(w http.ResponseWriter, r *http.Requ
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(res)
+}
+
+// FactCostRow представляет строку для вкладки "Затраты этапов" в ФинФакте
+type FactCostRow struct {
+	IsHeader   bool
+	Stage      models.Stage
+	WorkKind   string
+	Payments   float64
+	PlanCost   float64 // Стоимость работ из плана
+	PlanEqSale float64 // Обор. (прод.) из плана
+	FactFOT    float64 // Пока 0
+	FactDays   float64 // Пока 0
+	FactRate   float64 // Пока 0
+	FactTravel float64
+	FactEqCost float64
+	FactSub    float64
+	FactComm   float64
+	FactOther  float64
+	FactOver   float64 // Накладные
+}
+
+// buildFactCostsRows собирает данные для таблицы факта
+func (h *BudgetHandler) buildFactCostsRows(ctx context.Context, contractID string, onlyConfirmed bool) []FactCostRow {
+	stages, _ := h.stageSvc.List(ctx, contractID)
+
+	// 1. Получаем план (для Cost и EquipmentSale)
+	planCosts, _ := h.costSvc.GetAllCostsForContract(ctx, contractID)
+	planMap := make(map[string]map[string]models.StageCost) // map[StageGUID][WorkKind]
+	for _, c := range planCosts {
+		if planMap[c.StageGUID] == nil {
+			planMap[c.StageGUID] = make(map[string]models.StageCost)
+		}
+		planMap[c.StageGUID][c.WorkKind] = c
+	}
+
+	// 2. Получаем факт (все или только подтвержденные)
+	factLines, _ := h.svc.GetFactLines(ctx, contractID)
+
+	// Группируем факт: map[StageGUID][WorkKind] -> Суммы
+	type FactSums struct {
+		Travel, EqCost, Sub, Comm, Other, Over, FOT float64
+		Payments                                    float64
+	}
+	factMap := make(map[string]map[string]*FactSums) // map[StageGUID][WorkKind]
+	stagePayments := make(map[string]float64)        // map[StageGUID]Сумма платежей (для заголовка)
+
+	// Нам нужен маппинг StageNumber -> StageGUID, так как в факте хранится номер
+	stageNumToGUID := make(map[string]string)
+	for _, s := range stages {
+		stageNumToGUID[s.StageNumber] = s.GUID
+	}
+
+	for _, l := range factLines {
+		if onlyConfirmed && !l.IsConfirmed {
+			continue
+		}
+
+		// Пропускаем строки без этапа
+		stageGUID, ok := stageNumToGUID[l.StageNumber]
+		if !ok || stageGUID == "" {
+			continue
+		}
+
+		if l.OperationType == "Платежи по договору" {
+			stagePayments[stageGUID] += l.FactIncome
+			continue // Платежи не раскладываем на виды работ
+		}
+
+		if factMap[stageGUID] == nil {
+			factMap[stageGUID] = make(map[string]*FactSums)
+		}
+		if factMap[stageGUID][l.WorkKind] == nil {
+			factMap[stageGUID][l.WorkKind] = &FactSums{}
+		}
+
+		sums := factMap[stageGUID][l.WorkKind]
+		switch l.OperationType {
+		case "Командировки":
+			sums.Travel += l.FactExpense
+		case "Закупка по договору":
+			sums.EqCost += l.FactExpense
+		case "Субподрядчики":
+			sums.Sub += l.FactExpense
+		case "Комиссия":
+			sums.Comm += l.FactExpense
+		case "Другое (расходы)":
+			sums.Other += l.FactExpense
+		case "Накладные":
+			sums.Over += l.FactExpense
+		case "Зарплата сотрудникам":
+			sums.FOT += l.FactExpense
+		}
+	}
+
+	// 3. Собираем строки (сначала заголовки этапов, потом строки)
+	var rows []FactCostRow
+	for _, st := range stages {
+		// Заголовок этапа
+		rows = append(rows, FactCostRow{
+			IsHeader: true,
+			Stage:    st,
+			Payments: stagePayments[st.GUID],
+		})
+
+		stagePlan := planMap[st.GUID]
+		stageFact := factMap[st.GUID]
+
+		// Собираем уникальные виды работ (из плана и из факта)
+		workKindsSet := make(map[string]bool)
+		for wk := range stagePlan {
+			workKindsSet[wk] = true
+		}
+		for wk := range stageFact {
+			workKindsSet[wk] = true
+		}
+
+		if len(workKindsSet) == 0 {
+			// Если нет ни плана, ни факта — выводим одну пустую строку
+			rows = append(rows, FactCostRow{
+				IsHeader: false,
+				Stage:    st,
+				WorkKind: st.WorkKind,
+			})
+			continue
+		}
+
+		for wk := range workKindsSet {
+			row := FactCostRow{
+				IsHeader: false,
+				Stage:    st,
+				WorkKind: wk,
+			}
+
+			if p, ok := stagePlan[wk]; ok {
+				row.PlanCost = p.Cost
+				row.PlanEqSale = p.EquipmentSale
+			}
+			if f, ok := stageFact[wk]; ok {
+				row.FactTravel = f.Travel
+				row.FactEqCost = f.EqCost
+				row.FactSub = f.Sub
+				row.FactComm = f.Comm
+				row.FactOther = f.Other
+				row.FactOver = f.Over
+				row.FactFOT = f.FOT // (пока пусто)
+			}
+			rows = append(rows, row)
+		}
+	}
+
+	return rows
 }

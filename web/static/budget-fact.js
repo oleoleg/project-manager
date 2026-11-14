@@ -1,6 +1,22 @@
+window.switchTab = function(tabId, btn) {
+    console.log("Switching to tab:", tabId);
+    document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    
+    const tab = document.getElementById('tab-' + tabId);
+    if (tab) tab.style.display = 'block';
+    if (btn) btn.classList.add('active');
+    
+    // Сохраняем в URL
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', tabId);
+    window.history.replaceState({}, '', url);
+};
+
 
 
 document.addEventListener('DOMContentLoaded', function() {
+
     // Читаем JSON из скрытых полей
     const wkInput = document.getElementById('json-work-kinds');
     const swkInput = document.getElementById('json-stage-work-kinds');
@@ -50,6 +66,15 @@ document.addEventListener('DOMContentLoaded', function() {
     if (typeBtn) {
         sortFactTable('type', typeBtn);
     }
+
+
+    // Восстанавливаем вкладку при загрузке
+    const urlParams = new URLSearchParams(window.location.search);
+    const activeTab = urlParams.get('tab') || 'details';
+    const btn = document.querySelector(`.tab-btn[onclick*="'${activeTab}'"]`);
+    if (btn) {
+        switchTab(activeTab, btn);
+    }
 });
 
 function recalculateTotals() {
@@ -97,5 +122,4 @@ function recalculateTotals() {
     if (confExpEl) confExpEl.textContent = 'Подтв.: ' + formatMoney(confirmedExpense);
     if (confBalEl) confBalEl.textContent = 'Подтв.: ' + formatMoney(confirmedIncome - confirmedExpense);
 }
-
-
+ 

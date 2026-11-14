@@ -1,0 +1,77 @@
+{{ define "tab_fact_costs_table" }}
+<div id="tab-costs" class="tab-content" style="display: none;">
+    
+    <div class="filter-bar" style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; justify-content: space-between;">
+        <div style="display: flex; gap: 10px; align-items: center;">
+            <span>Показывать:</span>
+            <a href="?tab=costs&fact_mode=confirmed" class="btn btn-sm {{ if eq .FactMode "confirmed" }}btn-primary{{ end }}">Только подтвержденные</a>
+            <a href="?tab=costs&fact_mode=all" class="btn btn-sm {{ if eq .FactMode "all" }}btn-primary{{ end }}">Все</a>
+        </div>
+    </div>
+
+    <div class="table-scroll">
+        <table class="data-table costs-table" style="min-width: 1200px;">
+            <thead>
+            <tr>
+                <th style="width: 60px; text-align: center;">Этап</th>
+                <th>Вид работы</th>
+                <th class="num">Стоимость работ</th>
+                <th class="num">ФОТп</th>
+                <th class="num">Коэф.</th>
+                <th class="num">Т/з, дни</th>
+                <th class="num">Ставка/день</th>
+                <th class="num">Командир.</th>
+                <th class="num">Обор. (прод.)</th>
+                <th class="num">Обор. (себест.)</th>
+                <th class="num">Субподряд</th>
+                <th class="num">Комиссия</th>
+                <th class="num">Накладные</th>
+                <th class="num">Другое</th>
+            </tr>
+            </thead>
+            <tbody>
+            {{ range $i, $row := .FactCostRows }}
+                {{ if $row.IsHeader }}
+                    <!-- ЗАГОЛОВОК ЭТАПА -->
+                    <tr class="stage-header-row" style="background: var(--surface-alt);">
+                        <td style="font-weight: bold; text-align: center;">{{ $row.Stage.StageNumber }}</td>
+                        <td colspan="12" style="font-weight: bold; font-size: 1.1em; color: var(--accent);">
+                            {{ $row.Stage.Name }}
+                            {{ if $row.Payments }}
+                                <span class="muted" style="font-size: 12px; font-weight: normal; margin-left: 10px;">
+                                    Платежи по договору: {{ money $row.Payments }}
+                                </span>
+                            {{ end }}
+                        </td>
+                    </tr>
+                {{ else }}
+                    <!-- СТРОКА ЗАТРАТ -->
+                    <tr class="cost-row">
+                        <td></td>
+                        <td>{{ $row.WorkKind }}</td>
+                        
+                        <td class="num">{{ if $row.PlanCost }}{{ money $row.PlanCost }}{{ end }}</td>
+                        <td class="num">{{ if $row.FactFOT }}{{ money $row.FactFOT }}{{ end }}</td>
+                        <td class="num">
+                            {{ if and $row.PlanCost $row.FactFOT }}
+                                {{ printf "%.2f" (div $row.FactFOT $row.PlanCost) }}
+                            {{ end }}
+                        </td>
+                        <td class="num">{{ if $row.FactDays }}{{ printf "%.0f" $row.FactDays }}{{ end }}</td>
+                        <td class="num">{{ if $row.FactRate }}{{ money $row.FactRate }}{{ end }}</td>
+                        
+                        <td class="num">{{ if $row.FactTravel }}{{ money $row.FactTravel }}{{ end }}</td>
+                        <td class="num">{{ if $row.PlanEqSale }}{{ money $row.PlanEqSale }}{{ end }}</td>
+                        <td class="num">{{ if $row.FactEqCost }}{{ money $row.FactEqCost }}{{ end }}</td>
+                        <td class="num">{{ if $row.FactSub }}{{ money $row.FactSub }}{{ end }}</td>
+                        <td class="num">{{ if $row.FactComm }}{{ money $row.FactComm }}{{ end }}</td>
+                        <td class="num">{{ if $row.FactOver }}{{ money $row.FactOver }}{{ end }}</td>
+                        <td class="num">{{ if $row.FactOther }}{{ money $row.FactOther }}{{ end }}</td>
+                    </tr>
+                {{ end }}
+            {{ end }}
+            </tbody>
+        </table>
+    </div>
+</div>
+{{ end }}
