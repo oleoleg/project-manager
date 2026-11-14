@@ -507,6 +507,18 @@ a { color: var(--accent); }
 }
 .costs-table.compact .col-lockable { display: none; }
 
+.costs-table th.num, 
+.costs-table td.num { 
+    text-align: right; 
+}
+ 
+
+/* Убираем рамку у readonly-полей в режиме просмотра */
+.costs-table[data-readonly="true"] input {
+    background: transparent !important;
+    border-color: transparent !important;
+    cursor: default;
+}
 form.form { max-width: 100%; }
 
 .warning {
@@ -1358,11 +1370,11 @@ html[data-theme="dark"] .text-danger { color: #ff6b6b !important; }
 /* Кнопка переключения режима "auto" */
 .auto-toggle-btn {
     position: absolute;
-    right: -5px; /* Чуть выступает за край */
+    right: -2px; /* Чуть выступает за край */
     top: 50%;
     transform: translateY(-50%);
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
     border: 1px solid var(--border);
     background: var(--surface);
@@ -1374,7 +1386,7 @@ html[data-theme="dark"] .text-danger { color: #ff6b6b !important; }
     align-items: center;
     justify-content: center;
     padding: 0;
-    z-index: 2;
+    z-index: 10;
     transition: all 0.2s;
 }
 
@@ -1401,5 +1413,43 @@ html[data-theme="dark"] .text-danger { color: #ff6b6b !important; }
     background: transparent !important;
     border: 1px solid transparent !important;
     color: var(--text) !important;
-    padding-right: 25px; /* Оставляем место для кнопки */
+    padding-right: 16px; /* Оставляем место для кнопки */
+}
+
+ 
+
+/* В режиме чтения отступ не нужен, выравниваем ровно по краю */
+.costs-table[data-readonly="true"] td.num input {
+    padding-right: 0;
+}
+
+.cost-row.row-error,
+.stage-header-row.row-error {
+    cursor: help;
+}
+
+/* Выравнивание по правому краю для всех числовых полей */
+.costs-table td.num input {
+    text-align: right;
+}
+
+/* Резервируем место под кнопку A ТОЛЬКО в нужных колонках */
+.costs-table td.cell-fot input, 
+.costs-table td.cell-days input, 
+.costs-table td.cell-rate input {
+    padding-right: 16px;
+}
+
+.tab-btn {
+    background: var(--surface);
+    color: var(--text-mid);
+    border: 1px solid var(--border);
+}
+.tab-btn:hover {
+    background: var(--surface-soft);
+}
+.tab-btn.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
 }

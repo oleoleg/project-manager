@@ -1,0 +1,223 @@
+{{ define "costs_table" }}
+
+<!-- НАСТРОЙКИ БЮДЖЕТА -->
+{{ if .ShowSettings }}
+<section class="collapsible {{ if .IsReadOnly }}collapsed{{ end }}" id="section-settings" style="margin-bottom: 20px;">
+    <header class="collapsible-header">
+        <h3>Настройки бюджета {{ if .IsReadOnly }}(Только для чтения){{ end }}</h3>
+        <div class="collapsible-actions">
+            <button type="button" class="toggle-btn" aria-expanded="{{ if .IsReadOnly }}false{{ else }}true{{ end }}" onclick="toggleSettings()">
+                {{ if .IsReadOnly }}Развернуть{{ else }}Свернуть{{ end }}
+            </button>
+        </div>
+    </header>
+    <div class="collapsible-body" id="settings-body" {{ if .IsReadOnly }}style="display: none;"{{ end }}>
+        <div class="form" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; max-width: 800px;">
+            <label>Дата старта <input type="date" name="project_start_date" value="{{ .Settings.ProjectStartDate.Format "2006-01-02" }}" required {{ if .IsReadOnly }}disabled{{ end }}></label>
+            <label>Дата окончания <input type="date" name="project_end_date" value="{{ if .Settings.ProjectEndDate }}{{ .Settings.ProjectEndDate.Format "2006-01-02" }}{{ end }}" {{ if .IsReadOnly }}disabled{{ end }}></label>
+            <label>Отсрочка (дней) <input type="number" name="payment_delay_days" value="{{ .Settings.PaymentDelayDays }}" {{ if .IsReadOnly }}disabled{{ end }}></label>
+            <label>Коэф. накладных <input type="text" name="overhead_rate" value="{{ printf "%.2f" .Settings.OverheadRate }}" {{ if .IsReadOnly }}disabled{{ end }}></label>
+            <label>Предоплата оборуд. (%) <input type="text" name="equip_payment_percent" value="{{ printf "%.2f" .Settings.EquipPaymentPercent }}" {{ if .IsReadOnly }}disabled{{ end }}></label>
+            <label>Отсрочка оборуд. (дней) <input type="number" name="equip_payment_delay" value="{{ .Settings.EquipPaymentDelay }}" {{ if .IsReadOnly }}disabled{{ end }}></label>
+            
+            {{ if not .IsReadOnly }}
+                <label>Комментарий (версия) <input type="text" name="note" placeholder="Например: Доп. соглашение №1" required></label>
+            {{ end }}
+        </div>
+    </div>
+</section>
+{{ end }}
+
+<!-- КАРТОЧКИ ИТОГОВ -->
+{{ if .ShowTotals }}
+<div class="totals" id="fact-totals" style="margin-bottom: 20px;">
+    <div class="total-card">
+        <span>Продажа работ и оборудования</span>
+        <strong id="total-sale-and-eq" style="color: #28a745;">0,00 ₽</strong>
+        <div class="vat-hint">(должна равняться стоимости договора)</div>
+    </div>
+    <div class="total-card">
+        <span>Сумма ФОТп</span>
+        <strong id="total-fot">0,00 ₽</strong>
+        <div class="vat-hint">(зарплата своим сотрудникам)</div>
+    </div>
+    <div class="total-card">
+        <span>Себестоимость Оборудования</span>
+        <strong id="total-eq-cost">0,00 ₽</strong>
+        <div class="vat-hint">(закупки)</div>
+    </div>
+    <div class="total-card">
+        <span>Полная себестоимость</span>
+        <strong id="total-cost" style="color: #ff6384;">0,00 ₽</strong>
+        {{ if .OverheadRate }}
+        <div class="vat-hint" id="overhead-rate-hint" style="display: none;">Накладные: {{ printf "%.1f" (mul .OverheadRate 100) }}%</div>
+        {{ end }}
+        <div class="vat-hint">(ФОТп + командир. + себест. обор. + субподряд + комиссия + другое + накладные)</div>
+    </div>
+</div>
+{{ end }}
+
+<!-- ПЛАШКА ПРЕДУПРЕЖДЕНИЙ -->
+{{ if .ShowWarnings }}
+<div id="costs-warning-box" style="display: none; background: var(--error-bg); color: var(--error-text); padding: 12px; border-left: 4px solid #c0392b; border-radius: 4px; margin-bottom: 15px;">
+    <strong>Внимание! Обнаружены ошибки:</strong>
+    <ul id="costs-warning-list" style="margin: 5px 0 0 20px; padding: 0;"></ul>
+</div>
+{{ end }}
+
+<!-- ТАБЛИЦА -->
+<div class="table-scroll">
+    <table class="data-table costs-table" id="costs-table" style="min-width: 1200px;" data-readonly="{{ if .IsReadOnly }}true{{ else }}false{{ end }}">
+        <thead>
+        <tr>
+            <th style="width: 60px; text-align: center;">Этап</th>
+            <th>Вид работы</th>
+            <th class="num">Стоимость работ</th>
+            <th class="num">ФОТп</th>
+            <th class="num">Коэф.</th>
+            <th class="num">Т/з, дни</th>
+            <th class="num">Ставка/день</th>
+            <th class="num">Командир.</th>
+            <th class="num">Обор. (прод.)</th>
+            <th class="num">Обор. (себест.)</th>
+            <th class="num">Субподряд</th>
+            <th class="num">Комиссия</th>
+            <th class="num">Другое</th>
+            {{ if not .IsReadOnly }}<th style="width: 50px;"></th>{{ end }}
+        </tr>
+        </thead>
+        <tbody>
+        {{ range $i, $row := .DisplayRows }}
+            {{ if $row.IsHeader }}
+                <!-- ЗАГОЛОВОК ЭТАПА -->
+                <tr class="stage-header-row" style="background: var(--surface-alt);" data-stage-guid="{{ $row.Stage.GUID }}" data-work-kind="{{ $row.Stage.WorkKind }}" data-stage-cost="{{ $row.Stage.Cost }}">
+                    <td style="font-weight: bold; text-align: center;">
+                        {{ if $.IsReadOnly }}
+                            {{ $row.Stage.StageNumber }}
+                        {{ else }}
+                            <a href="/contracts/{{ $.Contract.ID }}/stages/{{ $row.Stage.GUID }}/edit" title="Редактировать этап" style="color: var(--accent); text-decoration: none;">
+                                {{ $row.Stage.StageNumber }}
+                            </a>
+                        {{ end }}
+                    </td>
+                    <td colspan="{{ if $.IsReadOnly }}12{{ else }}11{{ end }}" style="font-weight: bold; font-size: 1.1em; color: var(--accent);">
+                        {{ $row.Stage.Name }}
+                        <span class="muted" style="font-size: 12px; font-weight: normal; margin-left: 10px;">
+                            Стоимость этапа: {{ money $row.Stage.Cost }} | Аванс: {{ printf "%.1f" $row.Stage.AdvancePercent }}%
+                        </span>
+                    </td>
+                    {{ if not $.IsReadOnly }}
+                    <td style="text-align: right;">
+                        <button type="button" class="btn btn-sm add-cost-btn" title="Добавить строку затрат" style="white-space: nowrap;">+ Добавить</button>
+                    </td>
+                    {{ end }}
+                </tr>
+            {{ else }}
+                <!-- СТРОКА ЗАТРАТ -->
+                {{ $cost := $row.Cost }}
+                <tr class="cost-row" data-stage-guid="{{ $cost.StageGUID }}" data-stage-cost="{{ $row.Stage.Cost }}">
+                    {{ if not $.IsReadOnly }}
+                        <input type="hidden" name="cost_stage_guid[]" value="{{ $cost.StageGUID }}">
+                        <input type="hidden" name="cost_work_kind[]" value="{{ $cost.WorkKind }}">
+                    {{ end }}
+                    
+                    <td></td>
+                    <td>{{ $cost.WorkKind }}</td>
+                    
+                    <!-- Стоимость -->
+                    <td class="num">
+                        <input type="text" name="cost_amount[]" class="money-input fact-input" value="{{ if $cost.Cost }}{{ printf "%.2f" $cost.Cost }}{{ end }}"
+                            {{ if $.IsReadOnly }}readonly tabindex="-1" style="background: transparent; border-color: transparent;"{{ end }}>
+                    </td>
+                    
+                    <!-- ФОТп -->
+                    <td class="num cell-fot" style="position: relative;">
+                        <input type="text" name="cost_fot_plan[]" class="money-input fact-input {{ if eq $cost.CalcField "fot_plan" }}is-auto{{ end }}" 
+                            value="{{ if $cost.FOTPlan }}{{ printf "%.2f" $cost.FOTPlan }}{{ end }}"
+                            {{ if or $.IsReadOnly (eq $cost.CalcField "fot_plan") }} readonly tabindex="-1" {{ end }}
+                            {{ if $.IsReadOnly }}style="background: transparent; border-color: transparent;"{{ end }}>
+                        
+                        {{ if not $.IsReadOnly }}
+                            <input type="hidden" name="cost_calc_field[]" value="{{ $cost.CalcField }}">
+                            {{ if eq $cost.CalcField "fot_plan" }}
+                                <button type="button" class="auto-toggle-btn active" title="Вычисляется автоматически">A</button>
+                            {{ else }}
+                                <button type="button" class="auto-toggle-btn" title="Сделать вычисляемым">A</button>
+                            {{ end }}
+                        {{ end }}
+                    </td>
+
+                    <!-- Коэф (всегда только чтение) -->
+                    <td class="num cell-ratio">
+                        <input type="text" class="ratio-display fact-input" value="{{ if and $cost.Cost $cost.FOTPlan }}{{ printf "%.2f" (div $cost.FOTPlan $cost.Cost) }}{{ end }}" readonly tabindex="-1" style="background: transparent; border: none;">
+                    </td>
+
+                    <!-- Т/з, дни -->
+                    <td class="num cell-days" style="position: relative;">
+                        <input type="text" name="cost_labor_days[]" class="days-input fact-input {{ if eq $cost.CalcField "labor_days" }}is-auto{{ end }}" 
+                            value="{{ printf "%.0f" $cost.LaborDays }}"
+                            {{ if or $.IsReadOnly (eq $cost.CalcField "labor_days") }} readonly tabindex="-1" {{ end }}
+                            {{ if $.IsReadOnly }}style="background: transparent; border-color: transparent;"{{ end }}>
+                        
+                        {{ if not $.IsReadOnly }}
+                            {{ if eq $cost.CalcField "labor_days" }}
+                                <button type="button" class="auto-toggle-btn active" title="Вычисляется автоматически">A</button>
+                            {{ else }}
+                                <button type="button" class="auto-toggle-btn" title="Сделать вычисляемым">A</button>
+                            {{ end }}
+                        {{ end }}
+                    </td>
+
+                    <!-- Ставка -->
+                    <td class="num cell-rate" style="position: relative;">
+                        <input type="text" name="cost_rate_per_day[]" class="money-input fact-input {{ if eq $cost.CalcField "rate_per_day" }}is-auto{{ end }}" 
+                            value="{{ if $cost.RatePerDay }}{{ printf "%.2f" $cost.RatePerDay }}{{ end }}"
+                            {{ if or $.IsReadOnly (eq $cost.CalcField "rate_per_day") }} readonly tabindex="-1" {{ end }}
+                            {{ if $.IsReadOnly }}style="background: transparent; border-color: transparent;"{{ end }}>
+                        
+                        {{ if not $.IsReadOnly }}
+                            {{ if eq $cost.CalcField "rate_per_day" }}
+                                <button type="button" class="auto-toggle-btn active" title="Вычисляется автоматически">A</button>
+                            {{ else }}
+                                <button type="button" class="auto-toggle-btn" title="Сделать вычисляемым">A</button>
+                            {{ end }}
+                        {{ end }}
+                    </td>
+                                
+                    <td class="num"><input type="text" name="cost_travel[]" class="money-input fact-input" value="{{ if $cost.TravelExpenses }}{{ printf "%.2f" $cost.TravelExpenses }}{{ end }}" {{ if $.IsReadOnly }}readonly tabindex="-1" style="background: transparent; border-color: transparent;"{{ end }}></td>
+                    <td class="num"><input type="text" name="cost_equipment_sale[]" class="money-input fact-input" value="{{ if $cost.EquipmentSale }}{{ printf "%.2f" $cost.EquipmentSale }}{{ end }}" {{ if $.IsReadOnly }}readonly tabindex="-1" style="background: transparent; border-color: transparent;"{{ end }}></td>
+                    <td class="num"><input type="text" name="cost_equipment_cost[]" class="money-input fact-input" value="{{ if $cost.EquipmentCost }}{{ printf "%.2f" $cost.EquipmentCost }}{{ end }}" {{ if $.IsReadOnly }}readonly tabindex="-1" style="background: transparent; border-color: transparent;"{{ end }}></td>
+                    <td class="num"><input type="text" name="cost_subcontract[]" class="money-input fact-input" value="{{ if $cost.Subcontract }}{{ printf "%.2f" $cost.Subcontract }}{{ end }}" {{ if $.IsReadOnly }}readonly tabindex="-1" style="background: transparent; border-color: transparent;"{{ end }}></td>
+                    <td class="num"><input type="text" name="cost_commission[]" class="money-input fact-input" value="{{ if $cost.Commission }}{{ printf "%.2f" $cost.Commission }}{{ end }}" {{ if $.IsReadOnly }}readonly tabindex="-1" style="background: transparent; border-color: transparent;"{{ end }}></td>
+                    <td class="num"><input type="text" name="cost_other[]" class="money-input fact-input" value="{{ if $cost.OtherExpenses }}{{ printf "%.2f" $cost.OtherExpenses }}{{ end }}" {{ if $.IsReadOnly }}readonly tabindex="-1" style="background: transparent; border-color: transparent;"{{ end }}></td>
+                    
+                    {{ if not $.IsReadOnly }}
+                    <td style="text-align: center;">
+                        <button type="button" class="btn btn-sm btn-danger remove-cost-btn" title="Удалить строку">×</button>
+                    </td>
+                    {{ end }}
+                </tr>
+            {{ end }}
+        {{ end }}
+        </tbody>
+        <tfoot>
+            <tr style="background: var(--surface-alt); font-weight: bold;">
+                <td colspan="2" style="text-align: right; padding: 10px;">ИТОГО:</td>
+                <td class="num" id="foot-total-sale">0,00 ₽</td>
+                <td class="num" id="foot-total-fot">0,00 ₽</td>
+                <td></td>
+                <td class="num" id="foot-total-days">0</td>
+                <td></td>
+                <td class="num" id="foot-total-travel">0,00 ₽</td>
+                <td class="num" id="foot-total-eq-sale">0,00 ₽</td>
+                <td class="num" id="foot-total-eq-cost">0,00 ₽</td>
+                <td class="num" id="foot-total-sub">0,00 ₽</td>
+                <td class="num" id="foot-total-comm">0,00 ₽</td>
+                <td class="num" id="foot-total-other">0,00 ₽</td>
+                {{ if not .IsReadOnly }}<td></td>{{ end }}
+            </tr>
+        </tfoot>
+    </table>
+</div>
+<div id="calc-data" data-overhead="{{ .OverheadRate }}" hidden></div>
+{{ end }}

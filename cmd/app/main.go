@@ -206,15 +206,28 @@ func startHTTPServer(stopCh <-chan struct{}) {
 		},
 	})
 
+	// 1. Загружаем основные шаблоны
+	log.Println("Loading main templates from web/templates/*.html...")
 	parsed, err := tmpl.ParseGlob(filepath.Join(baseDir, "web", "templates", "*.html"))
 	if err != nil {
-		log.Fatalf("templates: %v", err)
+		log.Fatalf("templates glob error: %v", err)
 	}
+
+	// 2. Загружаем компоненты (партиалы)
+	log.Println("Loading component templates from web/templates/components/*.html...")
+	parsed, err = parsed.ParseGlob(filepath.Join(baseDir, "web", "templates", "components", "*.html"))
+	if err != nil {
+		log.Fatalf("components glob error: %v", err)
+	}
+
 	tmpl = parsed
 
+	// 3. Выводим список всех загруженных шаблонов
+	log.Println("--- Loaded templates ---")
 	for _, t := range tmpl.Templates() {
-		log.Printf("template loaded: %q", t.Name())
+		log.Printf("  -> %q", t.Name())
 	}
+	log.Println("------------------------")
 
 	// =====================================================
 	// 5. Репозитории
@@ -346,6 +359,7 @@ func startHTTPServer(stopCh <-chan struct{}) {
 			r.Post("/contracts/{id}/budget/snapshots/{snapshotID}/delete", budgetH.DeleteSnapshot)
 			r.Post("/contracts/{id}/budget/snapshots/{snapshotID}/activate", budgetH.ActivateSnapshot)
 			r.Get("/contracts/{id}/budget/charts.json", budgetH.GetSummaryChart)
+			r.Get("/contracts/{id}/budget/timeline.json", budgetH.GetTimelineChartData)
 
 			// Бюджет (Факт)
 			r.Get("/contracts/{id}/budget/fact", budgetH.FactIndex)

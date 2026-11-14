@@ -55,10 +55,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 const check = StageCostsChecks.checkRow(tr, 0, overheadRate); 
                 if (check.hasError) {
                     hasErrors = true;
-                    errorMessages.push(`Этап ${stageNumber} (${stageName}): ${check.message}`);
-                    tr.classList.add('row-error'); // Добавляем класс для красного фона
+                    const fullMsg = `Этап ${stageNumber} (${stageName}): ${check.message}`;
+                    errorMessages.push(fullMsg);
+                    tr.classList.add('row-error'); 
+                    tr.title = fullMsg; 
                 } else {
                     tr.classList.remove('row-error');
+                    tr.removeAttribute('title'); 
                 }
             }
         });
@@ -100,10 +103,19 @@ document.addEventListener('DOMContentLoaded', function() {
                     hasErrors = true;
                     // Важно: добавляем ошибки этапов к уже собранным ошибкам строк
                     stageCheck.errorMessages.forEach(msg => {
-                        // Добавляем только если такой ошибки еще нет
                         if (!errorMessages.includes(msg)) {
                             errorMessages.push(msg);
                         }
+                    });
+                    
+                    // Для ошибок этапов (превышение суммы) добавим тултип на заголовок этапа
+                    // Для простоты пройдемся по всем заголовкам с ошибками
+                    document.querySelectorAll('.stage-header-row.row-error').forEach(header => {
+                         const stageNum = header.querySelector('td:first-child').textContent.trim();
+                         const relatedError = stageCheck.errorMessages.find(m => m.includes(`Этап ${stageNum}`));
+                         if (relatedError) {
+                             header.title = relatedError;
+                         }
                     });
                 }
             }
@@ -220,8 +232,9 @@ document.addEventListener('DOMContentLoaded', function() {
         alert('Сортировка временно недоступна из-за группировки по этапам.');
     };
 
-    // 4. Делегирование кликов
-    if (tableBody) {
+    // 4. Делегирование кликов (только если не режим чтения)
+    const isReadOnly = document.getElementById('costs-table')?.dataset.readonly === 'true';
+    if (tableBody && !isReadOnly) {
         tableBody.addEventListener('click', (e) => {
             // --- ДОБАВЛЕНИЕ ---
             if (e.target.classList.contains('add-cost-btn')) {

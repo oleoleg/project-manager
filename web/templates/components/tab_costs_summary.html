@@ -1,0 +1,55 @@
+{{ define "tab_costs_summary" }}
+<div id="tab-summary" class="tab-content" style="display: none;">
+    {{ if .Snapshot }}
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; margin-bottom: 20px;">
+        <div class="card" style="padding: 20px; position: relative; display: flex; flex-direction: column;">
+            <h3 style="text-align: center; margin-bottom: 15px;">Разбивка суммы по затратам</h3>
+            <div style="height: 300px; position: relative;">
+                <canvas id="expensesChart"></canvas>
+            </div>
+            <!-- Сюда JS вставит HTML-легенду -->
+            <div id="expenses-legend"></div>
+        </div>
+        
+        <div class="card" style="padding: 20px; position: relative; display: flex; flex-direction: column;">
+            <h3 style="text-align: center; margin-bottom: 15px;">Разбивка по Отделам (Видам работ)</h3>
+            <div style="height: 300px; position: relative;">
+                <canvas id="departmentsChart"></canvas>
+            </div>
+            <!-- Сюда JS вставит HTML-легенду -->
+            <div id="departments-legend"></div>
+        </div>
+    </div>
+    
+    <!-- Временной график -->
+    <div class="card" style="padding: 20px; margin-top: 20px; position: relative;">
+        <h3 style="text-align: center; margin-bottom: 15px;">Динамика</h3>
+        
+        <div style="display: flex; gap: 20px; justify-content: center; margin-bottom: 15px; align-items: center;">
+            <label style="font-size: 14px; display: flex; align-items: center; gap: 8px;">
+                Детализация: 
+                <select id="timeline-group" class="btn btn-sm" onchange="updateTimeline()" style="padding: 4px 8px; border: 1px solid var(--border);">
+                    <option value="week">По неделям</option>
+                    <option value="month" selected>По месяцам</option>
+                    <option value="quarter">По кварталам</option>
+                </select>
+            </label>
+            
+            <label style="font-size: 14px; display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <input type="checkbox" id="timeline-negative-expense" onchange="updateTimeline()">
+                Затраты в минус
+            </label>
+        </div>
+
+        <div style="height: 400px; position: relative;">
+            <canvas id="timelineChart"></canvas>
+        </div>
+        
+        <!-- Контейнер для кастомной легенды -->
+        <div id="timeline-legend" style="margin-top: 15px;"></div>
+    </div>
+    {{ else }}
+        <p>Нет данных для построения графиков.</p>
+    {{ end }}
+</div>
+{{ end }}

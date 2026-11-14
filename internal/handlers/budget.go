@@ -67,9 +67,7 @@ func (h *BudgetHandler) Index(w http.ResponseWriter, r *http.Request) {
 		activeSnapshot, lines, _ = h.svc.GetPlanByID(r.Context(), targetID)
 	}
 
-	isReadOnly := false
 	if activeSnapshot != nil && !editMode {
-		isReadOnly = true
 		if len(activeSnapshot.Settings) > 0 {
 			var snapshotSettings models.BudgetSettings
 			if err := json.Unmarshal(activeSnapshot.Settings, &snapshotSettings); err == nil {
@@ -104,6 +102,35 @@ func (h *BudgetHandler) Index(w http.ResponseWriter, r *http.Request) {
 	stageWorkKindsJSON, _ := json.Marshal(stageWorkKinds)
 	workKindsJSON, _ := json.Marshal(workKinds)
 
+	// ФОРМИРУЕМ ДАННЫЕ ДЛЯ ТАБЛИЦЫ ЗАТРАТ (Аналогично NewVersion)
+	type CostRow struct {
+		IsHeader bool
+		Stage    models.Stage
+		Cost     models.StageCost
+	}
+	var displayRows []CostRow
+
+	for _, s := range stages {
+		displayRows = append(displayRows, CostRow{IsHeader: true, Stage: s})
+		hasCosts := false
+		for _, c := range displayCosts {
+			if c.StageGUID == s.GUID {
+				displayRows = append(displayRows, CostRow{IsHeader: false, Stage: s, Cost: c})
+				hasCosts = true
+			}
+		}
+		if !hasCosts {
+			displayRows = append(displayRows, CostRow{
+				IsHeader: false,
+				Stage:    s,
+				Cost: models.StageCost{
+					StageGUID: s.GUID,
+					WorkKind:  s.WorkKind,
+				},
+			})
+		}
+	}
+
 	cp, _ := h.cpSvc.GetByID(r.Context(), contract.CounterpartyID)
 
 	data := map[string]any{
@@ -117,13 +144,19 @@ func (h *BudgetHandler) Index(w http.ResponseWriter, r *http.Request) {
 		"PlanLines":          lines,
 		"Flash":              r.URL.Query().Get("flash"),
 		"WorkKinds":          workKinds,
-		"IsReadOnly":         isReadOnly,
-		"EditMode":           editMode,
 		"Counterparty":       cp,
 		"Costs":              displayCosts,
 		"StagesMap":          stagesMap,
 		"StageWorkKindsJSON": string(stageWorkKindsJSON),
 		"WorkKindsJSON":      string(workKindsJSON),
+
+		// НОВЫЕ ПОЛЯ ДЛЯ ПАРТИАЛА:
+		"DisplayRows":  displayRows,
+		"IsReadOnly":   true,  // В просмотре всегда только чтение
+		"ShowTotals":   true,  // Показываем карточки
+		"ShowWarnings": false, // Скрываем предупреждения (или true, если нужно)
+		"ShowSettings": true,
+		"OverheadRate": settings.OverheadRate,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -155,6 +188,8 @@ func (h *BudgetHandler) Generate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for stageGUID, stageCosts := range costsByStage {
+		// Серверный пересчет на случай, если JS не сработал
+		h.costSvc.RecalculateCosts(stageCosts)
 		if err := h.costSvc.ReplaceForStage(r.Context(), stageGUID, stageCosts); err != nil {
 			log.Printf("save stage costs before generate: %v", err)
 			http.Error(w, "Ошибка сохранения затрат: "+err.Error(), http.StatusInternalServerError)
@@ -183,7 +218,7 @@ func (h *BudgetHandler) NewVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	settings, _, _ := h.svc.GetSettings(r.Context(), contractID)
+	settings, hasSettings, _ := h.svc.GetSettings(r.Context(), contractID)
 	costs, _ := h.costSvc.GetAllCostsForContract(r.Context(), contractID)
 	stages, _ := h.stageSvc.List(r.Context(), contractID)
 	workKinds, _ := h.stageSvc.WorkKinds(r.Context())
@@ -221,6 +256,7 @@ func (h *BudgetHandler) NewVersion(w http.ResponseWriter, r *http.Request) {
 				Cost: models.StageCost{
 					StageGUID: s.GUID,
 					WorkKind:  s.WorkKind,
+					CalcField: "fot_plan",
 				},
 			})
 		}
@@ -234,14 +270,23 @@ func (h *BudgetHandler) NewVersion(w http.ResponseWriter, r *http.Request) {
 		"Contract":      contract,
 		"Counterparty":  cp,
 		"Settings":      settings,
+		"HasSettings":   hasSettings,
+		"OverheadRate":  settings.OverheadRate,
 		"DisplayRows":   displayRows,
 		"WorkKinds":     workKinds,
 		"Stages":        stages,
 		"WorkKindsJSON": string(workKindsJSON),
+		"IsReadOnly":    false,
+		"ShowTotals":    true,
+		"ShowWarnings":  true,
+		"ShowSettings":  true,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.tmpl.ExecuteTemplate(w, "budget_new.html", data)
+	if err := h.tmpl.ExecuteTemplate(w, "budget_new.html", data); err != nil {
+		log.Printf("!!! ОШИБКА РЕНДЕРА budget_new.html: %v", err)
+		http.Error(w, err.Error(), 500)
+	}
 }
 
 func (h *BudgetHandler) SaveSettings(w http.ResponseWriter, r *http.Request) {
@@ -591,6 +636,7 @@ func parseCostsFromBudgetForm(r *http.Request) []models.StageCost {
 	subs := r.Form["cost_subcontract[]"]
 	comms := r.Form["cost_commission[]"]
 	others := r.Form["cost_other[]"]
+	calcFields := r.Form["cost_calc_field[]"] // ← НОВОЕ
 
 	n := len(stageGUIDs)
 	res := make([]models.StageCost, 0, n)
@@ -602,7 +648,6 @@ func parseCostsFromBudgetForm(r *http.Request) []models.StageCost {
 		return ""
 	}
 
-	// Локальная обертка, чтобы не обрабатывать ошибку каждый раз (при ошибке вернет 0)
 	parseMoney := func(s string) float64 {
 		v, _ := services.ParseMoney(s)
 		return v
@@ -613,6 +658,14 @@ func parseCostsFromBudgetForm(r *http.Request) []models.StageCost {
 		if wc == "" {
 			continue
 		}
+
+		// Если calcField пустой (например, JS отключен и не проставил его),
+		// ставим по умолчанию "fot_plan", чтобы сервер сам рассчитал ФОТп.
+		cf := getStr(calcFields, i)
+		if cf == "" {
+			cf = "fot_plan"
+		}
+
 		res = append(res, models.StageCost{
 			StageGUID:      getStr(stageGUIDs, i),
 			WorkKind:       wc,
@@ -626,6 +679,7 @@ func parseCostsFromBudgetForm(r *http.Request) []models.StageCost {
 			Subcontract:    parseMoney(getStr(subs, i)),
 			Commission:     parseMoney(getStr(comms, i)),
 			OtherExpenses:  parseMoney(getStr(others, i)),
+			CalcField:      cf, // ← НОВОЕ
 		})
 	}
 	return res
@@ -917,4 +971,130 @@ func (h *BudgetHandler) FactAppendSelected(w http.ResponseWriter, r *http.Reques
 	}
 
 	w.WriteHeader(http.StatusOK)
+}
+
+// GetTimelineChartData возвращает данные для временного графика
+func (h *BudgetHandler) GetTimelineChartData(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "id")
+	selectedSnapshotID := r.URL.Query().Get("snapshot")
+	groupBy := r.URL.Query().Get("group")
+
+	if groupBy == "" {
+		groupBy = "month"
+	}
+
+	var lines []models.BudgetPlanLine
+	var err error
+
+	if selectedSnapshotID != "" {
+		_, lines, err = h.svc.GetPlanByID(r.Context(), selectedSnapshotID)
+	} else {
+		_, lines, err = h.svc.GetLatestPlan(r.Context(), contractID)
+	}
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if len(lines) == 0 {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte("[]"))
+		return
+	}
+
+	// Находим минимальную и максимальную дату
+	minDate, maxDate := lines[0].OperationDate, lines[0].OperationDate
+	for _, l := range lines {
+		if l.OperationDate.Before(minDate) {
+			minDate = l.OperationDate
+		}
+		if l.OperationDate.After(maxDate) {
+			maxDate = l.OperationDate
+		}
+	}
+
+	// Собираем все периоды в диапазоне
+	var periods []string
+	periodMap := make(map[string]bool)
+
+	// Функция для форматирования периода
+	formatPeriod := func(t time.Time) string {
+		switch groupBy {
+		case "week":
+			year, week := t.ISOWeek()
+			return fmt.Sprintf("%d-W%02d", year, week)
+		case "quarter":
+			quarter := (int(t.Month())-1)/3 + 1
+			return fmt.Sprintf("%d-Q%d", t.Year(), quarter)
+		default: // month
+			return t.Format("2006-01")
+		}
+	}
+
+	// Идем от minDate к maxDate с шагом
+	current := minDate
+	// Для месяцев и кварталов сбрасываем на первое число
+	if groupBy == "month" || groupBy == "quarter" {
+		current = time.Date(minDate.Year(), minDate.Month(), 1, 0, 0, 0, 0, time.UTC)
+	} else {
+		// Для недель можно просто отнять день недели до понедельника
+		weekday := int(current.Weekday())
+		if weekday == 0 {
+			weekday = 7
+		}
+		current = current.AddDate(0, 0, -weekday+1)
+	}
+
+	for !current.After(maxDate) {
+		p := formatPeriod(current)
+		if !periodMap[p] {
+			periods = append(periods, p)
+			periodMap[p] = true
+		}
+
+		switch groupBy {
+		case "week":
+			current = current.AddDate(0, 0, 7)
+		case "quarter":
+			current = current.AddDate(0, 3, 0)
+		default:
+			current = current.AddDate(0, 1, 0)
+		}
+	}
+
+	// Группируем данные
+	dataMap := make(map[string]*struct{ Income, Expense float64 })
+	for _, p := range periods {
+		dataMap[p] = &struct{ Income, Expense float64 }{}
+	}
+
+	for _, l := range lines {
+		p := formatPeriod(l.OperationDate)
+		if data, ok := dataMap[p]; ok {
+			data.Income += l.Income
+			data.Expense += l.Expense
+		}
+	}
+
+	var res []map[string]any
+	var cumIncome, cumExpense float64
+
+	for _, p := range periods {
+		point := dataMap[p]
+		cumIncome += point.Income
+		cumExpense += point.Expense
+
+		res = append(res, map[string]any{
+			"period":        p,
+			"income_month":  point.Income,
+			"expense_month": point.Expense,
+			"income_cum":    cumIncome,
+			"expense_cum":   cumExpense,
+			"balance_cum":   cumIncome - cumExpense,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(res)
 }

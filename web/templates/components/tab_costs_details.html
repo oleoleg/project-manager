@@ -1,0 +1,83 @@
+{{ define "tab_costs_details" }}
+<div id="tab-details" class="tab-content">
+    {{ if .Snapshot }}
+        <div class="filter-bar" style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+            <span>Сортировать:</span>
+            <button type="button" class="btn btn-sm sort-btn" onclick="sortTable('plan-table', 'stage', this, {labelColspan: 3, incIdx: 6, expIdx: 7, balIdx: 8, hasIncome: true, hasExpense: true, hasBalance: true})">По этапам</button>
+            <button type="button" class="btn btn-sm sort-btn" onclick="sortTable('plan-table', 'date', this, {labelColspan: 3, incIdx: 6, expIdx: 7, balIdx: 8, hasIncome: true, hasExpense: true, hasBalance: true})">По дате</button>
+            <button type="button" class="btn btn-sm sort-btn" onclick="sortTable('plan-table', 'type', this, {labelColspan: 3, incIdx: 6, expIdx: 7, balIdx: 8, hasIncome: true, hasExpense: true, hasBalance: true})">По типу операции</button>
+            <button type="button" class="btn btn-sm sort-btn" onclick="sortTable('plan-table', 'work', this, {labelColspan: 3, incIdx: 6, expIdx: 7, balIdx: 8, hasIncome: true, hasExpense: true, hasBalance: true})">По виду работ</button>
+        </div>
+
+        <div class="totals" id="group-totals" style="margin-bottom: 20px;">
+            <div class="total-card">
+                <span>Поступления (План)</span>
+                <strong id="total-income">0,00 ₽</strong>
+            </div>
+            <div class="total-card">
+                <span>Затраты (План)</span>
+                <strong id="total-expense">0,00 ₽</strong>
+            </div>
+            <div class="total-card">
+                <span>Баланс (План)</span>
+                <strong id="total-balance">0,00 ₽</strong>
+            </div>
+        </div>
+
+        <div class="table-scroll">
+        <table class="data-table" id="plan-table">
+            <thead>
+            <tr>
+                <th style="width: 60px; text-align: center;">№ этапа</th>
+                <th>Вид работы</th>
+                <th>Наименование</th>
+                <th>Дата операции</th>
+                <th>Отсрочка</th>
+                <th>Дата платежа</th>
+                <th class="num">Поступление</th>
+                <th class="num">Затраты</th>
+                <th class="num">Баланс</th>
+                <th>Тип операции</th>
+            </tr>
+            </thead>
+            <tbody id="plan-tbody">
+            {{ $totalIncome := 0.0 }}
+            {{ $totalExpense := 0.0 }}
+            {{ $totalBalance := 0.0 }}
+            
+            {{ range .PlanLines }}
+                <tr data-work="{{ .WorkKind }}" data-type="{{ .OperationType }}" data-date="{{ .OperationDate.Unix }}" data-order="{{ .StageRowOrder }}" data-stage="{{ .StageNumber }}" data-stage-name="{{ .StageNumber }} — {{ .StageName }}">
+                    <td style="text-align: center; color: var(--text-muted);">{{ .StageNumber }}</td>
+                    <td>{{ .WorkKind }}</td>
+                    <td>{{ .Name }}</td>
+                    <td>{{ .OperationDate.Format "02.01.2006" }}</td>
+                    <td>{{ .DelayDays }}</td>
+                    <td>{{ .PaymentDate.Format "02.01.2006" }}</td>
+                    <td class="num">{{ if gt .Income 0.0 }}{{ money .Income }}{{ end }}</td>
+                    <td class="num">{{ if gt .Expense 0.0 }}{{ money .Expense }}{{ end }}</td>
+                    <td class="num">{{ money .Balance }}</td>
+                    <td>{{ .OperationType }}</td>
+                </tr>
+                {{ $totalIncome = add $totalIncome .Income }}
+                {{ $totalExpense = add $totalExpense .Expense }}
+                {{ $totalBalance = add $totalBalance .Balance }}
+            {{ end }}
+            </tbody>
+            <tfoot>
+                <tr class="row-total">
+                    <td colspan="6"><strong>ИТОГО</strong></td>
+                    <td class="num"><strong>{{ money $totalIncome }}</strong></td>
+                    <td class="num"><strong>{{ money $totalExpense }}</strong></td>
+                    <td class="num"><strong>{{ money $totalBalance }}</strong></td>
+                    <td></td>
+                </tr>
+            </tfoot>
+        </table>
+        </div>
+    {{ else }}
+        <div class="info-box">
+            <p>План ещё не сформирован. Заполните настройки и нажмите «Создать новый план».</p>
+        </div>
+    {{ end }}
+</div>
+{{ end }}

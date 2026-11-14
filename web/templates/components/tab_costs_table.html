@@ -1,0 +1,12 @@
+{{ define "tab_costs_table" }}
+<div id="tab-costs" class="tab-content" style="display: none;">
+
+    {{ if .Snapshot }}
+        <div class="info-box" style="margin-bottom: 20px;">
+            <strong>Просмотр снимка.</strong> Это зафиксированные затраты на момент генерации плана. Чтобы изменить их, создайте новую версию.
+        </div>
+    {{ end }}
+ 
+    {{ template "costs_table" . }}
+</div>
+{{ end }}

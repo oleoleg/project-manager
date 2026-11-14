@@ -11,7 +11,7 @@
 
 <form method="post" action="{{ if $isNew }}/counterparties{{ else }}/counterparties/{{ $c.ID }}{{ end }}" class="form">
     <label>
-        ID (4 цифры)
+        ID (4 цифры) *
         <input type="text" name="id" value="{{ $c.ID }}" maxlength="4" pattern="[0-9]{4}"
                {{ if not $isNew }}readonly{{ end }} required>
     </label>

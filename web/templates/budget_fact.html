@@ -232,9 +232,9 @@
 
     <section class="danger-zone" style="margin-top: 40px;">
         <h3>Опасная зона</h3>
-        <p class="muted">Действие необратимо. Все ручные правки в факте будут потеряны, а таблица пересоздана на основе активного плана.</p>
+        <p class="muted">Действие необратимо. Все ручные правки в факте будут потеряны.</p>
         <form method="post" action="/contracts/{{ $c.ID }}/budget/fact/delete" onsubmit="return confirm('Удалить текущий факт и вернуть базовую версию из плана?');">
-            <button type="submit" class="btn btn-danger">🗑 Сбросить факт по активному плану</button>
+            <button type="submit" class="btn btn-danger">🗑 Удалить факт полностью</button>
         </form>
     </section>
 {{ else }}
