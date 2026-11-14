@@ -146,7 +146,13 @@ function sortTable(tableId, field, btnElement, groupConfig) {
         // Скрываем заголовок, ТОЛЬКО если в группе нет ничего, кроме ЗП
         if (hasOnlySalaryRows) {
             headerRow.className += ' salary-row';
-            headerRow.style.display = 'none';
+            
+            // Проверяем, включен ли чекбокс "Показать ЗП"
+            const showSalaryCheckbox = document.getElementById('show-salary');
+            const isShowSalary = showSalaryCheckbox ? showSalaryCheckbox.checked : false;
+            
+            // Показываем заголовок, только если чекбокс включен. Иначе прячем.
+            headerRow.style.display = isShowSalary ? '' : 'none';
         }
         headerRow.setAttribute('data-type', field === 'type' ? currentGroupValue : '');
         
@@ -170,35 +176,147 @@ function sortTable(tableId, field, btnElement, groupConfig) {
             }
         });
 
-        // Добавляем кнопку в конец группы (только если есть обычные строки)
-        if (hasVisibleRows) {
+        // Определяем, нужно ли показывать кнопку добавления
+        let showAddButton = true;
+
+        // Скрываем кнопку ТОЛЬКО если сортируем по Типу операции и это ЗП/Накладные
+        if (field === 'type') {
+            if (currentGroupValue === 'Зарплата сотрудникам' || currentGroupValue === 'Накладные') {
+                showAddButton = false;
+            }
+        } else {
+            // Если сортируем по дате/этапу/работе, проверяем, есть ли ВИДИМЫЕ строки в группе
+            // (с учетом того, что ЗП могут быть скрыты)
+            const hasVisibleRows = currentGroupRows.some(r => r.style.display !== 'none');
+            if (!hasVisibleRows) {
+                showAddButton = false;
+            }
+        }
+
+        // Дополнительная проверка: если все строки в группе скрыты (ЗП), но мы не в режиме "По типу", 
+        // все равно показываем кнопку, чтобы можно было добавить обычную операцию в этот месяц/этап
+        if (showAddButton) {
             let groupOpType = 'Платежи по договору'; 
             
             if (field === 'type') {
                 groupOpType = currentGroupValue;
             } else {
-                const firstRow = currentGroupRows[0];
-                if (firstRow) {
-                    const select = firstRow.querySelector('.op-type-select');
+                // Берем тип из ПОСЛЕДНЕЙ ВИДИМОЙ строки (не ЗП), чтобы кнопка добавляла правильный тип
+                let lastVisibleRow = null;
+                for (let i = currentGroupRows.length - 1; i >= 0; i--) {
+                    const r = currentGroupRows[i];
+                    if (r.style.display !== 'none' && !r.classList.contains('salary-row')) {
+                        lastVisibleRow = r;
+                        break;
+                    }
+                }
+                if (!lastVisibleRow) lastVisibleRow = currentGroupRows[0]; 
+
+                if (lastVisibleRow) {
+                    const select = lastVisibleRow.querySelector('.op-type-select');
                     if (select) {
                         groupOpType = select.value;
                     } else {
-                        groupOpType = firstRow.dataset.type || 'Платежи по договору';
+                        groupOpType = lastVisibleRow.dataset.type || 'Платежи по договору';
                     }
                 }
             }
             
             const addRow = document.createElement('tr');
             addRow.className = 'group-add-row';
+            // ВАЖНО: сохраняем данные группы в кнопку, чтобы addNewRow знал, откуда брать данные
+            addRow.dataset.groupType = groupOpType;
+            if (field === 'stage') addRow.dataset.groupStage = currentGroupValue;
+            if (field === 'date') addRow.dataset.groupDate = currentGroupValue;
+            if (field === 'work') addRow.dataset.groupWork = currentGroupValue;
+
             const totalCols = groupConfig.labelColspan + 
                               (groupConfig.incIdx - groupConfig.labelColspan) + 
                               (groupConfig.hasIncome ? 1 : 0) + 
                               (groupConfig.hasExpense ? 1 : 0) + 
                               (groupConfig.hasBalance ? 1 : 0) + 1;
             
+            // Берем данные из ПОСЛЕДНЕЙ видимой строки в группе, ИГНОРИРУЯ ЗП и Накладные
+            let lastRow = null;
+            for (let i = currentGroupRows.length - 1; i >= 0; i--) {
+                const r = currentGroupRows[i];
+                // Пропускаем скрытые и ЗП/Накладные
+                if (r.style.display !== 'none' && !r.classList.contains('salary-row')) {
+                    lastRow = r;
+                    break;
+                }
+            }
+            // Если нашли только ЗП, берем любую строку (чтобы не упасть)
+            if (!lastRow && currentGroupRows.length > 0) {
+                lastRow = currentGroupRows[0];
+            }
+
+            // Берем отсрочку из последней строки
+            let lastDelay = 0;
+            if (lastRow) {
+                const delayInput = lastRow.querySelector('input[name="delay_days[]"]');
+                if (delayInput) lastDelay = delayInput.value;
+            }
+
+            // Определяем этап (если сортируем по этапам, берем из группы, иначе из последней строки)
+            let groupStage = '';
+            let groupStageName = '';
+            if (field === 'stage') {
+                groupStage = currentGroupValue;
+                groupStageName = currentGroupLabel; // Например, "1 — Проектирование"
+            } else if (lastRow) {
+                // Берем из data-атрибута последней строки
+                groupStage = lastRow.dataset.stage || '';
+                groupStageName = lastRow.dataset.stageName || '';
+            }
+
+            // Определяем дату (если сортируем по дате, берем из группы, иначе из последней строки)
+            let groupDate = '';
+            if (field === 'date') {
+                groupDate = currentGroupValue;
+            } else if (lastRow) {
+                groupDate = lastRow.dataset.date || '';
+            }
+
+            // Определяем вид работы (если сортируем по виду работ, берем из группы, иначе из последней строки)
+            let groupWork = '';
+            if (field === 'work') {
+                groupWork = currentGroupValue;
+            } else if (lastRow) {
+                groupWork = lastRow.dataset.work || '';
+            }
+            
+            // Ищем ПОСЛЕДНЮЮ видимую строку (не ЗП) в группе
+            let sourceRow = null;
+            for (let i = currentGroupRows.length - 1; i >= 0; i--) {
+                const r = currentGroupRows[i];
+                if (r.style.display !== 'none' && !r.classList.contains('salary-row')) {
+                    sourceRow = r;
+                    break;
+                }
+            }
+            if (!sourceRow && currentGroupRows.length > 0) {
+                sourceRow = currentGroupRows[0];
+            }
+
+            // Собираем данные для кнопки
+            let groupData = {
+                type: groupOpType, // Тип операции (текст кнопки)
+                stage: sourceRow ? (sourceRow.dataset.stage || '') : '', 
+                stageName: sourceRow ? (sourceRow.dataset.stageName || '') : '',
+                work: sourceRow ? (sourceRow.dataset.work || '') : '',
+                delay: sourceRow ? (sourceRow.querySelector('input[name="delay_days[]"]')?.value || '0') : '0',
+                date: sourceRow ? (sourceRow.querySelector('input[name="operation_date[]"]')?.value || '') : '' // Берем дату из последней строки
+            };
+            
+            const jsonStr = JSON.stringify(groupData).replace(/"/g, '&quot;');
+
             addRow.innerHTML = `
-                <td colspan="${totalCols}" style="padding: 5px 10px;">
-                    <button type="button" class="btn btn-sm" style="opacity: 0.7;" onclick="addNewRow('${groupOpType}', event)">+ Добавить операцию</button>
+                <td colspan="${totalCols}" style="padding: 5px 5px;">
+                    <button type="button" class="btn btn-sm" style="opacity: 0.7;" 
+                            onclick="addNewRowFromGroup(this, ${jsonStr})">
+                        + Добавить операцию
+                    </button>
                 </td>
             `;
             tbody.appendChild(addRow);
@@ -210,8 +328,8 @@ function sortTable(tableId, field, btnElement, groupConfig) {
     allRows.forEach((row) => {
         let gv = '', gl = '';
         if (field === 'date') {
-            gv = row.dataset.date; 
             const d = new Date(parseInt(row.dataset.date) * 1000);
+            gv = `${d.getFullYear()}-${d.getMonth()}`; // Уникальный ключ для месяца
             gl = `${months[d.getMonth()]} ${d.getFullYear()}`;
         } else if (field === 'type') {
             gv = row.dataset.type; gl = row.dataset.type;

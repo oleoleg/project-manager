@@ -2,6 +2,7 @@
 {{ template "layout_header" . }}
 {{ $c := .Contract }}
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="/static/budget-table-sort-fact.js"></script>
 <script src="/static/budget-fact.js"></script>
 <script src="/static/budget-fact-actions.js"></script>
@@ -25,7 +26,7 @@
                 <a href="/counterparties/{{ .Counterparty.ID }}">{{ .Counterparty.Name }}</a>
             {{ end }}
         </p>
-        
+
         <div class="breadcrumb" style="margin-bottom: 16px;">
             <a href="/contracts/{{ $c.ID }}">Договор {{ $c.ID }}</a> 
             &rarr; <a href="/contracts/{{ $c.ID }}/stages">Этапы</a> 

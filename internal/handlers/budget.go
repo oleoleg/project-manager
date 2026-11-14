@@ -590,6 +590,51 @@ func (h *BudgetHandler) FactSaveForm(w http.ResponseWriter, r *http.Request) {
 		return out
 	}
 
+	getStr := func(arr []string, i int) string {
+		if i < len(arr) {
+			return arr[i]
+		}
+		return ""
+	}
+
+	// ВАЛИДАЦИЯ НА СЕРВЕРЕ
+	for i := 0; i < n; i++ {
+		id := ids[i]
+		if id == "" { // Только для новых строк
+			name := strings.TrimSpace(getStr(names, i))
+			stageNum := strings.TrimSpace(getStr(stageNumbers, i))
+			workKind := strings.TrimSpace(getStr(workKinds, i))
+			opDate := strings.TrimSpace(getStr(opDates, i))
+			inc := getStr(incIncomes, i)
+			exp := getStr(incExpenses, i)
+
+			if name == "" {
+				http.Error(w, "Ошибка: Наименование операции обязательно для заполнения", http.StatusBadRequest)
+				return
+			}
+			if stageNum == "" {
+				http.Error(w, "Ошибка: Этап обязателен для заполнения", http.StatusBadRequest)
+				return
+			}
+			if workKind == "" || workKind == "Комплексный" {
+				http.Error(w, "Ошибка: Вид работы обязателен (и не может быть 'Комплексный')", http.StatusBadRequest)
+				return
+			}
+			if opDate == "" {
+				http.Error(w, "Ошибка: Дата операции обязательна", http.StatusBadRequest)
+				return
+			}
+
+			// Проверка на нулевую сумму
+			incVal, _ := strconv.ParseFloat(strings.ReplaceAll(inc, " ", ""), 64)
+			expVal, _ := strconv.ParseFloat(strings.ReplaceAll(exp, " ", ""), 64)
+			if incVal == 0 && expVal == 0 {
+				http.Error(w, "Ошибка: Сумма операции не может быть нулевой", http.StatusBadRequest)
+				return
+			}
+		}
+	}
+
 	confirmedSet := make(map[string]bool)
 	for _, id := range r.Form["is_confirmed[]"] {
 		confirmedSet[id] = true
@@ -983,8 +1028,8 @@ func (h *BudgetHandler) FactAppendSelected(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusOK)
 }
 
-// GetTimelineChartData возвращает данные для временного графика
-func (h *BudgetHandler) GetTimelineChartData(w http.ResponseWriter, r *http.Request) {
+// GetTimelineChart возвращает данные для временного графика
+func (h *BudgetHandler) GetTimelineChart(w http.ResponseWriter, r *http.Request) {
 	contractID := chi.URLParam(r, "id")
 	selectedSnapshotID := r.URL.Query().Get("snapshot")
 	groupBy := r.URL.Query().Get("group")
@@ -1258,4 +1303,195 @@ func (h *BudgetHandler) buildFactCostsRows(ctx context.Context, contractID strin
 	}
 
 	return rows
+}
+
+// FactGetSummaryChart собирает данные для графиков ФинФакта
+func (h *BudgetHandler) FactGetSummaryChart(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "id")
+
+	// Определяем режим (по умолчанию - только подтвержденные)
+	factMode := r.URL.Query().Get("fact_mode")
+	if factMode == "" {
+		factMode = "confirmed"
+	}
+	onlyConfirmed := factMode == "confirmed"
+
+	lines, err := h.svc.GetFactLines(r.Context(), contractID)
+	if err != nil {
+		log.Printf("fact chart get lines: %v", err)
+		http.Error(w, "Ошибка загрузки данных", http.StatusInternalServerError)
+		return
+	}
+
+	expenseSums := make(map[string]float64)
+	deptSums := make(map[string]float64)
+
+	totalIncome := 0.0
+	totalExpense := 0.0
+
+	for _, l := range lines {
+		if onlyConfirmed && !l.IsConfirmed {
+			continue
+		}
+
+		// Считаем только фактические суммы
+		totalIncome += l.FactIncome
+		totalExpense += l.FactExpense
+
+		// В график затрат не включаем поступления от клиента (Платежи по договору)
+		if l.OperationType != "Платежи по договору" && l.FactExpense > 0 {
+			expenseSums[l.OperationType] += l.FactExpense
+			deptSums[l.WorkKind] += l.FactExpense
+		}
+	}
+
+	// Добавляем "Прибыль" в график затрат (как остаток)
+	profit := totalIncome - totalExpense
+	if profit != 0 {
+		expenseSums["Прибыль"] = profit
+	}
+
+	// Формируем ответ (структура ChartData уже есть в файле)
+	resp := struct {
+		ExpensesChart    ChartData `json:"expenses_chart"`
+		DepartmentsChart ChartData `json:"departments_chart"`
+	}{
+		ExpensesChart:    ChartData{Labels: make([]string, 0, len(expenseSums)), Data: make([]float64, 0, len(expenseSums))},
+		DepartmentsChart: ChartData{Labels: make([]string, 0, len(deptSums)), Data: make([]float64, 0, len(deptSums))},
+	}
+
+	for k, v := range expenseSums {
+		resp.ExpensesChart.Labels = append(resp.ExpensesChart.Labels, k)
+		resp.ExpensesChart.Data = append(resp.ExpensesChart.Data, v)
+	}
+
+	for k, v := range deptSums {
+		resp.DepartmentsChart.Labels = append(resp.DepartmentsChart.Labels, k)
+		resp.DepartmentsChart.Data = append(resp.DepartmentsChart.Data, v)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		log.Printf("encode fact chart: %v", err)
+	}
+}
+
+// FactGetTimelineChart возвращает данные для временного графика ФинФакта
+func (h *BudgetHandler) FactGetTimelineChart(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "id")
+	groupBy := r.URL.Query().Get("group")
+	factMode := r.URL.Query().Get("fact_mode")
+
+	if groupBy == "" {
+		groupBy = "month"
+	}
+	onlyConfirmed := factMode == "confirmed" // По умолчанию только подтвержденные
+
+	lines, err := h.svc.GetFactLines(r.Context(), contractID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Фильтруем по подтвержденности
+	var filteredLines []models.BudgetFactLine
+	for _, l := range lines {
+		if onlyConfirmed && !l.IsConfirmed {
+			continue
+		}
+		filteredLines = append(filteredLines, l)
+	}
+
+	if len(filteredLines) == 0 {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte("[]"))
+		return
+	}
+
+	// Находим минимальную и максимальную дату
+	minDate, maxDate := filteredLines[0].OperationDate, filteredLines[0].OperationDate
+	for _, l := range filteredLines {
+		if l.OperationDate.Before(minDate) {
+			minDate = l.OperationDate
+		}
+		if l.OperationDate.After(maxDate) {
+			maxDate = l.OperationDate
+		}
+	}
+
+	var periods []string
+	periodMap := make(map[string]bool)
+
+	formatPeriod := func(t time.Time) string {
+		switch groupBy {
+		case "week":
+			year, week := t.ISOWeek()
+			return fmt.Sprintf("%d-W%02d", year, week)
+		case "quarter":
+			quarter := (int(t.Month())-1)/3 + 1
+			return fmt.Sprintf("%d-Q%d", t.Year(), quarter)
+		default:
+			return t.Format("2006-01")
+		}
+	}
+
+	current := minDate
+	if groupBy == "month" || groupBy == "quarter" {
+		current = time.Date(minDate.Year(), minDate.Month(), 1, 0, 0, 0, 0, time.UTC)
+	} else {
+		weekday := int(current.Weekday())
+		if weekday == 0 {
+			weekday = 7
+		}
+		current = current.AddDate(0, 0, -weekday+1)
+	}
+
+	for !current.After(maxDate) {
+		p := formatPeriod(current)
+		if !periodMap[p] {
+			periods = append(periods, p)
+			periodMap[p] = true
+		}
+		switch groupBy {
+		case "week":
+			current = current.AddDate(0, 0, 7)
+		case "quarter":
+			current = current.AddDate(0, 3, 0)
+		default:
+			current = current.AddDate(0, 1, 0)
+		}
+	}
+
+	dataMap := make(map[string]*struct{ Income, Expense float64 })
+	for _, p := range periods {
+		dataMap[p] = &struct{ Income, Expense float64 }{}
+	}
+
+	for _, l := range filteredLines {
+		p := formatPeriod(l.OperationDate)
+		if data, ok := dataMap[p]; ok {
+			data.Income += l.FactIncome
+			data.Expense += l.FactExpense
+		}
+	}
+
+	var res []map[string]any
+	var cumIncome, cumExpense float64
+
+	for _, p := range periods {
+		point := dataMap[p]
+		cumIncome += point.Income
+		cumExpense += point.Expense
+		res = append(res, map[string]any{
+			"period":        p,
+			"income_month":  point.Income,
+			"expense_month": point.Expense,
+			"income_cum":    cumIncome,
+			"expense_cum":   cumExpense,
+			"balance_cum":   cumIncome - cumExpense,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(res)
 }

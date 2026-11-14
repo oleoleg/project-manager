@@ -141,60 +141,93 @@ function deleteRow(btn) {
     });
 }
 
-function addNewRow(opType, event) {
-    const btn = event.target;
-    const btnRow = btn.closest('tr');
-    if (!window.stageOptionsHTML || window.stageOptionsHTML.trim() === '') {
-        alert('Сначала добавьте хотя бы один этап в договор.');
-        return;
+function addNewRowFromGroup(btn, groupData) {
+    const finalData = {
+        opType: groupData.type || 'Платежи по договору',
+        stageNum: groupData.stage || '',
+        stageNameFull: groupData.stageName || '',
+        workKind: groupData.work || '',
+        opDate: groupData.date || new Date().toISOString().split('T')[0], // Берем дату, переданную из кнопки
+        delay: groupData.delay || '0',
+        rowOrder: '0'
+    };
+
+    if (groupData.stage) {
+        const stageOpt = Array.from(document.querySelectorAll('.stage-select option')).find(o => o.value === groupData.stage);
+        if (stageOpt) finalData.rowOrder = stageOpt.getAttribute('data-row-order') || '0';
     }
+
+    if (!finalData.stageNum && window.stageOptionsHTML) {
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = window.stageOptionsHTML;
+        const firstOpt = tempDiv.querySelector('option');
+        if (firstOpt) {
+            finalData.stageNum = firstOpt.value;
+            finalData.stageNameFull = firstOpt.textContent;
+            finalData.rowOrder = firstOpt.getAttribute('data-row-order') || '0';
+        }
+    }
+
+    createFactRow(btn, finalData);
+}
+
+// Вспомогательная функция для создания строки (чтобы не дублировать код)
+function createFactRow(btn, data) {
     const tbody = document.getElementById('fact-table').querySelector('tbody');
     const newRow = document.createElement('tr');
     newRow.className = 'fact-row';
-    // Устанавливаем атрибуты для сортировки
-    newRow.dataset.type = opType;
-    newRow.dataset.date = Math.floor(Date.now() / 1000); // текущая дата как временная метка
-    newRow.dataset.stage = '0'; // Заглушка
-    newRow.dataset.stageName = ''; // Заглушка
-    
-    const isPayment = opType === 'Платежи по договору';
-    const isSalary = opType === 'Зарплата сотрудникам' || opType === 'Накладные';
+
+    newRow.dataset.type = data.opType;
+    newRow.dataset.date = Math.floor(new Date(data.opDate).getTime() / 1000);
+    newRow.dataset.stage = data.stageNum || '0';
+    newRow.dataset.stageName = data.stageNameFull || '';
+    newRow.dataset.order = data.rowOrder;
+
+    const isPayment = data.opType === 'Платежи по договору';
+    const isSalary = data.opType === 'Зарплата сотрудникам' || data.opType === 'Накладные';
     
     let workKindsHTML = '<option value="" disabled selected hidden>— выберите —</option>';
     if (window.workKinds && window.workKinds.length > 0) {
         window.workKinds.forEach(wk => {
-            workKindsHTML += `<option value="${wk.Code}">${wk.Name}</option>`;
+            if (wk.Code === 'Комплексный') return; 
+            const selected = (wk.Code === data.workKind) ? 'selected' : '';
+            workKindsHTML += `<option value="${wk.Code}" ${selected}>${wk.Name}</option>`;
         });
+    }
+
+    let stageOptions = window.stageOptionsHTML;
+    if (data.stageNum) {
+        stageOptions = stageOptions.replace(new RegExp(`value="${data.stageNum}"`), `value="${data.stageNum}" selected`);
     }
 
     newRow.innerHTML = `
         <td style="text-align: center;">
             <select name="stage_select" class="fact-input stage-select" style="width: 100%; font-size: 12px;" onchange="filterWorkKinds(this)">
-                ${window.stageOptionsHTML}
+                ${stageOptions}
             </select>
-            <input type="hidden" name="stage_number[]" value="">
-            <input type="hidden" name="stage_name[]" value="">
+            <input type="hidden" name="stage_number[]" value="${data.stageNum}">
+            <input type="hidden" name="stage_name[]" value="${data.stageNameFull.split('—').pop().trim()}">
         </td>
         <td>
             <input type="hidden" name="fact_id[]" value="">
-            <input type="hidden" name="work_kind[]" class="workkind-hidden" value="">
+            <input type="hidden" name="work_kind[]" class="workkind-hidden" value="${data.workKind}">
             <select class="fact-input workkind-select">
                 ${workKindsHTML}
             </select>
         </td>
         <td>
             <select name="operation_type[]" class="fact-input op-type-select" style="width: 100%; font-size: 12px;" onchange="updateRowInputsByType(this)">
-                <option value="Платежи по договору" ${opType === 'Платежи по договору' ? 'selected' : ''}>Платежи по договору</option>
-                <option value="Закупка по договору" ${opType === 'Закупка по договору' ? 'selected' : ''}>Закупка по договору</option>
-                <option value="Командировки" ${opType === 'Командировки' ? 'selected' : ''}>Командировки</option>
-                <option value="Субподрядчики" ${opType === 'Субподрядчики' ? 'selected' : ''}>Субподрядчики</option>
-                <option value="Комиссия" ${opType === 'Комиссия' ? 'selected' : ''}>Комиссия</option>
-                <option value="Другое (расходы)" ${opType === 'Другое (расходы)' ? 'selected' : ''}>Другое (расходы)</option>
+                <option value="Платежи по договору" ${data.opType === 'Платежи по договору' ? 'selected' : ''}>Платежи по договору</option>
+                <option value="Закупка по договору" ${data.opType === 'Закупка по договору' ? 'selected' : ''}>Закупка по договору</option>
+                <option value="Командировки" ${data.opType === 'Командировки' ? 'selected' : ''}>Командировки</option>
+                <option value="Субподрядчики" ${data.opType === 'Субподрядчики' ? 'selected' : ''}>Субподрядчики</option>
+                <option value="Комиссия" ${data.opType === 'Комиссия' ? 'selected' : ''}>Комиссия</option>
+                <option value="Другое (расходы)" ${data.opType === 'Другое (расходы)' ? 'selected' : ''}>Другое (расходы)</option>
             </select>
         </td>
         <td><textarea name="name[]" class="fact-input" rows="2" placeholder="Новая операция"></textarea></td>
-        <td><input type="date" name="operation_date[]" class="fact-input"></td>
-        <td><input type="number" name="delay_days[]" value="0" class="fact-input" onchange="updatePayDate(this)"></td>
+        <td><input type="date" name="operation_date[]" class="fact-input" value="${data.opDate}"></td>
+        <td><input type="number" name="delay_days[]" value="${data.delay}" class="fact-input" onchange="updatePayDate(this)"></td>
         <td><input type="date" name="payment_date[]" class="fact-input" readonly></td>
         <td class="num">
             ${isPayment ? `<input type="text" name="fact_income[]" class="fact-input money-input">` : `<input type="hidden" name="fact_income[]" value="0"><span class="muted">—</span>`}
@@ -212,80 +245,76 @@ function addNewRow(opType, event) {
         </td>
     `;
     
-    // Принудительно ставим тип операции в новый селект и применяем логику отображения полей
     const opTypeSelect = newRow.querySelector('.op-type-select');
     if (opTypeSelect) {
-        opTypeSelect.value = opType;
-        updateRowInputsByType(opTypeSelect); // Применяем блокировку/разблокировку полей
+        opTypeSelect.value = data.opType;
+        updateRowInputsByType(opTypeSelect); 
     }
 
-    tbody.insertBefore(newRow, btnRow);
+    tbody.insertBefore(newRow, btn.closest('tr'));
     
     if (window.attachMoneyInput) {
         newRow.querySelectorAll('input.money-input').forEach(window.attachMoneyInput);
     }
     
-    const today = new Date().toISOString().split('T')[0];
     const dateInput = newRow.querySelector('input[name="operation_date[]"]');
-    dateInput.value = today;
-    dateInput.addEventListener('change', function() { updatePayDate(this); }); // Вешаем обработчик здесь
-    
-    updatePayDate(dateInput);
-
-      // Автоматически применяем фильтр для первого выбранного этапа
-    const stageSelect = newRow.querySelector('.stage-select');
-    if (stageSelect) {
-        if (stageSelect.options.length > 0) {
-            stageSelect.selectedIndex = 0;
-            newRow.dataset.stage = stageSelect.options[0].getAttribute('data-stage-num') || '0';
-            const rowOrder = stageSelect.options[0].getAttribute('data-row-order') || '0';
-            newRow.dataset.order = rowOrder;
-        }
-        
-        // Применяем фильтр видов работ для выбранного этапа
-        filterWorkKinds(stageSelect);
-        
-        // Логика автовыбора, если вид работы один
-        const wkSelect = newRow.querySelector('.workkind-select');
-        const wkhidden = newRow.querySelector('input[name="work_kind[]"]');
-        
-        if (wkSelect && wkhidden) {
-            // Если доступен только 1 вариант (индекс 1, т.к. 0-й это "— выберите —")
-            if (wkSelect.options.length === 2) {
-                wkSelect.selectedIndex = 1;
-                // Если он не комплексный, можно даже скрыть селект и показать текст
-                wkSelect.disabled = true;
-                wkhidden.value = wkSelect.value;
-            } else if (wkSelect.options.length > 2) {
-                // Если это комплексный этап (вариантов много), выбираем первый
-                wkSelect.selectedIndex = 1; 
-                wkhidden.value = wkSelect.value;
-            }
-        }
+    if (dateInput) {
+        dateInput.addEventListener('change', function() { updatePayDate(this); }); 
+        updatePayDate(dateInput);
     }
 
-    // Принудительно обновляем скрытое поле work_kind из селекта
-    const wkSelect = newRow.querySelector('.workkind-select');
-    const wkhidden = newRow.querySelector('input[name="work_kind[]"]');
-    if (wkSelect && wkhidden) {
-        wkhidden.value = wkSelect.value;
-        // Добавляем обработчик для ручного выбора
-        wkSelect.addEventListener('change', function() {
-            wkhidden.value = this.value;
-        });
+    const stageSelect = newRow.querySelector('.stage-select');
+    if (stageSelect && data.stageNum) {
+        filterWorkKinds(stageSelect);
+        const wkSelect = newRow.querySelector('.workkind-select');
+        const wkhidden = newRow.querySelector('input[name="work_kind[]"]');
+        if (wkSelect && data.workKind) {
+            wkSelect.value = data.workKind;
+            if (wkhidden) wkhidden.value = data.workKind;
+        }
     }
 
     recalculateTotals();
 }
 
-
 function toggleSalaryRows() {
     const checkbox = document.getElementById('show-salary');
+    const isChecked = checkbox ? checkbox.checked : false;
+    
+    // 1. Скрываем/показываем сами строки
     document.querySelectorAll('.salary-row').forEach(row => {
-        row.style.display = checkbox.checked ? '' : 'none';
-    });
-}
+        // Если это заголовок группы (tr), мы его не трогаем напрямую, 
+        // его судьбой управляет сортировка
+        if (row.classList.contains('group-header-row')) return;
 
+        if (isChecked) {
+            row.style.display = ''; 
+        } else {
+            row.style.display = 'none'; 
+        }
+    });
+
+    // 2. Пересобираем таблицу заново, чтобы заголовки групп обновились
+    const activeSortBtn = document.querySelector('.filter-bar .sort-btn.btn-primary');
+    
+    if (activeSortBtn) {
+        if (activeSortBtn.textContent.includes('По этапам')) {
+            sortFactTable('stage', activeSortBtn);
+        } else if (activeSortBtn.textContent.includes('По дате')) {
+            sortFactTable('date', activeSortBtn);
+        } else if (activeSortBtn.textContent.includes('По типу')) {
+            sortFactTable('type', activeSortBtn);
+        } else if (activeSortBtn.textContent.includes('По виду')) {
+            sortFactTable('work', activeSortBtn);
+        }
+    } else {
+        // Если сортировка не выбрана, применяем дефолтную (По типу)
+        const defaultBtn = Array.from(document.querySelectorAll('.filter-bar button')).find(b => b.textContent.includes('По типу'));
+        if (defaultBtn) {
+            sortFactTable('type', defaultBtn);
+        }
+    }
+}
 
 function updateRowInputsByType(selectEl) {
     const row = selectEl.closest('tr');
@@ -321,4 +350,65 @@ function updateRowInputsByType(selectEl) {
     }
     
     recalculateTotals();
+}
+
+
+function validateAndSubmitForm() {
+    document.querySelectorAll('select.op-type-select[disabled]').forEach(el => {
+        el.removeAttribute('disabled');
+    });
+
+    const rows = document.querySelectorAll('#fact-table tbody tr.fact-row');
+    for (let row of rows) {
+        if (row.style.display === 'none' || row.classList.contains('salary-row')) continue;
+
+        const stageSelect = row.querySelector('.stage-select');
+        const workKindSelect = row.querySelector('.workkind-select');
+        const dateInput = row.querySelector('input[name="operation_date[]"]');
+        
+        if (stageSelect && stageSelect.value === '') { alert('Выберите этап.'); return false; }
+        if (workKindSelect && (workKindSelect.value === '' || workKindSelect.value === 'Комплексный')) { alert('Выберите вид работы (Комплексный недопустим).'); return false; }
+        if (dateInput && dateInput.value === '') { alert('Укажите дату.'); return false; }
+    }
+
+    // Отправляем через AJAX
+    const form = document.getElementById('fact-form');
+    const formData = new FormData(form);
+    
+    fetch(form.action, {
+        method: 'POST',
+        body: new URLSearchParams(formData) // Отправляем как urlencoded, чтобы сервер понял
+    })
+    .then(response => {
+        if (response.ok) {
+            // Успех - перезагружаем страницу, чтобы обновить данные
+            window.location.href = response.url; // или window.location.reload()
+        } else {
+            // Ошибка - показываем текст ошибки
+            return response.text().then(text => {
+                const errorBox = document.getElementById('error-box');
+                if (errorBox) {
+                    errorBox.textContent = text;
+                    errorBox.style.display = 'block';
+                    errorBox.scrollIntoView({ behavior: 'smooth' });
+                } else {
+                    alert(text);
+                }
+            });
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        alert('Ошибка сети при сохранении');
+    });
+
+    return false; // Предотвращаем обычную отправку формы
+}
+
+
+// Оставьте только эту версию, старую addNewRow можно удалить или сделать алиасом
+function addNewRow(opType, event) {
+    const btn = event.target;
+    // Если старая кнопка вызывает addNewRow напрямую, передаем базовые данные
+    addNewRowFromGroup(btn, { type: opType });
 }

@@ -1,7 +1,60 @@
 {{ define "tab_fact_summary" }}
 <div id="tab-summary" class="tab-content" style="display: none;">
-    <div class="info-box">
-        <p>Раздел «Сводка и графики» для ФинФакта находится в разработке.</p>
+    
+    <!-- Фильтр (Все / Только подтвержденные) -->
+    <div class="filter-bar" style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center;">
+        <span>Показывать:</span>
+        <a href="?tab=summary&fact_mode=confirmed" class="btn btn-sm {{ if eq .FactMode "confirmed" }}btn-primary{{ end }}">Только подтвержденные</a>
+        <a href="?tab=summary&fact_mode=all" class="btn btn-sm {{ if eq .FactMode "all" }}btn-primary{{ end }}">Все</a>
     </div>
+
+    {{ if .FactLines }}
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; margin-bottom: 20px;">
+        <div class="card" style="padding: 20px; position: relative; display: flex; flex-direction: column;">
+            <h3 style="text-align: center; margin-bottom: 15px;">Разбивка суммы по затратам</h3>
+            <div style="height: 300px; position: relative;">
+                <canvas id="factExpensesChart"></canvas>
+            </div>
+            <div id="fact-expenses-legend"></div>
+        </div>
+        
+        <div class="card" style="padding: 20px; position: relative; display: flex; flex-direction: column;">
+            <h3 style="text-align: center; margin-bottom: 15px;">Разбивка затрат по Отделам (Видам работ)</h3>
+            <div style="height: 300px; position: relative;">
+                <canvas id="factDepartmentsChart"></canvas>
+            </div>
+            <div id="fact-departments-legend"></div>
+        </div>
+    </div>
+
+    <!-- Временной график -->
+    <div class="card" style="padding: 20px; margin-top: 20px; position: relative;">
+        <h3 style="text-align: center; margin-bottom: 15px;">Динамика (Нарастающий итог)</h3>
+        
+        <div style="display: flex; gap: 20px; justify-content: center; margin-bottom: 15px; align-items: center;">
+            <label style="font-size: 14px; display: flex; align-items: center; gap: 8px;">
+                Детализация: 
+                <select id="fact-timeline-group" class="btn btn-sm" onchange="updateFactTimeline()" style="padding: 4px 8px; border: 1px solid var(--border);">
+                    <option value="week">По неделям</option>
+                    <option value="month" selected>По месяцам</option>
+                    <option value="quarter">По кварталам</option>
+                </select>
+            </label>
+            
+            <label style="font-size: 14px; display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <input type="checkbox" id="fact-timeline-negative-expense" onchange="updateFactTimeline()">
+                Затраты в минус
+            </label>
+        </div>
+
+        <div style="height: 400px; position: relative;">
+            <canvas id="factTimelineChart"></canvas>
+        </div>
+        
+        <div id="fact-timeline-legend" style="margin-top: 15px;"></div>
+    </div>
+    {{ else }}
+        <div class="info-box">Нет данных для построения графиков. Сформируйте факт.</div>
+    {{ end }}
 </div>
 {{ end }}

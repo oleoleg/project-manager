@@ -359,7 +359,7 @@ func startHTTPServer(stopCh <-chan struct{}) {
 			r.Post("/contracts/{id}/budget/snapshots/{snapshotID}/delete", budgetH.DeleteSnapshot)
 			r.Post("/contracts/{id}/budget/snapshots/{snapshotID}/activate", budgetH.ActivateSnapshot)
 			r.Get("/contracts/{id}/budget/charts.json", budgetH.GetSummaryChart)
-			r.Get("/contracts/{id}/budget/timeline.json", budgetH.GetTimelineChartData)
+			r.Get("/contracts/{id}/budget/timeline.json", budgetH.GetTimelineChart)
 
 			// Бюджет (Факт)
 			r.Get("/contracts/{id}/budget/fact", budgetH.FactIndex)
@@ -373,6 +373,8 @@ func startHTTPServer(stopCh <-chan struct{}) {
 			r.Post("/contracts/{id}/budget/fact/append", budgetH.FactAppendFromPlan)
 			r.Post("/contracts/{id}/budget/fact/append-preview", budgetH.FactAppendPreview)
 			r.Post("/contracts/{id}/budget/fact/append-selected", budgetH.FactAppendSelected)
+			r.Get("/contracts/{id}/budget/fact/charts.json", budgetH.FactGetSummaryChart)
+			r.Get("/contracts/{id}/budget/fact/timeline.json", budgetH.FactGetTimelineChart)
 
 			// Сравнить Бюджет Факт vs План
 			r.Get("/contracts/{id}/budget/compare", budgetH.PlanFactIndex)

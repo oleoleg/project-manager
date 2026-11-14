@@ -26,7 +26,9 @@
             <button type="submit" form="fact-form" class="btn btn-primary" style="height: 36px; padding: 0 16px; display: inline-flex; align-items: center;">💾 Сохранить изменения</button>
         {{ end }}
     </div>
-
+    
+   <!-- Плашка для AJAX-ошибок -->
+    <div id="error-box" class="error" style="display: none; margin-bottom: 15px; padding: 12px; border-left: 4px solid #c0392b; background: var(--error-bg); color: var(--error-text); border-radius: 4px;"></div>
     {{ if .Warnings }}
         {{ range .Warnings }}
             <div class="error" style="margin-bottom: 15px; padding: 12px; border-left: 4px solid #c0392b; background: var(--error-bg); color: var(--error-text); border-radius: 4px;">
@@ -69,7 +71,7 @@
         </div>
     </div>
 
-    <form id="fact-form" method="post" action="/contracts/{{ .Contract.ID }}/budget/fact/save-form" onsubmit="return enableDisabledSelects()">
+    <form id="fact-form" method="post" action="/contracts/{{ .Contract.ID }}/budget/fact/save-form" onsubmit="return validateAndSubmitForm()">
         <div class="table-scroll">
         <table class="data-table" id="fact-table">
             <thead>
