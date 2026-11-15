@@ -1,19 +1,35 @@
 {{ define "tab_costs_summary" }}
 <div id="tab-summary" class="tab-content" style="display: none;">
     {{ if .Snapshot }}
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; margin-bottom: 20px;">
-        <div class="card" style="padding: 20px; position: relative; display: flex; flex-direction: column;">
-            <h3 style="text-align: center; margin-bottom: 15px;">Разбивка суммы по затратам</h3>
-            <div style="height: 300px; position: relative;">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px; margin-top: 20px; margin-bottom: 20px;">
+       
+        <!-- 1. Большой пирог (Разбивка суммы Договора) -->
+        <div class="card" style="padding: 20px; position: relative; display: flex; flex-direction: column; height: 620px;">
+            <h3 style="text-align: center; margin-bottom: 2px;">Разбивка суммы Договора</h3>
+            <div id="expenses-total-sum" style="text-align: center; font-size: 18px; font-weight: bold; margin-bottom: 15px;"></div>
+            <div style="height: 400px; position: relative; min-height: 100px;">
                 <canvas id="expensesChart"></canvas>
             </div>
             <!-- Сюда JS вставит HTML-легенду -->
             <div id="expenses-legend"></div>
         </div>
-        
+
+        <!-- 2. Маленький пирог (Разбивка прибыли по Отделам) -->
         <div class="card" style="padding: 20px; position: relative; display: flex; flex-direction: column;">
-            <h3 style="text-align: center; margin-bottom: 15px;">Разбивка затрат по Отделам (Видам работ)</h3>
-            <div style="height: 300px; position: relative;">
+            <h3 style="text-align: center; margin-bottom: 15px;">Разбивка прибыли по Отделам</h3>
+            <div id="profit-total-sum" style="text-align: center; font-size: 18px; font-weight: bold; color: #28a745; margin-bottom: 15px;"></div>
+            <div style="height: 240px; position: relative; min-height: 100px;">
+                <canvas id="profitChart"></canvas>
+            </div>
+            <!-- Сюда JS вставит HTML-легенду -->
+            <div id="profit-legend"></div>
+        </div>
+        
+        <!-- 3. Маленький пирог (Разбивка затрат по Отделам) -->
+        <div class="card" style="padding: 20px; position: relative; display: flex; flex-direction: column;">
+            <h3 style="text-align: center; margin-bottom: 15px;">Разбивка затрат по Отделам</h3>
+            <div id="departments-total-sum" style="text-align: center; font-size: 18px; font-weight: bold; color: #ff6384; margin-bottom: 15px;"></div>
+            <div style="height: 240px; position: relative; min-height: 100px;">
                 <canvas id="departmentsChart"></canvas>
             </div>
             <!-- Сюда JS вставит HTML-легенду -->

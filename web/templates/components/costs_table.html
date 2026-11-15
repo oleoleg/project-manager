@@ -32,9 +32,9 @@
 {{ if .ShowTotals }}
 <div class="totals" id="fact-totals" style="margin-bottom: 20px;">
     <div class="total-card">
-        <span>Продажа работ и оборудования</span>
+        <span>Платежи по договору</span>
         <strong id="total-sale-and-eq" style="color: #28a745;">0,00 ₽</strong>
-        <div class="vat-hint">(должна равняться стоимости договора)</div>
+        <div class="vat-hint">(стоимость договора = стоимость работ + обор.продажа)</div>
     </div>
     <div class="total-card">
         <span>Сумма ФОТп</span>
@@ -44,15 +44,12 @@
     <div class="total-card">
         <span>Себестоимость Оборудования</span>
         <strong id="total-eq-cost">0,00 ₽</strong>
-        <div class="vat-hint">(закупки)</div>
+        <div class="vat-hint">(все закупки)</div>
     </div>
     <div class="total-card">
         <span>Полная себестоимость</span>
         <strong id="total-cost" style="color: #ff6384;">0,00 ₽</strong>
-        {{ if .OverheadRate }}
-        <div class="vat-hint" id="overhead-rate-hint" style="display: none;">Накладные: {{ printf "%.1f" (mul .OverheadRate 100) }}%</div>
-        {{ end }}
-        <div class="vat-hint">(ФОТп + командир. + себест. обор. + субподряд + комиссия + другое + накладные)</div>
+        <div class="vat-hint">(ФОТп + командир. + себест.оборудования + субподряд + комиссия + другое + накладные {{ printf "%.1f" (mul .OverheadRate 100) }}% от ЗП)</div>  
     </div>
 </div>
 {{ end }}
@@ -90,7 +87,7 @@
         {{ range $i, $row := .DisplayRows }}
             {{ if $row.IsHeader }}
                 <!-- ЗАГОЛОВОК ЭТАПА -->
-                <tr class="stage-header-row" style="background: var(--surface-alt);" data-stage-guid="{{ $row.Stage.GUID }}" data-work-kind="{{ $row.Stage.WorkKind }}" data-stage-cost="{{ $row.Stage.Cost }}">
+                <tr class="stage-header-row" style="background: var(--surface-alt);" data-stage-guid="{{ $row.Stage.GUID }}" data-work-kind="{{ $row.Stage.WorkKind }}" data-stage-cost="{{ $row.Stage.Cost }}" data-order="{{ $row.Stage.RowOrder }}">
                     <td style="font-weight: bold; text-align: center;">
                         {{ if $.IsReadOnly }}
                             {{ $row.Stage.StageNumber }}
@@ -132,7 +129,7 @@
                     
                     <!-- ФОТп -->
                     <td class="num cell-fot" style="position: relative;">
-                        <input type="text" name="cost_fot_plan[]" class="money-input fact-input {{ if eq $cost.CalcField "fot_plan" }}is-auto{{ end }}" 
+                        <input type="text" name="cost_fot_plan[]" class="money-input fact-input {{ if and (eq $cost.CalcField "fot_plan") (not $.IsReadOnly) }}is-auto{{ end }}" 
                             value="{{ if $cost.FOTPlan }}{{ printf "%.2f" $cost.FOTPlan }}{{ end }}"
                             {{ if or $.IsReadOnly (eq $cost.CalcField "fot_plan") }} readonly tabindex="-1" {{ end }}
                             {{ if $.IsReadOnly }}style="background: transparent; border-color: transparent;"{{ end }}>
@@ -154,7 +151,7 @@
 
                     <!-- Т/з, дни -->
                     <td class="num cell-days" style="position: relative;">
-                        <input type="text" name="cost_labor_days[]" class="days-input fact-input {{ if eq $cost.CalcField "labor_days" }}is-auto{{ end }}" 
+                        <input type="text" name="cost_labor_days[]" class="days-input fact-input {{ if and (eq $cost.CalcField "labor_days") (not $.IsReadOnly) }}is-auto{{ end }}" 
                             value="{{ printf "%.0f" $cost.LaborDays }}"
                             {{ if or $.IsReadOnly (eq $cost.CalcField "labor_days") }} readonly tabindex="-1" {{ end }}
                             {{ if $.IsReadOnly }}style="background: transparent; border-color: transparent;"{{ end }}>
@@ -170,7 +167,7 @@
 
                     <!-- Ставка -->
                     <td class="num cell-rate" style="position: relative;">
-                        <input type="text" name="cost_rate_per_day[]" class="money-input fact-input {{ if eq $cost.CalcField "rate_per_day" }}is-auto{{ end }}" 
+                        <input type="text" name="cost_rate_per_day[]" class="money-input fact-input {{ if and (eq $cost.CalcField "rate_per_day") (not $.IsReadOnly) }}is-auto{{ end }}" 
                             value="{{ if $cost.RatePerDay }}{{ printf "%.2f" $cost.RatePerDay }}{{ end }}"
                             {{ if or $.IsReadOnly (eq $cost.CalcField "rate_per_day") }} readonly tabindex="-1" {{ end }}
                             {{ if $.IsReadOnly }}style="background: transparent; border-color: transparent;"{{ end }}>

@@ -90,6 +90,11 @@ func (h *BudgetHandler) Index(w http.ResponseWriter, r *http.Request) {
 	} else {
 		stages, _ = h.stageSvc.List(r.Context(), contractID)
 	}
+	// Сортируем этапы по порядковому номеру (row_order)
+	sort.Slice(stages, func(i, j int) bool {
+		return stages[i].RowOrder < stages[j].RowOrder
+	})
+
 	stagesMap := make(map[string]models.Stage)
 	for _, s := range stages {
 		stagesMap[s.GUID] = s
@@ -385,6 +390,7 @@ func (h *BudgetHandler) FactIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	settings, _, _ := h.svc.GetSettings(r.Context(), contractID)
 	stages, err := h.stageSvc.List(r.Context(), contractID)
 	if err != nil {
 		log.Printf("budget fact get stages %s: %v", contractID, err)
@@ -491,6 +497,7 @@ func (h *BudgetHandler) FactIndex(w http.ResponseWriter, r *http.Request) {
 		"WorkKindsJSON":      string(workKindsJSON),
 		"FactCostRows":       factCostRows,
 		"FactMode":           factMode,
+		"OverheadRate":       settings.OverheadRate,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -835,6 +842,7 @@ func (h *BudgetHandler) GetSummaryChart(w http.ResponseWriter, r *http.Request) 
 
 	expenseSums := make(map[string]float64)
 	deptSums := make(map[string]float64)
+	profitByDept := make(map[string]float64)
 
 	totalIncome := 0.0
 	totalExpense := 0.0
@@ -842,6 +850,11 @@ func (h *BudgetHandler) GetSummaryChart(w http.ResponseWriter, r *http.Request) 
 	for _, l := range lines {
 		totalIncome += l.Income
 		totalExpense += l.Expense
+
+		// Считаем прибыль по отделу (Поступления - Затраты)
+		if l.Income > 0 || l.Expense > 0 {
+			profitByDept[l.WorkKind] += (l.Income - l.Expense) // <-- НОВОЕ
+		}
 
 		// В график затрат не включаем поступления от клиента (Платежи по договору)
 		if l.OperationType != "Платежи по договору" && l.Expense > 0 {
@@ -860,9 +873,11 @@ func (h *BudgetHandler) GetSummaryChart(w http.ResponseWriter, r *http.Request) 
 	resp := struct {
 		ExpensesChart    ChartData `json:"expenses_chart"`
 		DepartmentsChart ChartData `json:"departments_chart"`
+		ProfitChart      ChartData `json:"profit_chart"`
 	}{
 		ExpensesChart:    ChartData{Labels: make([]string, 0, len(expenseSums)), Data: make([]float64, 0, len(expenseSums))},
 		DepartmentsChart: ChartData{Labels: make([]string, 0, len(deptSums)), Data: make([]float64, 0, len(deptSums))},
+		ProfitChart:      ChartData{Labels: make([]string, 0, len(profitByDept)), Data: make([]float64, 0, len(profitByDept))},
 	}
 
 	for k, v := range expenseSums {
@@ -873,6 +888,11 @@ func (h *BudgetHandler) GetSummaryChart(w http.ResponseWriter, r *http.Request) 
 	for k, v := range deptSums {
 		resp.DepartmentsChart.Labels = append(resp.DepartmentsChart.Labels, k)
 		resp.DepartmentsChart.Data = append(resp.DepartmentsChart.Data, v)
+	}
+
+	for k, v := range profitByDept {
+		resp.ProfitChart.Labels = append(resp.ProfitChart.Labels, k)
+		resp.ProfitChart.Data = append(resp.ProfitChart.Data, v)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -1174,21 +1194,24 @@ func (h *BudgetHandler) GetTimelineChart(w http.ResponseWriter, r *http.Request)
 
 // FactCostRow представляет строку для вкладки "Затраты этапов" в ФинФакте
 type FactCostRow struct {
-	IsHeader   bool
-	Stage      models.Stage
-	WorkKind   string
-	Payments   float64
-	PlanCost   float64 // Стоимость работ из плана
-	PlanEqSale float64 // Обор. (прод.) из плана
-	FactFOT    float64 // Пока 0
-	FactDays   float64 // Пока 0
-	FactRate   float64 // Пока 0
-	FactTravel float64
-	FactEqCost float64
-	FactSub    float64
-	FactComm   float64
-	FactOther  float64
-	FactOver   float64 // Накладные
+	IsHeader       bool
+	Stage          models.Stage
+	WorkKind       string
+	Payments       float64 // Сумма платежей по факту
+	StageTotalCost float64 // Общая стоимость этапа (Cost из stages)
+	StageRemain    float64 // Остаток (StageTotalCost - Payments)
+	StageAdvance   float64 // Аванс в рублях
+	PlanCost       float64 // Стоимость работ из плана
+	PlanEqSale     float64 // Обор. (прод.) из плана
+	FactFOT        float64 // Пока 0
+	FactDays       float64 // Пока 0
+	FactRate       float64 // Пока 0
+	FactTravel     float64
+	FactEqCost     float64
+	FactSub        float64
+	FactComm       float64
+	FactOther      float64
+	FactOver       float64 // Накладные
 }
 
 // buildFactCostsRows собирает данные для таблицы факта
@@ -1268,10 +1291,16 @@ func (h *BudgetHandler) buildFactCostsRows(ctx context.Context, contractID strin
 	var rows []FactCostRow
 	for _, st := range stages {
 		// Заголовок этапа
+		payments := stagePayments[st.GUID]
+		remain := st.Cost - payments
+		advanceAmount := st.Cost * (st.AdvancePercent / 100.0)
 		rows = append(rows, FactCostRow{
-			IsHeader: true,
-			Stage:    st,
-			Payments: stagePayments[st.GUID],
+			IsHeader:       true,
+			Stage:          st,
+			Payments:       payments,
+			StageTotalCost: st.Cost,
+			StageRemain:    remain,
+			StageAdvance:   advanceAmount,
 		})
 
 		stagePlan := planMap[st.GUID]
@@ -1343,6 +1372,7 @@ func (h *BudgetHandler) FactGetSummaryChart(w http.ResponseWriter, r *http.Reque
 
 	expenseSums := make(map[string]float64)
 	deptSums := make(map[string]float64)
+	profitByDept := make(map[string]float64)
 
 	totalIncome := 0.0
 	totalExpense := 0.0
@@ -1355,6 +1385,11 @@ func (h *BudgetHandler) FactGetSummaryChart(w http.ResponseWriter, r *http.Reque
 		// Считаем только фактические суммы
 		totalIncome += l.FactIncome
 		totalExpense += l.FactExpense
+
+		// Считаем прибыль по отделу (Поступления - Затраты)
+		if l.FactIncome > 0 || l.FactExpense > 0 {
+			profitByDept[l.WorkKind] += (l.FactIncome - l.FactExpense) // <-- НОВОЕ
+		}
 
 		// В график затрат не включаем поступления от клиента (Платежи по договору)
 		if l.OperationType != "Платежи по договору" && l.FactExpense > 0 {
@@ -1369,13 +1404,15 @@ func (h *BudgetHandler) FactGetSummaryChart(w http.ResponseWriter, r *http.Reque
 		expenseSums["Прибыль"] = profit
 	}
 
-	// Формируем ответ (структура ChartData уже есть в файле)
+	// Формируем ответ
 	resp := struct {
 		ExpensesChart    ChartData `json:"expenses_chart"`
 		DepartmentsChart ChartData `json:"departments_chart"`
+		ProfitChart      ChartData `json:"profit_chart"`
 	}{
 		ExpensesChart:    ChartData{Labels: make([]string, 0, len(expenseSums)), Data: make([]float64, 0, len(expenseSums))},
 		DepartmentsChart: ChartData{Labels: make([]string, 0, len(deptSums)), Data: make([]float64, 0, len(deptSums))},
+		ProfitChart:      ChartData{Labels: make([]string, 0, len(profitByDept)), Data: make([]float64, 0, len(profitByDept))},
 	}
 
 	for k, v := range expenseSums {
@@ -1386,6 +1423,11 @@ func (h *BudgetHandler) FactGetSummaryChart(w http.ResponseWriter, r *http.Reque
 	for k, v := range deptSums {
 		resp.DepartmentsChart.Labels = append(resp.DepartmentsChart.Labels, k)
 		resp.DepartmentsChart.Data = append(resp.DepartmentsChart.Data, v)
+	}
+
+	for k, v := range profitByDept {
+		resp.ProfitChart.Labels = append(resp.ProfitChart.Labels, k)
+		resp.ProfitChart.Data = append(resp.ProfitChart.Data, v)
 	}
 
 	w.Header().Set("Content-Type", "application/json")

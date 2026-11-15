@@ -163,18 +163,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 return labels.map((label, i) => colorMap[label] || defaultColors[i % defaultColors.length]);
             }
 
-            // Плагин для процентов
+             // 2. Плагин для отрисовки процентов (вынесены наружу, с контрастным фоном)
             const percentPlugin = {
                 id: 'percentPlugin',
                 afterDatasetsDraw(chart) {
                     const { ctx, data } = chart;
-                    const total = data.datasets[0].data.reduce((a, b) => a + b, 0);
+                    // Считаем сумму только не-null и положительных значений
+                    const total = data.datasets[0].data.reduce((a, b) => (b !== null && b > 0) ? a + b : a, 0);
                     
                     chart.getDatasetMeta(0).data.forEach((datapoint, index) => {
                         const value = data.datasets[0].data[index];
-                        if (value === 0 || (value / total) < 0.02) return; 
+                        if (value === null || value === 0 || (value / total) < 0.02) return; 
                         
                         const percent = ((value / total) * 100).toFixed(1) + '%';
+
+                        // Вычисляем координаты для выноски (чуть дальше от центра)
                         const angle = (datapoint.startAngle + datapoint.endAngle) / 2;
                         const x = datapoint.x + Math.cos(angle) * (datapoint.outerRadius * 0.6);
                         const y = datapoint.y + Math.sin(angle) * (datapoint.outerRadius * 0.6);
@@ -192,25 +195,41 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             };
 
-            // Кастомная легенда
+             // 3. Функция для генерации кастомной HTML-легенды (в виде списка)
             function renderHtmlLegend(containerId, chartData) {
                 const container = document.getElementById(containerId);
                 if (!container) return;
                 
-                const total = chartData.data.reduce((a, b) => a + b, 0);
+                // Считаем сумму ТОЛЬКО положительных значений для корректного расчета процентов
+                const positiveTotal = chartData.data.reduce((sum, val) => val > 0 ? sum + val : sum, 0);
+                
                 let html = '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 15px; font-size: 13px;">';
                 
                 chartData.labels.forEach((label, i) => {
                     const value = chartData.data[i];
                     const color = chartData.backgroundColor[i];
                     const formatted = new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(value);
-                    const percent = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
                     
+                    let percentText = '';
+                    let textColor = 'var(--text)';
+                    let valueColor = 'var(--text-mid)';
+                    
+                    if (value < 0) {
+                        // Отрицательное значение
+                        percentText = '';
+                        textColor = 'var(--error-text)';
+                        valueColor = 'var(--error-text)';
+                    } else {
+                        // Положительное значение
+                        const percent = positiveTotal > 0 ? ((value / positiveTotal) * 100).toFixed(1) : '0.0';
+                        percentText = ` (${percent}%)`;
+                    }
+
                     html += `
                         <div style="display: flex; align-items: center; gap: 8px; padding: 4px; background: var(--surface-alt); border-radius: 4px;">
                             <span style="display: inline-block; width: 12px; height: 12px; background-color: ${color}; border-radius: 2px; flex-shrink: 0;"></span>
-                            <span style="flex: 1; color: var(--text);">${label}</span>
-                            <span style="font-weight: bold; color: var(--text-mid); white-space: nowrap;">${formatted} (${percent}%)</span>
+                            <span style="flex: 1; color: ${textColor}; ${value < 0 ? 'font-weight: bold;' : ''}">${label}</span>
+                            <span style="font-weight: bold; color: ${valueColor}; white-space: nowrap;">${formatted}${percentText}</span>
                         </div>
                     `;
                 });
@@ -218,7 +237,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 container.innerHTML = html;
             }
 
-            // Рисуем первый график (Затраты)
+            // Функция для подсчета и вывода суммы под заголовком
+            function updateTotalSum(containerId, dataArray) {
+                const total = dataArray.reduce((a, b) => a + b, 0);
+                const formatted = new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(total);
+                const el = document.getElementById(containerId);
+                if (el) el.textContent = 'Итого: ' + formatted;
+            }
+
+            // Рисуем первый график (Разбивка суммы Договора)
             const expData = {
                 labels: data.expenses_chart.labels,
                 data: data.expenses_chart.data,
@@ -239,9 +266,35 @@ document.addEventListener('DOMContentLoaded', function() {
                     plugins: [percentPlugin]
                 });
                 renderHtmlLegend('fact-expenses-legend', expData);
+                updateTotalSum('fact-expenses-total-sum', expData.data);
             }
 
-            // Рисуем второй график (Отделы)
+            // --- График 2: Разбивка прибыли по Отделам ---
+            const profitData = {
+                labels: data.profit_chart.labels,
+                data: data.profit_chart.data,
+                backgroundColor: getColors(data.profit_chart.labels)
+            };
+
+            // Для отрисовки графика используем только положительные значения (отрицательные делаем null)
+            const chartProfitData = profitData.data.map(v => v >= 0 ? v : null);
+            
+            const ctxProfit = document.getElementById('factProfitChart');
+            if (ctxProfit) {
+                new Chart(ctxProfit.getContext('2d'), {
+                    type: 'pie',
+                    data: {
+                        labels: profitData.labels,
+                        datasets: [{ data: chartProfitData.data, backgroundColor: profitData.backgroundColor }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } },
+                    plugins: [percentPlugin]
+                });
+                renderHtmlLegend('fact-profit-legend', profitData);
+                updateTotalSum('fact-profit-total-sum', profitData.data);
+            }
+
+            // Рисуем третий график (Разбивка затрат по Отделам)
             const deptData = {
                 labels: data.departments_chart.labels,
                 data: data.departments_chart.data,
@@ -262,6 +315,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     plugins: [percentPlugin]
                 });
                 renderHtmlLegend('fact-departments-legend', deptData);
+                updateTotalSum('fact-departments-total-sum', deptData.data);
             }
         })
         .catch(err => console.error('Ошибка загрузки графиков факта:', err));
@@ -566,3 +620,7 @@ window.toggleFactTimelineDataset = function(index) {
     window.myFactTimelineChart.update();
     renderFactTimelineLegend(window.myFactTimelineChart, null);
 };
+
+if (document.getElementById('FactTimelineChart')) {
+    updateTimeline();
+}
