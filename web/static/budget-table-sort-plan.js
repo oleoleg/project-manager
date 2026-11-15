@@ -1,6 +1,6 @@
 // web/static/budget-table-sort-plan.js
 
-function sortTable(tableId, field, btnElement, groupConfig) {
+ function sortTable(tableId, field, btnElement, groupConfig) {
     const table = document.getElementById(tableId);
     if (!table) return;
     const tbody = table.querySelector('tbody');
@@ -83,15 +83,6 @@ function sortTable(tableId, field, btnElement, groupConfig) {
             tableIncome += inc; tableExpense += exp; tableBalance += bal;
         });
 
-        // Корректировка названия для этапа
-        if (field === 'stage') {
-            const firstRow = currentGroupRows[0];
-            if (firstRow && firstRow.dataset.stageName) {
-                currentGroupLabel = firstRow.dataset.stageName;
-            } else {
-                currentGroupLabel = 'Этап ' + (currentGroupValue || '—');
-            }
-        }
 
         const headerRow = document.createElement('tr');
         headerRow.className = 'group-header-row dynamic';
@@ -115,17 +106,20 @@ function sortTable(tableId, field, btnElement, groupConfig) {
     allRows.forEach((row) => {
         let gv = '', gl = '';
         if (field === 'date') {
-            gv = row.dataset.date; 
+            // Группируем по МЕСЯЦУ, а не по конкретному дню
             const d = new Date(parseInt(row.dataset.date) * 1000);
-            gl = `${months[d.getMonth()]} ${d.getFullYear()}`;
+            gv = `${d.getFullYear()}-${d.getMonth()}`; // Ключ для группы (например, "2026-9")
+            gl = `${months[d.getMonth()]} ${d.getFullYear()}`; // Заголовок (Октябрь 2026)
         } else if (field === 'type') {
             gv = row.dataset.type; gl = row.dataset.type;
         } else if (field === 'work') {
             gv = row.dataset.work; 
             gl = row.cells[1].textContent.trim();
         } else if (field === 'stage') {
-            gv = row.dataset.stage;
-            gl = ''; // Оставляем пустым, сформируем в flushGroup
+            // Используем data-order (row_order) для группировки
+            gv = row.dataset.order; 
+            // Берем название этапа для заголовка
+            gl = row.dataset.stageName || ('Этап ' + (gv || '—'));
         }
 
         if (gv !== currentGroupValue) {

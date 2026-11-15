@@ -46,7 +46,7 @@
             {{ $totalBalance := 0.0 }}
             
             {{ range .PlanLines }}
-                <tr data-work="{{ .WorkKind }}" data-type="{{ .OperationType }}" data-date="{{ .OperationDate.Unix }}" data-order="{{ .StageRowOrder }}" data-stage="{{ .StageNumber }}" data-stage-name="{{ .StageNumber }} — {{ .StageName }}">
+                <tr data-work="{{ .WorkKind }}" data-type="{{ .OperationType }}" data-date="{{ .OperationDate.Unix }}" data-order="{{ .StageRowOrder }}" data-stage-name="{{ .StageNumber }} — {{ .StageName }}">
                     <td style="text-align: center; color: var(--text-muted);">{{ .StageNumber }}</td>
                     <td>{{ .WorkKind }}</td>
                     <td>{{ .Name }}</td>

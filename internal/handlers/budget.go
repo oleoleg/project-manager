@@ -94,6 +94,24 @@ func (h *BudgetHandler) Index(w http.ResponseWriter, r *http.Request) {
 	for _, s := range stages {
 		stagesMap[s.GUID] = s
 	}
+
+	// Проставляем StageRowOrder, если он равен 0 (для неактивных снимков, где нет row_order в JSON)
+	if len(stages) > 0 {
+		stageOrderMap := make(map[string]int)
+		for _, s := range stages {
+			if s.StageNumber != "" {
+				stageOrderMap[s.StageNumber] = s.RowOrder
+			}
+		}
+		for i := range lines {
+			if lines[i].StageNumber != "" {
+				if order, ok := stageOrderMap[lines[i].StageNumber]; ok {
+					lines[i].StageRowOrder = order
+				}
+			}
+		}
+	}
+
 	workKinds, _ := h.stageSvc.WorkKinds(r.Context())
 
 	// Собираем доступные виды работ для каждого этапа через хелпер
