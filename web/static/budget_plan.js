@@ -1,5 +1,13 @@
 // web/static/budget_plan.js
 
+// Веса для сортировки Типа операции и Вида работы
+const TYPE_ORDER = {
+    "Прибыль": 1, "Платежи по договору": 2, "Закупка по договору": 3, "Зарплата сотрудникам": 4,
+    "Накладные": 5, "Командировки": 6, "Субподрядчики": 7, "Комиссия": 8, "Другое (расходы)": 9
+};
+const WORK_ORDER = { "ПИР": 1, "ППО": 2, "СМР": 3, "ПНР": 4, "Продажа": 5, "ТО": 6, "Ремонт": 7, "Сборка": 8, "Комплексный": 9 };
+
+
 // ============ Вспомогательные функции ============
 window.switchTab = function(tabId, btn) {
     // 1. Скрываем все вкладки, убираем активный класс с кнопок
@@ -108,10 +116,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     const { ctx, data } = chart;
                     // Считаем сумму только не-null и положительных значений
                     const total = data.datasets[0].data.reduce((a, b) => (b !== null && b > 0) ? a + b : a, 0);
-                    
+                    if (total === 0) return; // Защита от деления на ноль
+
                     chart.getDatasetMeta(0).data.forEach((datapoint, index) => {
                         const value = data.datasets[0].data[index];
-                        if (value === null || value === 0 || (value / total) < 0.02) return; // Скрываем совсем мелкие
+                       if (!value || value <= 0 || (value / total) < 0.02) return;  // Скрываем совсем мелкие
                         
                         const percent = ((value / total) * 100).toFixed(1) + '%';
                         
@@ -134,6 +143,40 @@ document.addEventListener('DOMContentLoaded', function() {
                     });
                 }
             };
+
+            // Функция сортировки данных для легенды перед отрисовкой
+            function sortLegendData(chartData, sortType) {
+                const indices = chartData.labels.map((_, i) => i);
+                
+                indices.sort((a, b) => {
+                    const labelA = chartData.labels[a];
+                    const labelB = chartData.labels[b];
+                    let weightA = 99;
+                    let weightB = 99;
+
+                    if (sortType === 'type') {
+                        weightA = TYPE_ORDER[labelA] || 99;
+                        weightB = TYPE_ORDER[labelB] || 99;
+                    } else if (sortType === 'work') {
+                        weightA = WORK_ORDER[labelA] || 99;
+                        weightB = WORK_ORDER[labelB] || 99;
+                    }
+
+                    // Если веса разные — сортируем по ним
+                    if (weightA !== weightB) {
+                        return weightA - weightB;
+                    }
+                    // Если веса одинаковые (например, неизвестный тип) — сортируем по алфавиту для стабильности
+                    return labelA.localeCompare(labelB);
+                });
+
+                // Возвращаем новые отсортированные массивы
+                return {
+                    labels: indices.map(i => chartData.labels[i]),
+                    data: indices.map(i => chartData.data[i]),
+                    backgroundColor: indices.map(i => chartData.backgroundColor[i])
+                };
+            }
 
             // 3. Функция для генерации кастомной HTML-легенды (в виде списка)
             function renderHtmlLegend(containerId, chartData) {
@@ -186,18 +229,22 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
 
-            // Отрисовка первого графика
-            const expData = {
+             // --- График 1: Разбивка суммы Договора --- 
+            const expDataRaw = {
                 labels: data.expenses_chart.labels,
                 data: data.expenses_chart.data,
                 backgroundColor: getColors(data.expenses_chart.labels)
             };
+            const expData = sortLegendData(expDataRaw, 'type');
+
+            const chartExpData = expData.data.map(v => v >= 0 ? v : 0);
+
             const ctxExp = document.getElementById('expensesChart').getContext('2d');
             new Chart(ctxExp, {
                 type: 'pie',
                 data: {
                     labels: expData.labels,
-                    datasets: [{ data: expData.data, backgroundColor: expData.backgroundColor }]
+                    datasets: [{ data: chartExpData, backgroundColor: expData.backgroundColor }]
                 },
                 options: { 
                     responsive: true, maintainAspectRatio: false,
@@ -208,37 +255,41 @@ document.addEventListener('DOMContentLoaded', function() {
             renderHtmlLegend('expenses-legend', expData);
             updateTotalSum('expenses-total-sum', expData.data);
 
-            // Отрисовка второго графика (Прибыль по отделам)
-            const profitData = {
+            // --- График 2: Разбивка прибыли по Отделам ---
+            const profitDataRaw = {
                 labels: data.profit_chart.labels,
                 data: data.profit_chart.data,
-                backgroundColor: getColors(data.profit_chart.labels) // Используем ту же палитру
+                backgroundColor: getColors(data.profit_chart.labels)
             };
+            const profitData = sortLegendData(profitDataRaw, 'work');
+            
+            const chartProfitData = profitData.data.map(v => v >= 0 ? v : 0);
+
             const ctxProfit = document.getElementById('profitChart');
             if (ctxProfit) {
                 new Chart(ctxProfit.getContext('2d'), {
                     type: 'pie',
                     data: {
                         labels: profitData.labels,
-                        datasets: [{ data: profitData.data, backgroundColor: profitData.backgroundColor }]
+                        datasets: [{ data: chartProfitData, backgroundColor: profitData.backgroundColor }]
                     },
-                    options: { 
-                        responsive: true, maintainAspectRatio: false,
-                        plugins: { legend: { display: false } }
-                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } },
                     plugins: [percentPlugin]
                 });
                 renderHtmlLegend('profit-legend', profitData);
                 updateTotalSum('profit-total-sum', profitData.data);
             }
 
-            // Рисуем третий график (Разбивка затрат по Отделам)
-            const deptData = {
+            // --- График 3: Разбивка затрат по Отделам ---
+            const deptDataRaw = {
                 labels: data.departments_chart.labels,
                 data: data.departments_chart.data,
                 backgroundColor: getColors(data.departments_chart.labels)
             };
+            const deptData = sortLegendData(deptDataRaw, 'work');
+
             const ctxDept = document.getElementById('departmentsChart').getContext('2d');
+            
             new Chart(ctxDept, {
                 type: 'pie',
                 data: {

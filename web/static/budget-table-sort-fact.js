@@ -42,8 +42,8 @@ function sortTable(tableId, field, btnElement, groupConfig) {
     const allRows = Array.from(tbody.querySelectorAll('tr.fact-row, tr:not(.group-header-row):not(.group-add-row)'));
 
     const typeOrder = {
-        "Платежи по договору": 1, "Закупка по договору": 2, "Зарплата сотрудникам": 3,
-        "Накладные": 4, "Командировки": 5, "Субподрядчики": 6, "Комиссия": 7, "Другое (расходы)": 8
+        "Прибыль": 1, "Платежи по договору": 2, "Закупка по договору": 3, "Зарплата сотрудникам": 4,
+        "Накладные": 5, "Командировки": 6, "Субподрядчики": 7, "Комиссия": 8, "Другое (расходы)": 9
     };
     const workOrder = groupConfig.workOrder || {};
 
