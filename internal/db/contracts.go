@@ -54,6 +54,7 @@ type ContractFilter struct {
 	Search         string // ищем по id, номеру, названию
 	CounterpartyID string
 	StatusCodes    []int16
+	TypeCodes      []string
 }
 
 func (r *ContractRepo) List(ctx context.Context, f ContractFilter) ([]models.Contract, error) {
@@ -75,6 +76,11 @@ func (r *ContractRepo) List(ctx context.Context, f ContractFilter) ([]models.Con
 	if len(f.StatusCodes) > 0 {
 		query += fmt.Sprintf(` AND status_code = ANY($%d)`, i)
 		args = append(args, f.StatusCodes)
+		i++
+	}
+	if len(f.TypeCodes) > 0 {
+		query += fmt.Sprintf(` AND contract_type = ANY($%d)`, i)
+		args = append(args, f.TypeCodes)
 		i++
 	}
 
@@ -167,57 +173,6 @@ func (r *ContractRepo) ListStatuses(ctx context.Context) ([]models.ContractStatu
 	var res []models.ContractStatusRef
 	for rows.Next() {
 		var s models.ContractStatusRef
-		if err := rows.Scan(&s.Code, &s.Name); err != nil {
-			return nil, err
-		}
-		res = append(res, s)
-	}
-	return res, rows.Err()
-}
-
-func (r *ContractRepo) ListTypes(ctx context.Context) ([]models.ContractTypeRef, error) {
-	rows, err := r.pool.Query(ctx, `SELECT code, name FROM contract_types ORDER BY name`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var res []models.ContractTypeRef
-	for rows.Next() {
-		var s models.ContractTypeRef
-		if err := rows.Scan(&s.Code, &s.Name); err != nil {
-			return nil, err
-		}
-		res = append(res, s)
-	}
-	return res, rows.Err()
-}
-
-func (r *ContractRepo) ListProcurementCardStatuses(ctx context.Context) ([]models.TrackingStatusRef, error) {
-	rows, err := r.pool.Query(ctx, `SELECT code, name FROM procurement_card_statuses ORDER BY name`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var res []models.TrackingStatusRef
-	for rows.Next() {
-		var s models.TrackingStatusRef
-		if err := rows.Scan(&s.Code, &s.Name); err != nil {
-			return nil, err
-		}
-		res = append(res, s)
-	}
-	return res, rows.Err()
-}
-
-func (r *ContractRepo) ListTrackingStatuses(ctx context.Context) ([]models.TrackingStatusRef, error) {
-	rows, err := r.pool.Query(ctx, `SELECT code, name FROM tracking_statuses ORDER BY name`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var res []models.TrackingStatusRef
-	for rows.Next() {
-		var s models.TrackingStatusRef
 		if err := rows.Scan(&s.Code, &s.Name); err != nil {
 			return nil, err
 		}

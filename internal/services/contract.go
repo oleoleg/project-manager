@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,6 +17,7 @@ var (
 	ErrContractCounterparty = errors.New("контрагент обязателен")
 	ErrContractType         = errors.New("тип договора обязателен")
 	ErrContractExists       = errors.New("договор с таким ID уже существует")
+	ErrContractIDRange      = errors.New("ID договора должен начинаться с цифр от 2000 до 9999")
 )
 
 // Минимум: 4 цифры. Дальше может быть суффикс через дефис:
@@ -40,12 +42,23 @@ func (s *ContractService) Validate(c *models.Contract) error {
 	if !contractIDRe.MatchString(c.ID) {
 		return ErrContractIDFormat
 	}
+
+	// Проверка диапазона: первые 4 цифры должны быть от 2000 до 9999
+	if len(c.ID) >= 4 {
+		num, err := strconv.Atoi(c.ID[:4])
+		if err != nil || num < 2000 || num > 9999 {
+			return ErrContractIDRange
+		}
+	}
+
 	if c.ProjectURL == "" {
 		return ErrContractProjectURLRequired
 	}
+
 	if c.CounterpartyID == "" {
 		return ErrContractCounterparty
 	}
+
 	if c.ContractType == "" {
 		return ErrContractType
 	}
@@ -80,22 +93,6 @@ func (s *ContractService) List(ctx context.Context, f db.ContractFilter) ([]mode
 
 func (s *ContractService) Delete(ctx context.Context, id string) error {
 	return s.repo.Delete(ctx, id)
-}
-
-func (s *ContractService) Statuses(ctx context.Context) ([]models.ContractStatusRef, error) {
-	return s.repo.ListStatuses(ctx)
-}
-
-func (s *ContractService) Types(ctx context.Context) ([]models.ContractTypeRef, error) {
-	return s.repo.ListTypes(ctx)
-}
-
-func (s *ContractService) ProcurementCardStatuses(ctx context.Context) ([]models.TrackingStatusRef, error) {
-	return s.repo.ListProcurementCardStatuses(ctx)
-}
-
-func (s *ContractService) TrackingStatuses(ctx context.Context) ([]models.TrackingStatusRef, error) {
-	return s.repo.ListTrackingStatuses(ctx)
 }
 
 // ParseDate — вспомогательный парсер формата input type="date" (YYYY-MM-DD).

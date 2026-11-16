@@ -75,20 +75,15 @@ func (h *StageHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.svc.EnsureCard(r.Context(), contractID); err != nil {
-		log.Printf("stage ensure card: %v", err)
-	}
-
 	stages, err := h.svc.List(r.Context(), contractID)
 	if err != nil {
 		log.Printf("stage list: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	statuses, _ := h.svc.Statuses(r.Context())
+	statuses := models.GetStageStatuses()
 	workKinds, _ := h.svc.WorkKinds(r.Context())
 	totals, _ := h.svc.Totals(r.Context(), contractID)
-	card, _ := h.svc.GetCard(r.Context(), contractID)
 	cp, _ := h.cpSvc.GetByID(r.Context(), contract.CounterpartyID)
 	costTotals, _ := h.budgetSvc.GetPlanCostTotalsByStage(r.Context(), contractID)
 	actCounts, _ := h.actSvc.CountByContract(r.Context(), contractID)
@@ -103,10 +98,8 @@ func (h *StageHandler) List(w http.ResponseWriter, r *http.Request) {
 	data["Statuses"] = statuses
 	data["WorkKinds"] = workKinds
 	data["Totals"] = totals
-	data["Card"] = card
 	data["Counterparty"] = cp
-	data["StatusName"] = func(code int16) string { return stageStatusName(statuses, code) }
-	// Теперь WorkKind — это уже русская строка, поэтому просто возвращаем её (для совместимости с шаблоном)
+	data["StatusName"] = func(code int16) string { return findStageStatusName(statuses, code) }
 	data["WorkKindName"] = func(code string) string { return code }
 	data["Flash"] = r.URL.Query().Get("flash")
 	data["CostTotals"] = costTotals
@@ -161,7 +154,6 @@ func (h *StageHandler) New(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	statuses, _ := h.svc.Statuses(r.Context())
 	workKinds, _ := h.svc.WorkKinds(r.Context())
 	nextOrder, _ := h.svc.Totals(r.Context(), contractID)
 
@@ -172,7 +164,7 @@ func (h *StageHandler) New(w http.ResponseWriter, r *http.Request) {
 		RowOrder:   nextOrder.Count + 1,
 		StatusCode: 0,
 	}
-	data["Statuses"] = statuses
+	data["Statuses"] = models.GetStageStatuses()
 	data["WorkKinds"] = workKinds
 	data["IsNew"] = true
 	data["Error"] = ""
@@ -303,11 +295,18 @@ func (h *StageHandler) Delete(w http.ResponseWriter, r *http.Request) {
 }
 
 // ---------- helpers ----------
+func findStageStatusName(list []models.StageStatusRef, code int16) string {
+	for _, s := range list {
+		if s.Code == code {
+			return s.Name
+		}
+	}
+	return ""
+}
 
 func (h *StageHandler) renderFormWithError(w http.ResponseWriter, r *http.Request, st *models.Stage, isNew bool, errMsg string) {
 	contractID := chi.URLParam(r, "id")
 	contract, _ := h.contractSvc.GetByID(r.Context(), contractID)
-	statuses, _ := h.svc.Statuses(r.Context())
 	workKinds, _ := h.svc.WorkKinds(r.Context())
 
 	var costs []models.StageCost
@@ -330,7 +329,7 @@ func (h *StageHandler) renderFormWithError(w http.ResponseWriter, r *http.Reques
 	data["Contract"] = contract
 	data["Stage"] = st
 	data["Costs"] = costs
-	data["Statuses"] = statuses
+	data["Statuses"] = models.GetStageStatuses()
 	data["WorkKinds"] = workKinds
 	data["CostWorkKinds"] = costWorkKinds
 	data["IsNew"] = isNew
@@ -405,15 +404,6 @@ func humanizeStageError(err error) string {
 		return "Стоимость и закрытая сумма не могут быть отрицательными"
 	}
 	return "Не удалось сохранить: " + err.Error()
-}
-
-func stageStatusName(list []models.StageStatusRef, code int16) string {
-	for _, s := range list {
-		if s.Code == code {
-			return s.Name
-		}
-	}
-	return ""
 }
 
 // parseStageCostsForm собирает затраты из полей формы

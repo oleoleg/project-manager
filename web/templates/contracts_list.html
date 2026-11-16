@@ -11,7 +11,7 @@
 <form method="get" action="/contracts" class="filter-form">
     <input type="text" name="q" value="{{ .Search }}" placeholder="Поиск по ID, номеру, названию…">
 
-    <select name="counterparty">
+    <select name="counterparty" style="min-width: 250px;">
         <option value="">— все контрагенты —</option>
         {{ range .Counterparties }}
             <option value="{{ .ID }}" {{ if eq .ID $.FilterCounterparty }}selected{{ end }}>
@@ -22,7 +22,7 @@
 
     <!-- Кастомный выпадающий список со статусами -->
     <div class="custom-select-wrapper" style="position: relative;">
-        <button type="button" class="btn" id="status-dropdown-btn" style="min-width: 200px; text-align: left; background: var(--surface); border: 1px solid var(--border); color: var(--text);">
+        <button type="button" class="btn" id="status-dropdown-btn" style="min-width: 180px; text-align: left; background: var(--surface); border: 1px solid var(--border); color: var(--text);">
             — все статусы — ▼
         </button>
         
@@ -32,11 +32,35 @@
                 <input type="checkbox" class="status-checkbox" value="{{ .Code }}"> {{ .Code }} — {{ .Name }}
             </label>
             {{ end }}
+            <div style="margin-top: 10px; border-top: 1px solid var(--border); padding-top: 8px; text-align: right;">
+                <button type="button" class="btn btn-sm" id="clear-status-btn">Очистить</button>
+            </div>
         </div>
     </div>
 
     <!-- Скрытое поле для отправки выбранных статусов -->
     <input type="hidden" name="status" id="status-hidden-input" value="{{ .SelectedStatuses }}">
+
+    <!-- Кастомный выпадающий список с типами договоров -->
+    <div class="custom-select-wrapper" style="position: relative;">
+        <button type="button" class="btn" id="type-dropdown-btn" style="min-width: 180px; text-align: left; background: var(--surface); border: 1px solid var(--border); color: var(--text);">
+            — все типы — ▼
+        </button>
+        
+        <div id="type-dropdown-menu" style="display: none; position: absolute; z-index: 100; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 10px; min-width: 220px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            {{ range .Types }}
+            <label style="display: block; margin-bottom: 5px; cursor: pointer; white-space: nowrap;">
+                <input type="checkbox" class="type-checkbox" value="{{ .Code }}"> {{ .Name }}
+            </label>
+            {{ end }}
+            <div style="margin-top: 10px; border-top: 1px solid var(--border); padding-top: 8px; text-align: right;">
+                <button type="button" class="btn btn-sm" id="clear-type-btn">Очистить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Скрытое поле для отправки выбранных типов -->
+    <input type="hidden" name="type" id="type-hidden-input" value="{{ .SelectedTypes }}">
 
     <button type="submit" class="btn">Фильтр</button>
     <a href="/contracts" class="btn btn-ghost-dark">Сбросить</a>
@@ -52,6 +76,7 @@
         <th>Наименование</th>
         <th>Контрагент</th>
         <th>Статус</th>
+        <th>Тип</th>
         <th></th>
     </tr>
     </thead>
@@ -62,8 +87,9 @@
             <td>{{ .ContractNumber }}</td>
             <td>{{ if .ContractDate }}{{ .ContractDate.Format "02.01.2006" }}{{ end }}</td>
             <td>{{ .WorkName }}</td>
-            <td>{{ .CounterpartyID }} — {{ counterpartyName $.Counterparties .CounterpartyID }}</td>
+            <td><a href="/counterparties/{{ .CounterpartyID }}">{{ .CounterpartyID }} — {{ counterpartyName $.Counterparties .CounterpartyID }}</a></td>
             <td>{{ .StatusCode }} — {{ statusName $.Statuses .StatusCode }}</td>
+            <td>{{ call $.TypeNameFunc .ContractType }}</td>
             <td class="actions">
                 <a href="/contracts/{{ .ID }}" class="btn btn-sm">Открыть</a>
                 <a href="/contracts/{{ .ID }}/stages" class="btn btn-sm">Этапы</a>
@@ -77,6 +103,7 @@
 {{ end }}
 
 <script src="/static/contracts_filter.js"></script>
+
 
 {{ template "layout_footer" . }}
 {{ end }}

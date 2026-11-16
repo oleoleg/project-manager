@@ -15,6 +15,7 @@
     </div>
 
     <div class="actions">
+        <a href="/contracts/new?counterparty={{ $c.ID }}" class="btn btn-primary">+ Новый договор</a>
         <a href="/contracts?counterparty={{ $c.ID }}&status=0,1,2,4" class="btn" style="background-color: #337ab7; color: white;">📄 Договоры в работе</a>
         
         {{ if or (eq .User.RoleCode "admin") (eq .User.RoleCode "rp_chief") (eq .User.RoleCode "rp") (eq .User.RoleCode "director") }}

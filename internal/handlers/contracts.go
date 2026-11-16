@@ -72,21 +72,35 @@ func (h *ContractHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	f.StatusCodes = statusCodes
 
+	// Парсим типы договоров (новое)
+	var typeCodes []string
+	if tc := q.Get("type"); tc != "" {
+		typeCodes = strings.Split(tc, ",")
+	}
+	f.TypeCodes = typeCodes
+
+	typesList := models.GetContractTypes()
+
 	list, err := h.svc.List(r.Context(), f)
 	if err != nil {
 		log.Printf("contracts list: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	statuses, _ := h.svc.Statuses(r.Context())
+
 	counterparties, _ := h.cpSvc.List(r.Context(), "")
 
 	data := h.commonData(r, "Договоры")
 	data["List"] = list
-	data["Statuses"] = statuses
+	data["Statuses"] = models.GetContractStatuses()
+	data["Types"] = models.GetContractTypes()
 	data["Counterparties"] = counterparties
 	data["Search"] = f.Search
 	data["FilterCounterparty"] = f.CounterpartyID
+
+	data["TypeNameFunc"] = func(code string) string {
+		return findTypeName(typesList, code)
+	}
 
 	// Передаем выбранные статусы строкой (например, "0,1,2") для инициализации чекбоксов в JS
 	var selectedStatuses []string
@@ -94,6 +108,7 @@ func (h *ContractHandler) List(w http.ResponseWriter, r *http.Request) {
 		selectedStatuses = append(selectedStatuses, strconv.Itoa(int(code)))
 	}
 	data["SelectedStatuses"] = strings.Join(selectedStatuses, ",")
+	data["SelectedTypes"] = strings.Join(typeCodes, ",")
 
 	data["Flash"] = q.Get("flash")
 	h.render(w, "contracts_list.html", data)
@@ -114,11 +129,11 @@ func (h *ContractHandler) Show(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	statuses, _ := h.svc.Statuses(r.Context())
-	types, _ := h.svc.Types(r.Context())
+	statuses := models.GetContractStatuses()
+	types := models.GetContractTypes()
 	cp, _ := h.cpSvc.GetByID(r.Context(), c.CounterpartyID)
 	totals, _ := h.stageSvc.Totals(r.Context(), c.ID)
-	stageStatuses, _ := h.stageSvc.Statuses(r.Context())
+	stageStatuses := models.GetStageStatuses()
 	assignees, _ := h.svc.ListAssignees(r.Context(), c.ID)
 	costTotals, _ := h.stageSvc.StageCostTotals(r.Context(), c.ID)
 	planExpenses, isPlanApproved, _ := h.budgetSvc.GetActivePlanTotals(r.Context(), c.ID)
@@ -262,20 +277,24 @@ func (h *ContractHandler) Show(w http.ResponseWriter, r *http.Request) {
 // ---------- New / Create ----------
 
 func (h *ContractHandler) New(w http.ResponseWriter, r *http.Request) {
-	statuses, _ := h.svc.Statuses(r.Context())
-	types, _ := h.svc.Types(r.Context())
 	cp, _ := h.cpSvc.List(r.Context(), "")
-	pcs, _ := h.svc.ProcurementCardStatuses(r.Context())
-	ts, _ := h.svc.TrackingStatuses(r.Context())
 	users, _ := h.svc.ListActiveUsers(r.Context())
 
+	// Инициализируем пустой договор
+	contract := &models.Contract{}
+
+	// Если в URL передан ID контрагента (например, ?counterparty=1234), подставляем его
+	if cpID := r.URL.Query().Get("counterparty"); cpID != "" {
+		contract.CounterpartyID = cpID
+	}
+
 	data := h.commonData(r, "Новый договор")
-	data["Contract"] = &models.Contract{}
-	data["Statuses"] = statuses
-	data["Types"] = types
+	data["Contract"] = contract
+	data["Statuses"] = models.GetContractStatuses()
+	data["Types"] = models.GetContractTypes()
 	data["Counterparties"] = cp
-	data["ProcurementStatuses"] = pcs
-	data["TrackingStatuses"] = ts
+	data["ProcurementStatuses"] = models.GetProcurementCardStatuses()
+	data["TrackingStatuses"] = models.GetTrackingStatuses()
 	data["IsNew"] = true
 	data["Error"] = ""
 	data["ActiveUsers"] = users
@@ -372,20 +391,16 @@ func (h *ContractHandler) OpenFolder(w http.ResponseWriter, r *http.Request) {
 // ---------- helpers ----------
 
 func (h *ContractHandler) renderFormWithError(w http.ResponseWriter, r *http.Request, c *models.Contract, isNew bool, errMsg string) {
-	statuses, _ := h.svc.Statuses(r.Context())
-	types, _ := h.svc.Types(r.Context())
 	cp, _ := h.cpSvc.List(r.Context(), "")
-	pcs, _ := h.svc.ProcurementCardStatuses(r.Context())
-	ts, _ := h.svc.TrackingStatuses(r.Context())
 	users, _ := h.svc.ListActiveUsers(r.Context())
 
 	data := h.commonData(r, "Договор")
 	data["Contract"] = c
-	data["Statuses"] = statuses
-	data["Types"] = types
+	data["Statuses"] = models.GetContractStatuses()
+	data["Types"] = models.GetContractTypes()
 	data["Counterparties"] = cp
-	data["ProcurementStatuses"] = pcs
-	data["TrackingStatuses"] = ts
+	data["ProcurementStatuses"] = models.GetProcurementCardStatuses()
+	data["TrackingStatuses"] = models.GetTrackingStatuses()
 	data["IsNew"] = isNew
 	data["Error"] = errMsg
 	data["ActiveUsers"] = users
@@ -433,6 +448,8 @@ func humanizeContractError(err error) string {
 	switch {
 	case errors.Is(err, services.ErrContractIDFormat):
 		return "ID должен начинаться с 4 цифр номера проекта. Примеры: 6666, 6666-P, 6666-P2. Буквы — латинские: W (монтаж), S (поставка), D (проектирование)"
+	case errors.Is(err, services.ErrContractIDRange):
+		return "ID договора должен начинаться с 4 цифр в диапазоне от 2000 до 9999"
 	case errors.Is(err, services.ErrContractCounterparty):
 		return "Выберите контрагента"
 	case errors.Is(err, services.ErrContractType):

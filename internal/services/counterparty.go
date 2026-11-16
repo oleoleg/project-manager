@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -17,6 +18,7 @@ var (
 	ErrCounterpartyIDFormat  = errors.New("ID контрагента должен быть в формате NNNN (4 цифры)")
 	ErrCounterpartyNameEmpty = errors.New("наименование обязательно")
 	ErrCounterpartyExists    = errors.New("контрагент с таким ID уже существует")
+	ErrCounterpartyIDRange   = errors.New("ID контрагента должен быть в диапазоне от 0001 до 1999")
 )
 
 var counterpartyIDRe = regexp.MustCompile(`^[0-9]{4}$`)
@@ -37,6 +39,13 @@ func (s *CounterpartyService) Validate(c *models.Counterparty) error {
 	if !counterpartyIDRe.MatchString(c.ID) {
 		return ErrCounterpartyIDFormat
 	}
+
+	// Проверка диапазона: от 0001 до 1999
+	num, err := strconv.Atoi(c.ID)
+	if err != nil || num < 1 || num > 1999 {
+		return ErrCounterpartyIDRange
+	}
+
 	if c.Name == "" {
 		return ErrCounterpartyNameEmpty
 	}

@@ -178,7 +178,7 @@ func clearTestDB(t *testing.T) {
 	_, err := testPool.Exec(ctx, `
 		TRUNCATE TABLE 
 			budget_fact_lines, budget_plan_lines, budget_plan_snapshots, budget_settings, 
-			stage_costs, stages, contract_cards, contracts, counterparties, users 
+			stage_costs, stages, contracts, counterparties, users 
 		RESTART IDENTITY CASCADE
 	`)
 	if err != nil {

@@ -16,18 +16,23 @@
 <form method="post" action="{{ if $isNew }}/contracts{{ else }}/contracts/{{ $c.ID }}{{ end }}" class="form">
 
     <label>
-        ID договора
+        ID Договора *
+        {{ if $isNew }}
            <small class="hint">
                 Рекомендуется: 4 цифры номера проекта + необязательный суффикс через дефис.
                 Например: <code>6666</code>, <code>6666-W</code>, <code>6666-W2</code>.
                 Буквы (латиница): W — монтаж, S — поставка, D — проектирование.
             </small>
-            <input type="text" name="id" value="{{ $c.ID }}" maxlength="16"
-                {{ if not $isNew }}readonly{{ end }} required>
+        {{ end }}    
+        <input type="text" name="id" value="{{ $c.ID }}" maxlength="16"
+            {{ if not $isNew }}
+                readonly
+                title="ID нельзя изменить после создания"
+            {{ end }} required>
     </label>
 
     <label>
-        № договора
+        № Договора *
         <input type="text" name="contract_number" value="{{ $c.ContractNumber }}" required>
     </label>
 
@@ -37,8 +42,8 @@
     </label>
 
     <label>
-        Наименование работ
-        <input type="text" name="work_name" value="{{ $c.WorkName }}">
+        Наименование работ *
+        <input type="text" name="work_name" value="{{ $c.WorkName }}" required>
     </label>
 
     <label>
@@ -151,63 +156,7 @@
 
 </form>
 
-
-<script>
-    // Выбор папки проекта через pm-agent://pick-dir
-    (function () {
-        const btn = document.getElementById('btn-pick-dir');
-        const field = document.getElementById('contract-project-url');
-        if (!btn || !field) return;
-
-        let pollTimer = null;
-        let pollStartedAt = 0;
-
-        btn.addEventListener('click', (e) => {
-            e.preventDefault(); // Предотвращаем стандартное поведение
-
-            // Создаем невидимую ссылку и кликаем по ней (браузеры это любят больше)
-            let currentPath = field.value.trim();
-            let url = 'pm-agent://pick-dir';
-            if (currentPath) {
-                url += '?path=' + encodeURIComponent(currentPath);
-            }
-
-            const a = document.createElement('a');
-            a.href = url;
-            a.style.display = 'none';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-
-            if (pollTimer) clearInterval(pollTimer);
-            pollStartedAt = Date.now();
-            
-            // Опрашиваем сервер каждые 500 мс
-            pollTimer = setInterval(checkPickedPath, 1000);
-        });
-
-        function checkPickedPath() {
-            // Ждем максимум 2 минуты
-            if (Date.now() - pollStartedAt > 120000) {
-                clearInterval(pollTimer);
-                pollTimer = null;
-                return;
-            }
-
-            fetch('/api/picked-path?t=' + Date.now())
-                .then(r => r.json())
-                .then(data => {
-                    // Если пришел путь и он новее, чем начало клика
-                    if (data && data.path && data.mtime > pollStartedAt) {
-                        field.value = data.path;
-                        clearInterval(pollTimer);
-                        pollTimer = null;
-                    }
-                })
-                .catch(() => {});
-        }
-    })();
-</script>
+<script src="/static/contracts_form.js"></script>
 
 {{ template "layout_footer" . }}
 {{ end }}

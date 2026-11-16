@@ -77,25 +77,9 @@ func (s *StageService) Delete(ctx context.Context, contractID, guid string) erro
 	return s.repo.NormalizeOrder(ctx, contractID)
 }
 
-func (s *StageService) Statuses(ctx context.Context) ([]models.StageStatusRef, error) {
-	return s.repo.ListStatuses(ctx)
-}
-
 // WorkKinds теперь возвращает статический список из модели
 func (s *StageService) WorkKinds(ctx context.Context) ([]models.WorkKind, error) {
 	return models.WorkKinds, nil
-}
-
-func (s *StageService) EnsureCard(ctx context.Context, contractID string) error {
-	return s.repo.EnsureCard(ctx, contractID)
-}
-
-func (s *StageService) GetCard(ctx context.Context, contractID string) (*models.ContractCard, error) {
-	return s.repo.GetCard(ctx, contractID)
-}
-
-func (s *StageService) UpdateCardOverhead(ctx context.Context, contractID string, percent float64) error {
-	return s.repo.UpdateCardOverhead(ctx, contractID, percent)
 }
 
 func (s *StageService) Totals(ctx context.Context, contractID string) (db.StageTotals, error) {

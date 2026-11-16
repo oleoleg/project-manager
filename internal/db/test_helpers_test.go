@@ -16,7 +16,6 @@ func clearTestDB(t *testing.T) {
 			budget_settings, 
 			stage_costs, 
 			stages, 
-			contract_cards, 
 			contracts, 
 			counterparties, 
 			users 

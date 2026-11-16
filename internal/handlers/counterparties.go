@@ -192,6 +192,8 @@ func humanizeCounterpartyError(err error) string {
 	switch {
 	case errors.Is(err, services.ErrCounterpartyIDFormat):
 		return "ID должен состоять ровно из 4 цифр (например, 0001)"
+	case errors.Is(err, services.ErrCounterpartyIDRange):
+		return "ID контрагента должен быть числом от 0001 до 1999"
 	case errors.Is(err, services.ErrCounterpartyNameEmpty):
 		return "Наименование обязательно"
 	case errors.Is(err, services.ErrCounterpartyExists):

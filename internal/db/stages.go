@@ -149,62 +149,6 @@ func (r *StageRepo) Delete(ctx context.Context, guid string) error {
 	return nil
 }
 
-// --- справочники ---
-
-func (r *StageRepo) ListStatuses(ctx context.Context) ([]models.StageStatusRef, error) {
-	rows, err := r.pool.Query(ctx, `SELECT code, name FROM stage_statuses ORDER BY code`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var res []models.StageStatusRef
-	for rows.Next() {
-		var s models.StageStatusRef
-		if err := rows.Scan(&s.Code, &s.Name); err != nil {
-			return nil, err
-		}
-		res = append(res, s)
-	}
-	return res, rows.Err()
-}
-
-// --- contract_cards ---
-
-func (r *StageRepo) EnsureCard(ctx context.Context, contractID string) error {
-	_, err := r.pool.Exec(ctx, `
-		INSERT INTO contract_cards (contract_id)
-		VALUES ($1)
-		ON CONFLICT (contract_id) DO NOTHING
-	`, contractID)
-	if err != nil {
-		return fmt.Errorf("ensure contract card: %w", err)
-	}
-	return nil
-}
-
-func (r *StageRepo) GetCard(ctx context.Context, contractID string) (*models.ContractCard, error) {
-	row := r.pool.QueryRow(ctx, `
-		SELECT contract_id, overhead_percent, created_at, updated_at
-		FROM contract_cards WHERE contract_id = $1
-	`, contractID)
-	var c models.ContractCard
-	if err := row.Scan(&c.ContractID, &c.OverheadPercent, &c.CreatedAt, &c.UpdatedAt); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return &c, nil
-}
-
-func (r *StageRepo) UpdateCardOverhead(ctx context.Context, contractID string, percent float64) error {
-	_, err := r.pool.Exec(ctx, `
-		UPDATE contract_cards SET overhead_percent = $2, updated_at = NOW()
-		WHERE contract_id = $1
-	`, contractID, percent)
-	return err
-}
-
 func (r *StageRepo) NextRowOrder(ctx context.Context, contractID string) (int, error) {
 	var n int
 	err := r.pool.QueryRow(ctx, `
