@@ -21,6 +21,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/kardianos/service"
 
+	"github.com/oleoleg/project-manager/internal/clients"
 	"github.com/oleoleg/project-manager/internal/config"
 	"github.com/oleoleg/project-manager/internal/db"
 	"github.com/oleoleg/project-manager/internal/handlers"
@@ -239,6 +240,7 @@ func startHTTPServer(stopCh <-chan struct{}) {
 	stageCostRepo := db.NewStageCostRepo(pool)
 	actRepo := db.NewActRepo(pool)
 	budgetRepo := db.NewBudgetRepo(pool)
+	employeeRepo := db.NewEmployeeRepo(pool)
 
 	// =====================================================
 	// 6. Сервисы
@@ -252,6 +254,8 @@ func startHTTPServer(stopCh <-chan struct{}) {
 	stageCostSvc := services.NewStageCostService(stageCostRepo)
 	actSvc := services.NewActService(actRepo, stageRepo)
 	budgetSvc := services.NewBudgetService(budgetRepo)
+	reportsClient := clients.NewReportsClient(cfg.ReportsAPIURL)
+	reportSyncSvc := services.NewReportSyncService(reportsClient, employeeRepo)
 
 	// =====================================================
 	// 7. Хендлеры
@@ -266,6 +270,7 @@ func startHTTPServer(stopCh <-chan struct{}) {
 	adminUserH := handlers.NewAdminUserHandler(userSvc, tmpl)
 	actH := handlers.NewActHandler(actSvc, stageSvc, contractSvc, tmpl)
 	budgetH := handlers.NewBudgetHandler(budgetSvc, contractSvc, stageSvc, stageCostSvc, counterpartySvc, tmpl)
+	reportsH := handlers.NewReportsHandler(reportSyncSvc, employeeRepo, contractSvc, tmpl)
 
 	// =====================================================
 	// 8. Роутер
@@ -285,6 +290,9 @@ func startHTTPServer(stopCh <-chan struct{}) {
 	r.Get("/login", authH.LoginPage)
 	r.Post("/login", authH.LoginSubmit)
 	r.Post("/logout", authH.Logout)
+	r.Get("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "web/static/favicon.ico")
+	})
 
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
@@ -337,6 +345,9 @@ func startHTTPServer(stopCh <-chan struct{}) {
 		r.Get("/contracts/{id}/attachments/{attGuid}/edit", actH.EditAttachmentForm)
 		r.Get("/api/picked-path", actH.PickedPath)
 
+		// Рапорт сотрудников
+		r.Get("/reports", reportsH.Index)
+
 		r.Group(func(r chi.Router) {
 			r.Use(mw.RequireRole("admin", "rp_chief", "director", "rp"))
 			r.Post("/counterparties", counterpartyH.Create)
@@ -378,6 +389,10 @@ func startHTTPServer(stopCh <-chan struct{}) {
 
 			// Сравнить Бюджет Факт vs План
 			r.Get("/contracts/{id}/budget/compare", budgetH.PlanFactIndex)
+
+			// Синхронизация Рапорта сотрудников
+			r.Post("/reports/sync", reportsH.Sync)
+			r.Post("/reports/save-mapping", reportsH.SaveMapping)
 
 		})
 

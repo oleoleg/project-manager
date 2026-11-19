@@ -4,17 +4,12 @@
 <head>
     <meta charset="UTF-8">
     <title>{{ .Title }} — Project Manager</title>
-    <script>
-        (function () {
-            var t = document.documentElement.getAttribute('data-theme');
-            // уже выставлено сервером, ничего не делаем — просто страховка
-        })();
-    </script>
     <link rel="stylesheet" href="/static/style.css">
     <script src="/static/formats.js"></script>
-
     <script src="/static/app.js" defer></script>
     <script src="/static/act_kinds.js" defer></script>
+    <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+    <script src="/static/layout.js" defer></script>
 </head>
 <body>
 {{ if .User }}
@@ -26,19 +21,27 @@
         <nav class="main-nav">
             <a href="/dashboard">Дашборд</a>
             <a href="/counterparties">Контрагенты</a>
-             <a href="/contracts">Договоры</a>
-             <a href="/settings">Настройки</a>
-             {{ if eq .User.RoleCode "admin" }}
-                <a href="/admin/users">Пользователи</a>
-            {{ end }}
+            <a href="/contracts">Договоры</a>
+            <a href="/reports">Рапорт</a>
             <a href="https://github.com/oleoleg/project-manager/wiki" target="_blank">Справка</a>
         </nav>
         <div class="user-box">
-            <span>{{ .User.FullName }}</span>
-            <span class="role">{{ .RoleName }}</span>
-            <form method="post" action="/logout" class="logout-form">
-                <button type="submit" class="btn btn-ghost">Выйти</button>
-            </form>
+            <div class="user-dropdown-wrapper">
+                <button type="button" class="user-trigger" id="user-menu-btn">
+                    <span class="user-name">{{ .User.FullName }}</span>
+                    <span class="user-role">{{ .RoleName }}</span>
+                </button>
+                <div class="user-menu" id="user-menu">
+                    <a href="/settings">Профиль</a>
+                    {{ if eq .User.RoleCode "admin" }}
+                        <a href="/admin/users">Пользователи</a>
+                     {{ end }}
+                    <div class="menu-divider"></div>
+                    <form method="post" action="/logout" class="inline">
+                        <button type="submit">Выйти</button>
+                    </form>
+                </div>
+            </div>
         </div>
     </div>
 </header>

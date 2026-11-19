@@ -45,6 +45,7 @@
         {{ if $c.ProjectURL }}
             <a href="pm-agent://open?path={{ $c.ProjectURL | urlquery }}" class="btn btn-sm" title="Открыть папку проекта в проводнике">📁 Открыть папку</a>
         {{ end }}
+        <a href="/reports?contract_id={{ $c.ID }}" class="btn btn-sm" title="Рапорт сотрудников по этому договору">📊 Рапорт</a>
         <div class="vat-toggle">
             <a href="{{ $base }}?vat=without&stages={{ $curStages }}&costs={{ $curCosts }}"
                class="btn btn-sm {{ if ne $vatMode "with" }}active{{ end }}">Без НДС</a>

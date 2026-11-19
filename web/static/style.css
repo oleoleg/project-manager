@@ -99,20 +99,145 @@ body {
 }
 
 /* Header */
-header { background: var(--header-bg); color: var(--header-text); }
+header { 
+    background: var(--header-bg); 
+    color: var(--header-text); 
+    border-bottom: 1px solid var(--header-border); /* Четкая граница */
+}
 .header-inner {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 16px 32px;
-    max-width: 1200px; margin: 0 auto;
+    display: flex; 
+    align-items: center; 
+    justify-content: space-between;
+    padding: 0 32px; /* Убрали вертикальный padding, высоту задает min-height */
+    min-height: 64px; /* Фиксированная высота шапки на всех страницах */
+    max-width: 1440px;  
+    margin: 0 auto;
     gap: 24px;
 }
-header h1 { font-size: 20px; }
-.user-box { display: flex; align-items: center; gap: 12px; font-size: 14px; }
-.user-box .role {
-    background: var(--header-hover);
-    padding: 2px 8px; border-radius: 10px; font-size: 12px;
+
+.brand a { 
+    color: var(--header-text); 
+    text-decoration: none; 
+    font-weight: 600; 
+    font-size: 18px;
+    white-space: nowrap;
 }
-.logout-form { display: inline; }
+
+.main-nav { 
+    display: flex; 
+    gap: 24px; 
+    flex: 1; /* Растягиваем меню */
+    height: 100%;
+    align-items: center;
+}
+.main-nav a {
+    color: var(--header-muted); 
+    text-decoration: none; 
+    font-size: 14px;
+    padding: 22px 0; /* Чтобы ссылки были по центру */
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    line-height: 1;
+}
+.main-nav a:hover { 
+    color: var(--header-text); 
+    border-bottom-color: var(--header-text); 
+}
+
+.user-box { 
+    display: flex; 
+    align-items: center; 
+    flex-shrink: 0; 
+}
+
+/* =====================================================
+   Выпадающее меню пользователя
+   ===================================================== */
+.user-dropdown-wrapper {
+    position: relative;
+    display: inline-block;
+}
+
+.user-trigger {
+    background: none;
+    border: 1px solid transparent;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    padding: 6px 12px;
+    border-radius: 6px;
+    transition: all 0.2s;
+    font-family: inherit;
+    line-height: 1.2;
+}
+
+.user-trigger:hover {
+    background: var(--header-hover);
+    border-color: var(--header-border);
+}
+
+.user-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--header-text);
+    white-space: nowrap;
+}
+
+.user-role {
+    font-size: 11px;
+    color: var(--header-muted);
+    background: rgba(128, 128, 128, 0.2);
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-top: 4px;
+}
+
+.user-menu {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: 100%;
+    margin-top: 6px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: var(--shadow-lg);
+    min-width: 160px;
+    z-index: 1000;
+    overflow: hidden;
+}
+
+.user-menu.active {
+    display: block;
+}
+
+.user-menu a, 
+.user-menu button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 10px 16px;
+    background: none;
+    border: none;
+    color: var(--text);
+    font-size: 14px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.2s;
+    font-family: inherit;
+}
+
+.user-menu a:hover, 
+.user-menu button:hover {
+    background: var(--surface-soft);
+}
+
+.user-menu .menu-divider {
+    height: 1px;
+    background: var(--border-soft);
+    margin: 4px 0;
+}
 
 /* Main */
 main { max-width: 1440px; margin: 0 auto; padding: 32px; }
@@ -203,14 +328,6 @@ html[data-theme="dark"] .flash {
 
 a { color: var(--accent); }
 
-/* Навигация в шапке */
-.brand a { color: var(--header-text); text-decoration: none; font-weight: 600; }
-.main-nav { display: flex; gap: 20px; }
-.main-nav a {
-    color: var(--header-muted); text-decoration: none; font-size: 14px;
-    padding: 4px 0; border-bottom: 2px solid transparent;
-}
-.main-nav a:hover { color: var(--header-text); border-bottom-color: var(--header-text); }
 
 /* Page header */
 .page-header {
@@ -1485,4 +1602,19 @@ html[data-theme="dark"] .text-danger { color: #ff6b6b !important; }
     background: var(--accent);
     color: #fff;
     border-color: var(--accent);
+}
+
+/* Спиннер для модалки синхронизации */
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    margin: 0 auto;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
 }
