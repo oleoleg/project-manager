@@ -21,10 +21,12 @@
 Параметры (все опциональны):
 - `from` — `YYYY-MM-DD`, фильтр по локальной дате `start_time`, включительно.
 - `to` — `YYYY-MM-DD`, фильтр по локальной дате `start_time`, включительно.
-- `prj_id` — integer. Если не задан — все проекты (включая `prj_id = 0`).
-- `userid` — integer. На будущее.
+- `prj_id` — string. Если не задан — все проекты (включая `prj_id = 0`).
+- `userid` — integer.
 - `limit` — integer, по умолчанию `1000`, максимум `5000`.
 - `offset` — integer, по умолчанию `0`.
+- `department_id` — integer.
+- `prj_stage` — string.
 
 Ответ:
 ```
@@ -38,7 +40,9 @@
       "start_time": "2024-01-16T09:00:00",
       "end_time": "2024-01-16T18:00:00",
       "description": "Разработка модуля X",
-      "timestamp": "2024-01-16T18:05:12"
+      "timestamp": "2024-01-16T18:05:12",
+      "work_kind": "ПИР",
+      "prj_stage": "1.1"
     }
   ],
   "total": 54321,
@@ -55,6 +59,8 @@
 - `start_time`, `end_time` — `Reports.start_time`, `Reports.end_time`.
 - `description` — `Reports.description`.
 - `timestamp` — `Reports.timestamp`.
+- `work_kind` — `Reports.work_kind`.
+- `prj_stage` — `Reports.prj_stage`.
 
 ---
 
@@ -80,7 +86,7 @@
 
 ## 3) GET /users
 
-Справочник сотрудников (без пароля).
+Справочник сотрудников.
 
 Ответ:
 ```
@@ -88,13 +94,13 @@
   "items": [
     {
       "id": 7,
-      "username": "ivanov",
-      "longname": "Иванов И.И.",
-      "city": "Москва",
+      "username": "Иванов И.И.",
+      "longname": "Иванов Иван Иванович",
+      "city": "Краснодар",
       "email": "ivanov@example.com",
       "is_admin": false,
       "is_blocked": false,
-      "department": "Отдел разработки"
+      "department_id": 'ПО'
     }
   ]
 }
@@ -108,7 +114,7 @@
 - `email` — `Users.email`.
 - `is_admin` — `Users.is_admin` (boolean).
 - `is_blocked` — `Users.is_blocked` (boolean).
-- `department` — новое поле отдела сотрудника (текст), добавляется в сторонней БД.
+- `department_id` — `Users.department_id` (string)
 
 ---
 
@@ -128,3 +134,23 @@
 Поля:
 - `prj_id` — `Projects.prj_id`.
 - `description` — `Projects.description`.
+
+---
+
+## 5) GET /departments`
+
+Справочник отделов.
+
+Ответ:
+```
+{
+  "items": [
+    { "id": "ПОиПНР", "department": "Отдел ПО и ПНР", "work_kind": "ППО" }
+  ]
+}
+```
+
+Поля:
+- `id` — `department.id`.
+- `department` — `department.department`.
+- `work_kind` — `department.work_kind_default`.

@@ -11,7 +11,7 @@ type reportsResponse struct {
 type reportItem struct {
 	ID          int64   `json:"id"`
 	UserID      int64   `json:"userid"`
-	PrjID       int64   `json:"prj_id"`
+	PrjID       string  `json:"prj_id"`
 	WorkType    int32   `json:"work_type"`
 	StartTime   string  `json:"start_time"`
 	EndTime     string  `json:"end_time"`
@@ -52,6 +52,6 @@ type projectsResponse struct {
 }
 
 type projectItem struct {
-	PrjID       int64  `json:"prj_id"`
+	PrjID       string `json:"prj_id"`
 	Description string `json:"description"`
 }

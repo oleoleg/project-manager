@@ -23,12 +23,13 @@ func NewEmployeeRepo(pool *pgxpool.Pool) *EmployeeRepo {
 
 // ReportFilter — параметры выборки табеля.
 type ReportFilter struct {
-	PrjID      *int64
-	EmployeeID *int64
-	From       *time.Time
-	To         *time.Time
-	Limit      int
-	Offset     int
+	PrjID        *string
+	EmployeeID   *int64
+	DepartmentID *int64
+	From         *time.Time
+	To           *time.Time
+	Limit        int
+	Offset       int
 }
 
 // buildInsert собирает строку вида ($1,$2),(...) для cols-колоночного INSERT.
@@ -194,7 +195,7 @@ func (r *EmployeeRepo) UpsertReports(ctx context.Context, reps []models.Employee
 	}
 	defer tx.Rollback(ctx)
 
-	const cols = 8
+	const cols = 10
 	for start := 0; start < len(reps); start += reportBatchSize {
 		end := start + reportBatchSize
 		if end > len(reps) {
@@ -208,12 +209,13 @@ func (r *EmployeeRepo) UpsertReports(ctx context.Context, reps []models.Employee
 			args = append(args,
 				rep.SourceID, rep.EmployeeID, rep.PrjID, rep.WorkTypeID,
 				rep.StartTime, rep.EndTime, rep.Description, rep.SourceTS,
+				rep.WorkKind, rep.StageNumber, // <-- ДОБАВИЛИ
 			)
 		}
 
 		_, err := tx.Exec(ctx, `
 			INSERT INTO employee_reports
-				(source_id, employee_id, prj_id, work_type_id, start_time, end_time, description, source_ts)
+				(source_id, employee_id, prj_id, work_type_id, start_time, end_time, description, source_ts, work_kind, stage_number)
 			VALUES `+ph+`
 			ON CONFLICT (source_id) DO UPDATE SET
 				employee_id = EXCLUDED.employee_id,
@@ -223,6 +225,19 @@ func (r *EmployeeRepo) UpsertReports(ctx context.Context, reps []models.Employee
 				end_time = EXCLUDED.end_time,
 				description = EXCLUDED.description,
 				source_ts = EXCLUDED.source_ts,
+				
+				-- Обновляем work_kind только если оно сейчас пустое
+				work_kind = CASE 
+					WHEN employee_reports.work_kind = '' THEN EXCLUDED.work_kind 
+					ELSE employee_reports.work_kind 
+				END,
+				
+				-- Обновляем stage_number только если оно сейчас пустое
+				stage_number = CASE 
+					WHEN employee_reports.stage_number = '' THEN EXCLUDED.stage_number 
+					ELSE employee_reports.stage_number 
+				END,
+				
 				synced_at = now()
 		`, args...)
 		if err != nil {
@@ -271,13 +286,18 @@ func (r *EmployeeRepo) ListReports(ctx context.Context, f ReportFilter) ([]model
 		args = append(args, *f.EmployeeID)
 		i++
 	}
+	if f.DepartmentID != nil {
+		query += fmt.Sprintf(` AND e.department_id = $%d`, i)
+		args = append(args, *f.DepartmentID)
+		i++
+	}
 	if f.From != nil {
-		query += fmt.Sprintf(` AND r.start_time >= $%d`, i)
+		query += fmt.Sprintf(` AND r.start_time::date >= $%d`, i)
 		args = append(args, *f.From)
 		i++
 	}
 	if f.To != nil {
-		query += fmt.Sprintf(` AND r.start_time <= $%d`, i)
+		query += fmt.Sprintf(` AND r.start_time::date <= $%d`, i)
 		args = append(args, *f.To)
 		i++
 	}
@@ -347,4 +367,65 @@ func (r *EmployeeRepo) UpdateReportMapping(ctx context.Context, sourceID int64, 
 		return fmt.Errorf("update report mapping: %w", err)
 	}
 	return nil
+}
+
+// GetDepartmentMappings возвращает map[department_id]work_kind.
+func (r *EmployeeRepo) GetDepartmentMappings(ctx context.Context) (map[int64]string, error) {
+	rows, err := r.pool.Query(ctx, `SELECT department_id, work_kind FROM department_work_kinds`)
+	if err != nil {
+		return nil, fmt.Errorf("get department mappings: %w", err)
+	}
+	defer rows.Close()
+
+	res := make(map[int64]string)
+	for rows.Next() {
+		var id int64
+		var wk string
+		if err := rows.Scan(&id, &wk); err != nil {
+			return nil, err
+		}
+		res[id] = wk
+	}
+	return res, rows.Err()
+}
+
+// SaveDepartmentMapping сохраняет или обновляет связь.
+func (r *EmployeeRepo) SaveDepartmentMapping(ctx context.Context, departmentID int64, workKind string) error {
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO department_work_kinds (department_id, work_kind)
+		VALUES ($1, $2)
+		ON CONFLICT (department_id) DO UPDATE SET work_kind = EXCLUDED.work_kind
+	`, departmentID, workKind)
+	if err != nil {
+		return fmt.Errorf("save department mapping: %w", err)
+	}
+	return nil
+}
+
+// DeleteAllReports удаляет все записи из табеля.
+func (r *EmployeeRepo) DeleteAllReports(ctx context.Context) error {
+	_, err := r.pool.Exec(ctx, `DELETE FROM employee_reports`)
+	if err != nil {
+		return fmt.Errorf("delete all reports: %w", err)
+	}
+	return nil
+}
+
+// GetDepartments возвращает все отделы.
+func (r *EmployeeRepo) GetDepartments(ctx context.Context) ([]models.EmployeeDepartment, error) {
+	rows, err := r.pool.Query(ctx, `SELECT id, name FROM employee_departments ORDER BY name`)
+	if err != nil {
+		return nil, fmt.Errorf("get departments: %w", err)
+	}
+	defer rows.Close()
+
+	var res []models.EmployeeDepartment
+	for rows.Next() {
+		var d models.EmployeeDepartment
+		if err := rows.Scan(&d.ID, &d.Name); err != nil {
+			return nil, err
+		}
+		res = append(res, d)
+	}
+	return res, rows.Err()
 }

@@ -5,7 +5,9 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/oleoleg/project-manager/internal/clients"
@@ -16,18 +18,20 @@ import (
 )
 
 type ReportsHandler struct {
-	syncSvc     *services.ReportSyncService
-	repo        *db.EmployeeRepo
-	contractSvc *services.ContractService
-	tmpl        *template.Template
+	syncSvc      *services.ReportSyncService
+	repo         *db.EmployeeRepo
+	contractSvc  *services.ContractService
+	settingsRepo *db.SettingsRepo
+	tmpl         *template.Template
 }
 
-func NewReportsHandler(syncSvc *services.ReportSyncService, repo *db.EmployeeRepo, contractSvc *services.ContractService, tmpl *template.Template) *ReportsHandler {
+func NewReportsHandler(syncSvc *services.ReportSyncService, repo *db.EmployeeRepo, contractSvc *services.ContractService, settingsRepo *db.SettingsRepo, tmpl *template.Template) *ReportsHandler {
 	return &ReportsHandler{
-		syncSvc:     syncSvc,
-		repo:        repo,
-		contractSvc: contractSvc,
-		tmpl:        tmpl,
+		syncSvc:      syncSvc,
+		repo:         repo,
+		contractSvc:  contractSvc,
+		settingsRepo: settingsRepo,
+		tmpl:         tmpl,
 	}
 }
 
@@ -35,13 +39,16 @@ func (h *ReportsHandler) Index(w http.ResponseWriter, r *http.Request) {
 	filter := db.ReportFilter{}
 
 	if cid := r.URL.Query().Get("contract_id"); cid != "" {
-		if id, err := strconv.ParseInt(cid, 10, 64); err == nil {
-			filter.PrjID = &id
-		}
+		filter.PrjID = &cid
 	}
 	if eid := r.URL.Query().Get("employee_id"); eid != "" {
 		if id, err := strconv.ParseInt(eid, 10, 64); err == nil {
 			filter.EmployeeID = &id
+		}
+	}
+	if did := r.URL.Query().Get("department_id"); did != "" {
+		if id, err := strconv.ParseInt(did, 10, 64); err == nil {
+			filter.DepartmentID = &id
 		}
 	}
 	if fromStr := r.URL.Query().Get("from"); fromStr != "" {
@@ -53,6 +60,11 @@ func (h *ReportsHandler) Index(w http.ResponseWriter, r *http.Request) {
 		if t, err := time.Parse("2006-01-02", toStr); err == nil {
 			filter.To = &t
 		}
+	}
+
+	currentURL, _ := h.settingsRepo.Get(r.Context(), "reports_api_url")
+	if currentURL == "" {
+		currentURL = "http://192.168.0.200:8000/reports/api/database" // дефолт
 	}
 
 	// 2. Получаем данные
@@ -74,6 +86,10 @@ func (h *ReportsHandler) Index(w http.ResponseWriter, r *http.Request) {
 	employees, _ := h.repo.ListEmployees(r.Context())
 	workKinds := models.WorkKinds // Берем из models/stage.go
 
+	// Получаем отделы и маппинг для формы
+	departments, _ := h.repo.GetDepartments(r.Context())
+	deptMappings, _ := h.repo.GetDepartmentMappings(r.Context())
+
 	// 4. Собираем данные для шаблона
 	data := h.commonData(r, "Рапорт сотрудников")
 	data["Reports"] = rows
@@ -82,10 +98,15 @@ func (h *ReportsHandler) Index(w http.ResponseWriter, r *http.Request) {
 	data["Employees"] = employees
 	data["WorkKinds"] = workKinds
 	data["Flash"] = r.URL.Query().Get("flash")
+	data["CurrentAPIURL"] = currentURL
+	data["Departments"] = departments
+	data["DepartmentMappings"] = deptMappings
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := h.tmpl.ExecuteTemplate(w, "reports.html", data); err != nil {
-		log.Printf("render reports.html: %v", err)
+		log.Printf("!!! ОШИБКА РЕНДЕРА reports.html: %v", err)
+		// Временно выводим ошибку прямо в браузер, чтобы увидеть, что не так
+		http.Error(w, "Ошибка рендера: "+err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -95,22 +116,17 @@ func (h *ReportsHandler) Sync(w http.ResponseWriter, r *http.Request) {
 
 	params := clients.ReportsParams{}
 	if prjStr := r.FormValue("contract_id"); prjStr != "" {
-		if id, err := strconv.ParseInt(prjStr, 10, 64); err == nil {
-			params.PrjID = &id
-		}
+		params.PrjID = &prjStr
 	}
 
 	res, err := h.syncSvc.Sync(r.Context(), params)
 
-	// Всегда отдаем JSON
 	w.Header().Set("Content-Type", "application/json")
 
 	if err != nil {
 		log.Printf("sync reports: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]any{
-			"error": err.Error(),
-		})
+		json.NewEncoder(w).Encode(map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -171,5 +187,62 @@ func (h *ReportsHandler) SaveMapping(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	http.Redirect(w, r, "/reports?flash=Изменения+сохранены", http.StatusSeeOther)
+	// Возвращаемся на ту же страницу, откуда пришли (с фильтрами)
+	referer := r.Referer()
+	if referer == "" || !strings.Contains(referer, "/reports") {
+		referer = "/reports"
+	}
+
+	// Добавляем flash-сообщение
+	sep := "?"
+	if strings.Contains(referer, "?") {
+		sep = "&"
+	}
+	redirectURL := referer + sep + "flash=Изменения+сохранены"
+
+	http.Redirect(w, r, redirectURL, http.StatusSeeOther)
+}
+
+func (h *ReportsHandler) SaveSettings(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	url := r.FormValue("api_url")
+
+	if err := h.settingsRepo.Set(r.Context(), "reports_api_url", url); err != nil {
+		log.Printf("save settings: %v", err)
+	}
+
+	http.Redirect(w, r, "/reports?flash=URL+API+сохранен", http.StatusSeeOther)
+}
+
+func (h *ReportsHandler) DeleteAll(w http.ResponseWriter, r *http.Request) {
+	if err := h.repo.DeleteAllReports(r.Context()); err != nil {
+		log.Printf("delete all reports: %v", err)
+		http.Redirect(w, r, "/reports?flash="+url.QueryEscape("Ошибка удаления: "+err.Error()), http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/reports?flash=Все+записи+удалены", http.StatusSeeOther)
+}
+
+func (h *ReportsHandler) SaveDepartmentMapping(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+
+	// Проходим по всем полям формы (они имеют вид dept_1, dept_2 и т.д.)
+	for key, values := range r.Form {
+		if strings.HasPrefix(key, "dept_") && len(values) > 0 {
+			deptIDStr := strings.TrimPrefix(key, "dept_")
+			deptID, err := strconv.ParseInt(deptIDStr, 10, 64)
+			if err != nil {
+				continue
+			}
+
+			workKind := values[0]
+			if workKind != "" {
+				if err := h.repo.SaveDepartmentMapping(r.Context(), deptID, workKind); err != nil {
+					log.Printf("save dept mapping %d: %v", deptID, err)
+				}
+			}
+		}
+	}
+
+	http.Redirect(w, r, "/reports?flash=Настройки+отделов+сохранены", http.StatusSeeOther)
 }

@@ -1,27 +1,83 @@
 {{ define "reports.html" }}
 {{ template "layout_header" . }}
+ 
 
 <div class="page-header">
     <h2>Рапорт сотрудников</h2>
     <div class="actions">
-        <button type="button" id="btn-sync-reports" class="btn btn-primary" data-contract-id="{{ derefInt .Filter.PrjID }}">
+        <button type="button" id="btn-sync-reports" class="btn btn-primary" data-contract-id="{{ deref .Filter.PrjID }}">
             ⬇ Загрузить с сервера
         </button>
+        <form method="post" action="/reports/delete-all" style="margin: 0; display: inline-block;" onsubmit="return confirm('Удалить ВСЕ записи табеля? Это действие нельзя отменить.');">
+            <button type="submit" class="btn btn-danger">🗑 Удалить все</button>
+        </form>
     </div>
 </div>
 
-<form method="get" action="/reports" class="filter-form">
-    <!-- Фильтр по договору -->
-    <select name="contract_id" style="min-width: 200px;">
-        <option value="">— все договоры —</option>
-        {{ range .Contracts }}
-            <option value="{{ .ID }}" {{ if and $.Filter.PrjID (eq (derefInt $.Filter.PrjID) .ID) }}selected{{ end }}>
-                {{ .ID }} — {{ .ContractNumber }}
-            </option>
-        {{ end }}
-    </select>
+<!-- Настройки API -->
+<div style="margin-bottom: 20px; background: var(--surface); padding: 12px; border-radius: 8px; box-shadow: var(--shadow);">
+    <details>
+        <summary style="cursor: pointer; color: var(--accent); font-weight: 500; font-size: 14px;">
+            ⚙️ Настройки API сервера Рапортов
+        </summary>
+        <form method="post" action="/reports/settings" style="margin-top: 12px; display: flex; gap: 8px;">
+            <input type="text" name="api_url" value="{{ .CurrentAPIURL }}" style="flex: 1; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-soft); color: var(--text); font-size: 13px;">
+            <button type="submit" class="btn btn-sm btn-primary">Сохранить URL</button>
+        </form>
+    </details>
+</div>
+<!-- Настройка маппинга отделов -->
+{{ if .Departments }}
+<div style="margin-bottom: 20px; background: var(--surface); padding: 12px; border-radius: 8px; box-shadow: var(--shadow);">
+    <details>
+        <summary style="cursor: pointer; color: var(--accent); font-weight: 500; font-size: 14px;">
+            🔄 Настройка видов работ по отделам
+        </summary>
+        <form method="post" action="/reports/save-department-mapping" style="margin-top: 12px;">
+            <table class="data-table" style="box-shadow: none; margin-bottom: 12px;">
+                <thead>
+                    <tr>
+                        <th>Отдел</th>
+                        <th>Вид работ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {{ range .Departments }}
+                    <tr>
+                        <td>{{ .Name }}</td>
+                        <td>
+                            <select name="dept_{{ .ID }}" class="fact-input" style="width: 100%;">
+                                <option value="">— не указан —</option>
+                                {{ $currentMapping := index $.DepartmentMappings .ID }}
+                                {{ range $.WorkKinds }}
+                                    <option value="{{ .Code }}" {{ if eq .Code $currentMapping }}selected{{ end }}>{{ .Name }}</option>
+                                {{ end }}
+                            </select>
+                        </td>
+                    </tr>
+                {{ end }}
+                </tbody>
+            </table>
+            <div style="text-align: right;">
+                <button type="submit" class="btn btn-sm btn-primary">Сохранить настройки</button>
+            </div>
+        </form>
+    </details>
+</div>
+{{ end }}
 
-    <!-- Фильтр по сотруднику -->
+<form method="get" action="/reports" class="filter-form">
+    <!-- Фильтр по договору с поиском -->
+    <input list="contracts-list" name="contract_id" placeholder="Введите или выберите договор..." 
+           value="{{ deref .Filter.PrjID }}" 
+           style="min-width: 250px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; background: var(--surface); color: var(--text);">
+    
+    <datalist id="contracts-list">
+        {{ range .Contracts }}
+            <option value="{{ .ID }}">{{ .ID }} — {{ .ContractNumber }}</option>
+        {{ end }}
+    </datalist>
+
     <select name="employee_id" style="min-width: 200px;">
         <option value="">— все сотрудники —</option>
         {{ range .Employees }}
@@ -30,12 +86,18 @@
             </option>
         {{ end }}
     </select>
+    <select name="department_id" style="min-width: 200px;">
+        <option value="">— все отделы —</option>
+        {{ range .Departments }}
+            <option value="{{ .ID }}" {{ if and $.Filter.DepartmentID (eq (derefInt $.Filter.DepartmentID) .ID) }}selected{{ end }}>
+                {{ .Name }}
+            </option>
+        {{ end }}
+    </select>
 
-    <!-- Фильтр по датам -->
     <input type="date" name="from" value="{{ if .Filter.From }}{{ .Filter.From.Format "2006-01-02" }}{{ end }}" title="С даты">
     <input type="date" name="to" value="{{ if .Filter.To }}{{ .Filter.To.Format "2006-01-02" }}{{ end }}" title="По дату">
 
-    <button type="submit" class="btn">Фильтр</button>
     <a href="/reports" class="btn btn-ghost-dark">Сбросить</a>
 </form>
 
@@ -48,6 +110,7 @@
             <th>День</th>
             <th>Сотрудник</th>
             <th>Отдел</th>
+            <th>Договор</th>
             <th>Вид работ</th>
             <th>Этап</th>
             <th>Время</th>
@@ -65,16 +128,17 @@
                 <td><span class="muted">{{ .Weekday }}</span></td>
                 <td>{{ .EmployeeName }}</td>
                 <td>{{ .DepartmentName }}</td> 
+                <td><a href="/contracts/{{ .PrjID }}">{{ .PrjID }}</a></td>
                 <td>
                     <select name="work_kind[]" class="fact-input" style="min-width: 120px;">
                         <option value="">— не указан —</option>
+                        {{ $currentWK := .WorkKind }}
                         {{ range $.WorkKinds }}
-                            <option value="{{ .Code }}" {{ if eq .Code $.WorkKind }}selected{{ end }}>{{ .Name }}</option>
+                            <option value="{{ .Code }}" {{ if eq .Code $currentWK }}selected{{ end }}>{{ .Name }}</option>
                         {{ end }}
                     </select>
                 </td>
                 <td>
-                    <!-- Пока это текстовое поле, позже сделаем выпадающий список этапов договора -->
                     <input type="text" name="stage_number[]" value="{{ .StageNumber }}" class="fact-input" style="width: 80px;" placeholder="№">
                 </td>
                 <td>{{ .StartTime.Format "15:04" }} - {{ .EndTime.Format "15:04" }}</td>
@@ -90,8 +154,7 @@
     <div style="margin-top: 16px; text-align: right;">
         <button type="submit" class="btn btn-primary">Сохранить изменения</button>
     </div>
-    
- </form>   
+</form>
 {{ else }}
 <p class="empty">Нет данных за выбранный период. Нажмите «Загрузить с сервера».</p>
 {{ end }}
@@ -104,16 +167,12 @@
             <button type="button" class="modal-close" id="sync-modal-close" disabled>×</button>
         </header>
         <div class="modal-body">
-            <!-- Состояние загрузки -->
             <div id="sync-progress" style="text-align: center; padding: 20px 0;">
                 <div class="spinner"></div>
-                <p style="margin-top: 16px; font-weight: 500;">Связываемся с сервером...<br><span class="muted" style="font-size: 13px; font-weight: normal;">Это может занять несколько секунд</span></p>
+                <p style="margin-top: 16px; font-weight: 500;">Связываемся с сервером...</p>
             </div>
-
-            <!-- Состояние результата -->
             <div id="sync-result" style="display: none;">
                 <div id="sync-error-box" class="error" style="display: none; margin-bottom: 16px;"></div>
-                
                 <table class="data-table" style="box-shadow: none; border: 1px solid var(--border); margin-bottom: 16px;">
                     <tbody>
                         <tr><td>Отделы</td><td class="num" id="res-departments">0</td></tr>
@@ -124,9 +183,7 @@
                         <tr><td>Пропущено</td><td class="num" id="res-skipped">0</td></tr>
                     </tbody>
                 </table>
-
-                <div id="sync-errors-list" style="display: none; max-height: 150px; overflow-y: auto; font-size: 12px; color: var(--danger-text); background: var(--danger-bg); padding: 10px; border-radius: 6px;">
-                    <!-- Сюда выведутся ошибки, если есть -->
+                 <div id="sync-errors-list" style="display: none; max-height: 150px; overflow-y: auto; font-size: 12px; color: var(--danger-text); background: var(--danger-bg); padding: 10px; border-radius: 6px;">
                 </div>
             </div>
         </div>
@@ -136,8 +193,9 @@
         </div>
     </div>
 </div>
-<!-- =================================================================================== -->
 
+<script src="/static/reports.js"></script>
 <script src="/static/reports-sync.js"></script>
+
 {{ template "layout_footer" . }}
 {{ end }}

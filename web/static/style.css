@@ -1618,3 +1618,31 @@ html[data-theme="dark"] .text-danger { color: #ff6b6b !important; }
 @keyframes spin {
     to { transform: rotate(360deg); }
 }
+
+/* Стили для полей выбора даты */
+.filter-form input[type="date"] {
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 14px;
+    background: var(--surface);
+    color: var(--text);
+    font-family: inherit;
+}
+
+/* Убираем синюю подсветку при фокусе в некоторых браузерах */
+.filter-form input[type="date"]:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+/* Делаем иконку календаря видимой в темной теме */
+html[data-theme="dark"] .filter-form input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    opacity: 0.6;
+    cursor: pointer;
+}
+
+html[data-theme="dark"] .filter-form input[type="date"]::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+}

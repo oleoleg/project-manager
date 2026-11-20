@@ -36,8 +36,8 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
 			"items": []map[string]any{
-				{"prj_id": 1024, "description": "Договор 1024-AA"},
-				{"prj_id": 1025, "description": "Договор 1025-BB"},
+				{"prj_id": "6666", "description": "Договор 6666"},
+				{"prj_id": "7777", "description": "Договор 7777"},
 			},
 		})
 	})
@@ -56,20 +56,30 @@ func main() {
 		var items []map[string]any
 		now := time.Now()
 
-		for i := 0; i < 5; i++ {
+		for i := 0; i < 9; i++ {
 			start := now.AddDate(0, 0, -i).Truncate(24 * time.Hour).Add(9 * time.Hour)
 			end := start.Add(9 * time.Hour) // 9 часов работы
+
+			// Чередуем проекты 6666 и 7777
+			prjID := "6666"
+			if i%3 == 0 {
+				prjID = "7777"
+			}
+			if i%4 == 0 {
+				prjID = "8888"
+			}
 
 			items = append(items, map[string]any{
 				"id":          1000 + offset + i,
 				"userid":      (i % 3) + 1,
-				"prj_id":      1024,
+				"prj_id":      prjID,
 				"work_type":   0,
 				"start_time":  start.Format("2006-01-02T15:04:05"),
 				"end_time":    end.Format("2006-01-02T15:04:05"),
 				"description": "Тестовая запись " + strconv.Itoa(i+1),
 				"timestamp":   now.Format("2006-01-02T15:04:05"),
 			})
+
 		}
 
 		json.NewEncoder(w).Encode(map[string]any{

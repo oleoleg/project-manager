@@ -1,24 +1,23 @@
 BEGIN TRANSACTION;
 CREATE TABLE IF NOT EXISTS "Projects" (
 	"id"	INTEGER,
-	"prj_id"	INTEGER NOT NULL,
+	"prj_id"	TEXT NOT NULL, -- Изменен тип
 	"description"	TEXT,
 	PRIMARY KEY("id"),
 	UNIQUE("prj_id")
 );
 CREATE TABLE IF NOT EXISTS "Reports" (
-	"id"	INTEGER,
+	"id"	TEXT,
 	"userid"	INTEGER NOT NULL,
 	"prj_id"	INTEGER NOT NULL,
 	"description"	TEXT,
-	"mission_on"	BLOB DEFAULT FALSE,
-	"mission_place"	TEXT,
-	"mission_road"	BLOB DEFAULT FALSE,
 	"start_time"	DATETIME,
 	"end_time"	DATETIME,
 	"disable"	BLOB DEFAULT FALSE,
 	"timestamp"	DATETIME DEFAULT CURRENT_TIMESTAMP,
-	"work_type"	INTEGER DEFAULT 0,
+	"work_type"	INTEGER DEFAULT 0, 
+	"work_kind" TEXT, -- Новое поле сюда подставить по умолчанию Departments.work_kind_default
+	"prj_stage"	TEXT,  -- Новое поле 
 	PRIMARY KEY("id"),
 	UNIQUE("userid","start_time")
 );
@@ -31,9 +30,33 @@ CREATE TABLE IF NOT EXISTS "Users" (
 	"password"	TEXT NOT NULL DEFAULT 'popnr',
 	"is_admin"	BLOB DEFAULT FALSE,
 	"is_blocked"	BLOB DEFAULT FALSE,
+	"department_id" TEXT NOT NULL, -- Новое поле FK на  Departments.id
 	PRIMARY KEY("id"),
 	UNIQUE("username")
 );
+ -- Новая таблица Departments
+CREATE TABLE IF NOT EXISTS "Departments" (
+	"id"	TEXT,
+	"department"	TEXT NOT NULL,
+	"work_kind_default"	TEXT,
+	PRIMARY KEY("id"),
+	UNIQUE("department")
+);
+
+INSERT INTO "Departments" ("id","department","work_kind_default") VALUES ('ПО','Проектный отдел', 'ПИР');
+INSERT INTO "Departments" ("id","department","work_kind_default") VALUES ('ПОиПНР','Отдел ПО и ПНР', 'ППО');
+INSERT INTO "Departments" ("id","department","work_kind_default") VALUES ('ПНР','Отдел ПНР', 'ПНР');
+INSERT INTO "Departments" ("id","department","work_kind_default") VALUES ('МО','Монтажный отдел', 'СМР');
+INSERT INTO "Departments" ("id","department","work_kind_default") VALUES ('МСС','Сборочный сектор', 'Сборка');
+INSERT INTO "Departments" ("id","department","work_kind_default") VALUES ('ОСО','Отдел сервисного обслуживания', 'Ремонт');
+INSERT INTO "Departments" ("id","department","work_kind_default") VALUES ('ССТ','Сектор склада ТМЦ', 'Продажа');
+INSERT INTO "Departments" ("id","department","work_kind_default") VALUES ('КО','Коммерческий отдел', 'Продажа');
+INSERT INTO "Departments" ("id","department","work_kind_default") VALUES ('ОУП','Отдел управления проектами', 'Комплексный');
+INSERT INTO "Departments" ("id","department","work_kind_default") VALUES ('ООК','Отдел обеспечения и квалификации', 'Комплексный');
+INSERT INTO "Departments" ("id","department","work_kind_default") VALUES ('ОПиК','Отделение персонала и коммуникаций', 'Комплексный');
+INSERT INTO "Departments" ("id","department","work_kind_default") VALUES ('А','Администрация', 'Комплексный');
+
+
 CREATE TABLE IF NOT EXISTS "Vacations" (
 	"id"	INTEGER,
 	"userid"	INTEGER,

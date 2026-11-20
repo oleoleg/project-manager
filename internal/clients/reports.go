@@ -36,7 +36,7 @@ func NewReportsClient(baseURL string) *ReportsClient {
 type ReportsParams struct {
 	From   *time.Time
 	To     *time.Time
-	PrjID  *int64
+	PrjID  *string
 	UserID *int64
 }
 
@@ -44,7 +44,7 @@ type ReportsParams struct {
 type ReportRaw struct {
 	SourceID    int64
 	UserID      int64
-	PrjID       int64
+	PrjID       string
 	WorkTypeID  int32
 	StartTime   time.Time
 	EndTime     time.Time
@@ -70,7 +70,7 @@ func (c *ReportsClient) FetchReports(ctx context.Context, p ReportsParams) ([]Re
 			q.Set("to", p.To.Format("2006-01-02"))
 		}
 		if p.PrjID != nil {
-			q.Set("prj_id", strconv.FormatInt(*p.PrjID, 10))
+			q.Set("prj_id", *p.PrjID)
 		}
 		if p.UserID != nil {
 			q.Set("userid", strconv.FormatInt(*p.UserID, 10))
