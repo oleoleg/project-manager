@@ -14,7 +14,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/oleoleg/project-manager/internal/middleware"
 	"github.com/oleoleg/project-manager/internal/models"
 	"github.com/oleoleg/project-manager/internal/services"
 )
@@ -33,22 +32,6 @@ func NewActHandler(
 	tmpl *template.Template,
 ) *ActHandler {
 	return &ActHandler{svc: svc, stageSvc: stageSvc, contractSvc: contractSvc, tmpl: tmpl}
-}
-
-func (h *ActHandler) commonData(r *http.Request, title string) map[string]any {
-	u := middleware.UserFromContext(r.Context())
-	data := map[string]any{"Title": title, "User": u}
-	if u != nil {
-		data["RoleName"] = models.RoleName(u.RoleCode)
-	}
-	return data
-}
-
-func (h *ActHandler) render(w http.ResponseWriter, name string, data any) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := h.tmpl.ExecuteTemplate(w, name, data); err != nil {
-		log.Printf("template %s: %v", name, err)
-	}
 }
 
 // ======================= JSON API =======================
@@ -209,7 +192,7 @@ func (h *ActHandler) NewForm(w http.ResponseWriter, r *http.Request) {
 	// Список этапов этого договора — для выбора, куда распределить сумму.
 	stages, _ := h.stageSvc.List(r.Context(), contractID)
 
-	data := h.commonData(r, "Новый акт")
+	data := BaseData(r, "Новый акт")
 	data["Contract"] = contract
 	data["Stage"] = stage
 	data["Stages"] = stages
@@ -217,7 +200,7 @@ func (h *ActHandler) NewForm(w http.ResponseWriter, r *http.Request) {
 	data["ActKinds"] = models.ActKindRefs()
 	data["IsNew"] = true
 	data["Error"] = ""
-	h.render(w, "acts_form.html", data)
+	RenderTemplate(w, h.tmpl, "acts_form.html", data)
 }
 
 func (h *ActHandler) EditForm(w http.ResponseWriter, r *http.Request) {
@@ -234,7 +217,7 @@ func (h *ActHandler) EditForm(w http.ResponseWriter, r *http.Request) {
 	stages, _ := h.stageSvc.List(r.Context(), contractID)
 	links, _ := h.svc.StagesLinkedToAct(r.Context(), actGUID)
 
-	data := h.commonData(r, "Акт")
+	data := BaseData(r, "Акт")
 	data["Contract"] = contract
 	data["Act"] = act
 	data["Stages"] = stages
@@ -242,7 +225,7 @@ func (h *ActHandler) EditForm(w http.ResponseWriter, r *http.Request) {
 	data["Links"] = links
 	data["IsNew"] = false
 	data["Error"] = ""
-	h.render(w, "acts_form.html", data)
+	RenderTemplate(w, h.tmpl, "acts_form.html", data)
 }
 
 // Create создаёт акт.
@@ -268,7 +251,7 @@ func (h *ActHandler) Create(w http.ResponseWriter, r *http.Request) {
 		stage, _ := h.stageSvc.GetByID(r.Context(), stageGUID)
 		contract, _ := h.contractSvc.GetByID(r.Context(), contractID)
 		stages, _ := h.stageSvc.List(r.Context(), contractID)
-		data := h.commonData(r, "Новый акт")
+		data := BaseData(r, "Новый акт")
 		data["Contract"] = contract
 		data["Stage"] = stage
 		data["Stages"] = stages
@@ -278,7 +261,7 @@ func (h *ActHandler) Create(w http.ResponseWriter, r *http.Request) {
 		data["Error"] = humanizeActError(err)
 		data["Links"] = parseStageLinks(r)
 		w.WriteHeader(http.StatusBadRequest)
-		h.render(w, "acts_form.html", data)
+		RenderTemplate(w, h.tmpl, "acts_form.html", data)
 		return
 	}
 
@@ -315,7 +298,7 @@ func (h *ActHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if err := h.svc.Update(r.Context(), act, links); err != nil {
 		contract, _ := h.contractSvc.GetByID(r.Context(), contractID)
 		stages, _ := h.stageSvc.List(r.Context(), contractID)
-		data := h.commonData(r, "Акт")
+		data := BaseData(r, "Акт")
 		data["Contract"] = contract
 		data["Act"] = act
 		data["Stages"] = stages
@@ -324,7 +307,7 @@ func (h *ActHandler) Update(w http.ResponseWriter, r *http.Request) {
 		data["Error"] = humanizeActError(err)
 		data["Links"] = parseStageLinks(r)
 		w.WriteHeader(http.StatusBadRequest)
-		h.render(w, "acts_form.html", data)
+		RenderTemplate(w, h.tmpl, "acts_form.html", data)
 		return
 	}
 
@@ -401,14 +384,14 @@ func (h *ActHandler) NewAttachmentForm(w http.ResponseWriter, r *http.Request) {
 	}
 	contract, _ := h.contractSvc.GetByID(r.Context(), contractID)
 
-	data := h.commonData(r, "Новое приложение")
+	data := BaseData(r, "Новое приложение")
 	data["Contract"] = contract
 	data["Act"] = act
 	data["Attachment"] = &models.ActAttachment{}
 	data["ActKinds"] = models.ActKindRefs()
 	data["IsNew"] = true
 	data["Error"] = ""
-	h.render(w, "act_attachments_form.html", data)
+	RenderTemplate(w, h.tmpl, "act_attachments_form.html", data)
 }
 
 func (h *ActHandler) CreateAttachment(w http.ResponseWriter, r *http.Request) {
@@ -421,7 +404,7 @@ func (h *ActHandler) CreateAttachment(w http.ResponseWriter, r *http.Request) {
 	if err := h.svc.CreateAttachment(r.Context(), a); err != nil {
 		act, _ := h.svc.GetByID(r.Context(), actGUID)
 		contract, _ := h.contractSvc.GetByID(r.Context(), contractID)
-		data := h.commonData(r, "Новое приложение")
+		data := BaseData(r, "Новое приложение")
 		data["Contract"] = contract
 		data["Act"] = act
 		data["Attachment"] = a
@@ -429,7 +412,7 @@ func (h *ActHandler) CreateAttachment(w http.ResponseWriter, r *http.Request) {
 		data["IsNew"] = true
 		data["Error"] = humanizeActError(err)
 		w.WriteHeader(http.StatusBadRequest)
-		h.render(w, "act_attachments_form.html", data)
+		RenderTemplate(w, h.tmpl, "act_attachments_form.html", data)
 		return
 	}
 
@@ -654,14 +637,14 @@ func (h *ActHandler) EditAttachmentForm(w http.ResponseWriter, r *http.Request) 
 	contract, _ := h.contractSvc.GetByID(r.Context(), contractID)
 	act, _ := h.svc.GetByID(r.Context(), att.ActGUID)
 
-	data := h.commonData(r, "Приложение")
+	data := BaseData(r, "Приложение")
 	data["Contract"] = contract
 	data["Act"] = act
 	data["Attachment"] = att
 	data["ActKinds"] = models.ActKindRefs()
 	data["IsNew"] = false
 	data["Error"] = ""
-	h.render(w, "act_attachments_form.html", data)
+	RenderTemplate(w, h.tmpl, "act_attachments_form.html", data)
 }
 
 // UpdateAttachment — сохранение приложения.
@@ -683,7 +666,7 @@ func (h *ActHandler) UpdateAttachment(w http.ResponseWriter, r *http.Request) {
 	if err := h.svc.UpdateAttachment(r.Context(), a); err != nil {
 		act, _ := h.svc.GetByID(r.Context(), existing.ActGUID)
 		contract, _ := h.contractSvc.GetByID(r.Context(), contractID)
-		data := h.commonData(r, "Приложение")
+		data := BaseData(r, "Приложение")
 		data["Contract"] = contract
 		data["Act"] = act
 		data["Attachment"] = a
@@ -691,7 +674,7 @@ func (h *ActHandler) UpdateAttachment(w http.ResponseWriter, r *http.Request) {
 		data["IsNew"] = false
 		data["Error"] = humanizeActError(err)
 		w.WriteHeader(http.StatusBadRequest)
-		h.render(w, "act_attachments_form.html", data)
+		RenderTemplate(w, h.tmpl, "act_attachments_form.html", data)
 		return
 	}
 

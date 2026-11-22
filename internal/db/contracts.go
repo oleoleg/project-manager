@@ -162,25 +162,6 @@ func (r *ContractRepo) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// --- справочники ---
-
-func (r *ContractRepo) ListStatuses(ctx context.Context) ([]models.ContractStatusRef, error) {
-	rows, err := r.pool.Query(ctx, `SELECT code, name FROM contract_statuses ORDER BY code`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var res []models.ContractStatusRef
-	for rows.Next() {
-		var s models.ContractStatusRef
-		if err := rows.Scan(&s.Code, &s.Name); err != nil {
-			return nil, err
-		}
-		res = append(res, s)
-	}
-	return res, rows.Err()
-}
-
 // ListAssignees — пользователи, назначенные на договор (кроме главного ответственного).
 func (r *ContractRepo) ListAssignees(ctx context.Context, contractID string) ([]models.User, error) {
 	rows, err := r.pool.Query(ctx, `

@@ -1,1 +1,0 @@
-ALTER TABLE stage_costs RENAME COLUMN calc_field TO locked_field;

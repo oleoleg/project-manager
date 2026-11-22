@@ -1,3 +1,0 @@
-ALTER TABLE budget_plan_snapshots 
-ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT FALSE,
-ADD COLUMN note TEXT;

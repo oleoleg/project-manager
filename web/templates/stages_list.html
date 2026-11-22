@@ -43,7 +43,7 @@
                     <a href="?vat=with"    class="btn btn-sm {{ if eq .VATMode "with" }}active{{ end }}">С НДС</a>
             </div>
         </div>
-        {{ if or (eq .User.RoleCode "admin") (eq .User.RoleCode "rp_chief") (eq .User.RoleCode "rp") }}
+        {{ if $.CanEdit }}
             <a href="/contracts/{{ $c.ID }}/stages/new" class="btn btn-primary">+ Новый этап</a>
         {{ end }}
     </div>
@@ -126,7 +126,7 @@
                     <div class="stage-name">{{ .Name }}</div>
                     <div class="stage-tags">
                         <span class="tag tag-work">{{ .WorkKind }}</span>
-                        <span class="tag tag-status tag-status-{{ .StatusCode }}">{{ call $.StatusName .StatusCode }}</span>
+                        <span class="tag tag-status tag-status-{{ .StatusCode }}">{{ call $.StageStatusName .StatusCode }}</span>
                     </div>
                 </td>
                 
@@ -185,7 +185,7 @@
 
                 <!-- Действия -->
                 <td class="actions">
-                    {{ if or (eq $.User.RoleCode "admin") (eq $.User.RoleCode "rp_chief") (eq $.User.RoleCode "rp") }}
+                    {{ if $.CanEdit }}
                         <form method="post" action="/contracts/{{ $.Contract.ID }}/stages/{{ .GUID }}/move?dir=up" class="inline">
                             <button type="submit" class="btn btn-sm" title="Вверх">↑</button>
                         </form>
@@ -198,8 +198,6 @@
                                 data-stage-name="{{ .Name }}" 
                                 title="Акты этапа">📎 Акты</button>
                         <a href="/contracts/{{ $.Contract.ID }}/stages/{{ .GUID }}/edit" class="btn btn-sm">Изменить</a>
-                    {{ end }}
-                    {{ if or (eq $.User.RoleCode "admin") (eq $.User.RoleCode "rp_chief") }}
                         <form method="post" action="/contracts/{{ $.Contract.ID }}/stages/{{ .GUID }}/delete" 
                               onsubmit="return confirm('Удалить этап «{{ .Name }}»?');" class="inline">
                             <button type="submit" class="btn btn-sm btn-danger">×</button>

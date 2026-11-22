@@ -15,7 +15,6 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/oleoleg/project-manager/internal/db"
-	"github.com/oleoleg/project-manager/internal/middleware"
 	"github.com/oleoleg/project-manager/internal/models"
 	"github.com/oleoleg/project-manager/internal/services"
 )
@@ -30,25 +29,6 @@ type ContractHandler struct {
 
 func NewContractHandler(svc *services.ContractService, cpSvc *services.CounterpartyService, stageSvc *services.StageService, budgetSvc *services.BudgetService, tmpl *template.Template) *ContractHandler {
 	return &ContractHandler{svc: svc, cpSvc: cpSvc, stageSvc: stageSvc, budgetSvc: budgetSvc, tmpl: tmpl}
-}
-
-func (h *ContractHandler) commonData(r *http.Request, title string) map[string]any {
-	u := middleware.UserFromContext(r.Context())
-	data := map[string]any{
-		"Title": title,
-		"User":  u,
-	}
-	if u != nil {
-		data["RoleName"] = models.RoleName(u.RoleCode)
-	}
-	return data
-}
-
-func (h *ContractHandler) render(w http.ResponseWriter, name string, data any) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := h.tmpl.ExecuteTemplate(w, name, data); err != nil {
-		log.Printf("template %s: %v", name, err)
-	}
 }
 
 // ---------- List ----------
@@ -90,9 +70,9 @@ func (h *ContractHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	counterparties, _ := h.cpSvc.List(r.Context(), "")
 
-	data := h.commonData(r, "Договоры")
+	data := BaseData(r, "Договоры")
 	data["List"] = list
-	data["Statuses"] = models.GetContractStatuses()
+	data["ContractStatuses"] = models.GetContractStatuses()
 	data["Types"] = models.GetContractTypes()
 	data["Counterparties"] = counterparties
 	data["Search"] = f.Search
@@ -111,7 +91,7 @@ func (h *ContractHandler) List(w http.ResponseWriter, r *http.Request) {
 	data["SelectedTypes"] = strings.Join(typeCodes, ",")
 
 	data["Flash"] = q.Get("flash")
-	h.render(w, "contracts_list.html", data)
+	RenderTemplate(w, h.tmpl, "contracts_list.html", data)
 }
 
 // ---------- Show ----------
@@ -129,9 +109,6 @@ func (h *ContractHandler) Show(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	statuses := models.GetContractStatuses()
-	types := models.GetContractTypes()
-	cp, _ := h.cpSvc.GetByID(r.Context(), c.CounterpartyID)
 	totals, _ := h.stageSvc.Totals(r.Context(), c.ID)
 	stageStatuses := models.GetStageStatuses()
 	assignees, _ := h.svc.ListAssignees(r.Context(), c.ID)
@@ -141,13 +118,8 @@ func (h *ContractHandler) Show(w http.ResponseWriter, r *http.Request) {
 	factTotal, _ := h.budgetSvc.GetFactTotal(r.Context(), c.ID)
 	factConfirmed, _ := h.budgetSvc.GetFactConfirmedTotal(r.Context(), c.ID)
 
-	data := h.commonData(r, "Договор "+c.ID)
-	data["Contract"] = c
-	data["Statuses"] = statuses
-	data["Types"] = types
-	data["Counterparty"] = cp
-	data["StatusName"] = findStatusName(statuses, c.StatusCode)
-	data["TypeName"] = findTypeName(types, c.ContractType)
+	data := ContractBaseData(r, "Договор "+c.ID, c, h.cpSvc)
+	data["CanEdit"] = CanEditContract(r, c)
 	data["Totals"] = totals
 	data["StageStatuses"] = stageStatuses
 	data["StageStatusName"] = func(code int16) string {
@@ -271,7 +243,7 @@ func (h *ContractHandler) Show(w http.ResponseWriter, r *http.Request) {
 	data["VatSingle"] = vatSingle
 	data["VatMixed"] = vatMixed
 
-	h.render(w, "contracts_show.html", data)
+	RenderTemplate(w, h.tmpl, "contracts_show.html", data)
 }
 
 // ---------- New / Create ----------
@@ -288,9 +260,9 @@ func (h *ContractHandler) New(w http.ResponseWriter, r *http.Request) {
 		contract.CounterpartyID = cpID
 	}
 
-	data := h.commonData(r, "Новый договор")
+	data := BaseData(r, "Новый договор")
 	data["Contract"] = contract
-	data["Statuses"] = models.GetContractStatuses()
+	data["ContractStatuses"] = models.GetContractStatuses()
 	data["Types"] = models.GetContractTypes()
 	data["Counterparties"] = cp
 	data["ProcurementStatuses"] = models.GetProcurementCardStatuses()
@@ -298,7 +270,7 @@ func (h *ContractHandler) New(w http.ResponseWriter, r *http.Request) {
 	data["IsNew"] = true
 	data["Error"] = ""
 	data["ActiveUsers"] = users
-	h.render(w, "contracts_form.html", data)
+	RenderTemplate(w, h.tmpl, "contracts_form.html", data)
 }
 
 func (h *ContractHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -394,9 +366,9 @@ func (h *ContractHandler) renderFormWithError(w http.ResponseWriter, r *http.Req
 	cp, _ := h.cpSvc.List(r.Context(), "")
 	users, _ := h.svc.ListActiveUsers(r.Context())
 
-	data := h.commonData(r, "Договор")
+	data := BaseData(r, "Договор")
 	data["Contract"] = c
-	data["Statuses"] = models.GetContractStatuses()
+	data["ContractStatuses"] = models.GetContractStatuses()
 	data["Types"] = models.GetContractTypes()
 	data["Counterparties"] = cp
 	data["ProcurementStatuses"] = models.GetProcurementCardStatuses()
@@ -407,7 +379,7 @@ func (h *ContractHandler) renderFormWithError(w http.ResponseWriter, r *http.Req
 	if errMsg != "" {
 		w.WriteHeader(http.StatusBadRequest)
 	}
-	h.render(w, "contracts_form.html", data)
+	RenderTemplate(w, h.tmpl, "contracts_form.html", data)
 }
 
 func parseContractForm(r *http.Request) *models.Contract {

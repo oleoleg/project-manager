@@ -2,11 +2,9 @@ package handlers
 
 import (
 	"html/template"
-	"log"
 	"net/http"
 
 	"github.com/oleoleg/project-manager/internal/middleware"
-	"github.com/oleoleg/project-manager/internal/models"
 )
 
 type DashboardHandler struct {
@@ -23,12 +21,8 @@ func (h *DashboardHandler) Index(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
-	data := map[string]any{
-		"User":     u,
-		"RoleName": models.RoleName(u.RoleCode),
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := h.tmpl.ExecuteTemplate(w, "dashboard.html", data); err != nil {
-		log.Printf("template dashboard: %v", err)
-	}
+
+	data := BaseData(r, "Дашборд")
+
+	RenderTemplate(w, h.tmpl, "dashboard.html", data)
 }

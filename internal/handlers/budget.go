@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/oleoleg/project-manager/internal/db"
 	"github.com/oleoleg/project-manager/internal/middleware"
 	"github.com/oleoleg/project-manager/internal/models"
 	"github.com/oleoleg/project-manager/internal/services"
@@ -156,34 +155,29 @@ func (h *BudgetHandler) Index(w http.ResponseWriter, r *http.Request) {
 
 	cp, _ := h.cpSvc.GetByID(r.Context(), contract.CounterpartyID)
 
-	data := map[string]any{
-		"Title":              "Бюджет договора",
-		"User":               middleware.UserFromContext(r.Context()),
-		"Contract":           contract,
-		"Settings":           settings,
-		"HasSettings":        hasSettings,
-		"Snapshots":          snapshots,
-		"Snapshot":           activeSnapshot,
-		"PlanLines":          lines,
-		"Flash":              r.URL.Query().Get("flash"),
-		"WorkKinds":          workKinds,
-		"Counterparty":       cp,
-		"Costs":              displayCosts,
-		"StagesMap":          stagesMap,
-		"StageWorkKindsJSON": string(stageWorkKindsJSON),
-		"WorkKindsJSON":      string(workKindsJSON),
+	data := BaseData(r, "Бюджет договора")
+	data["Contract"] = contract
+	data["Settings"] = settings
+	data["HasSettings"] = hasSettings
+	data["Snapshots"] = snapshots
+	data["Snapshot"] = activeSnapshot
+	data["PlanLines"] = lines
+	data["Flash"] = r.URL.Query().Get("flash")
+	data["WorkKinds"] = workKinds
+	data["Counterparty"] = cp
+	data["Costs"] = displayCosts
+	data["StagesMap"] = stagesMap
+	data["StageWorkKindsJSON"] = string(stageWorkKindsJSON)
+	data["WorkKindsJSON"] = string(workKindsJSON)
 
-		// НОВЫЕ ПОЛЯ ДЛЯ ПАРТИАЛА:
-		"DisplayRows":  displayRows,
-		"IsReadOnly":   true,  // В просмотре всегда только чтение
-		"ShowTotals":   true,  // Показываем карточки
-		"ShowWarnings": false, // Скрываем предупреждения (или true, если нужно)
-		"ShowSettings": true,
-		"OverheadRate": settings.OverheadRate,
-	}
+	data["DisplayRows"] = displayRows
+	data["IsReadOnly"] = true    // В просмотре всегда только чтение
+	data["ShowTotals"] = true    // Показываем карточки
+	data["ShowWarnings"] = false // Скрываем предупреждения (или true, если нужно)
+	data["ShowSettings"] = true
+	data["OverheadRate"] = settings.OverheadRate
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.tmpl.ExecuteTemplate(w, "budget_plan.html", data)
+	RenderTemplate(w, h.tmpl, "budget_plan.html", data)
 }
 
 func (h *BudgetHandler) Generate(w http.ResponseWriter, r *http.Request) {
@@ -287,29 +281,22 @@ func (h *BudgetHandler) NewVersion(w http.ResponseWriter, r *http.Request) {
 
 	cp, _ := h.cpSvc.GetByID(r.Context(), contract.CounterpartyID)
 
-	data := map[string]any{
-		"Title":         "Новая версия бюджета",
-		"User":          middleware.UserFromContext(r.Context()),
-		"Contract":      contract,
-		"Counterparty":  cp,
-		"Settings":      settings,
-		"HasSettings":   hasSettings,
-		"OverheadRate":  settings.OverheadRate,
-		"DisplayRows":   displayRows,
-		"WorkKinds":     workKinds,
-		"Stages":        stages,
-		"WorkKindsJSON": string(workKindsJSON),
-		"IsReadOnly":    false,
-		"ShowTotals":    true,
-		"ShowWarnings":  true,
-		"ShowSettings":  true,
-	}
+	data := BaseData(r, "Новая версия бюджета")
+	data["Contract"] = contract
+	data["Counterparty"] = cp
+	data["Settings"] = settings
+	data["HasSettings"] = hasSettings
+	data["OverheadRate"] = settings.OverheadRate
+	data["DisplayRows"] = displayRows
+	data["WorkKinds"] = workKinds
+	data["Stages"] = stages
+	data["WorkKindsJSON"] = string(workKindsJSON)
+	data["IsReadOnly"] = false
+	data["ShowTotals"] = true
+	data["ShowWarnings"] = true
+	data["ShowSettings"] = true
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := h.tmpl.ExecuteTemplate(w, "budget_new.html", data); err != nil {
-		log.Printf("!!! ОШИБКА РЕНДЕРА budget_new.html: %v", err)
-		http.Error(w, err.Error(), 500)
-	}
+	RenderTemplate(w, h.tmpl, "budget_new.html", data)
 }
 
 func (h *BudgetHandler) SaveSettings(w http.ResponseWriter, r *http.Request) {
@@ -480,28 +467,25 @@ func (h *BudgetHandler) FactIndex(w http.ResponseWriter, r *http.Request) {
 
 	cp, _ := h.cpSvc.GetByID(r.Context(), contract.CounterpartyID)
 
-	data := map[string]any{
-		"Title":              "ФинФакт договора",
-		"User":               middleware.UserFromContext(r.Context()),
-		"Contract":           contract,
-		"Counterparty":       cp,
-		"FactLines":          lines,
-		"GroupedLines":       groupedLines,
-		"GroupOrder":         groupOrder,
-		"HasActivePlan":      hasActivePlan,
-		"WorkKinds":          workKinds,
-		"Flash":              r.URL.Query().Get("flash"),
-		"Warnings":           warnings,
-		"Stages":             stages,
-		"StageWorkKindsJSON": string(stageWorkKindsJSON),
-		"WorkKindsJSON":      string(workKindsJSON),
-		"FactCostRows":       factCostRows,
-		"FactMode":           factMode,
-		"OverheadRate":       settings.OverheadRate,
-	}
+	data := BaseData(r, "ФинФакт договора")
+	data["Contract"] = contract
+	data["Counterparty"] = cp
+	data["FactLines"] = lines
+	data["GroupedLines"] = groupedLines
+	data["GroupOrder"] = groupOrder
+	data["HasActivePlan"] = hasActivePlan
+	data["WorkKinds"] = workKinds
+	data["Flash"] = r.URL.Query().Get("flash")
+	data["Warnings"] = warnings
+	data["Stages"] = stages
+	data["StageWorkKindsJSON"] = string(stageWorkKindsJSON)
+	data["WorkKindsJSON"] = string(workKindsJSON)
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	h.tmpl.ExecuteTemplate(w, "budget_fact.html", data)
+	data["FactCostRows"] = factCostRows
+	data["FactMode"] = factMode
+	data["OverheadRate"] = settings.OverheadRate
+
+	RenderTemplate(w, h.tmpl, "budget_fact.html", data)
 }
 
 func (h *BudgetHandler) FactGenerate(w http.ResponseWriter, r *http.Request) {
@@ -544,48 +528,6 @@ func (h *BudgetHandler) FactUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.Redirect(w, r, "/contracts/"+contractID+"/budget/fact", http.StatusSeeOther)
-}
-
-func (h *BudgetHandler) FactSaveBatch(w http.ResponseWriter, r *http.Request) {
-	contractID := chi.URLParam(r, "id")
-	log.Printf("ПОЛУЧЕН ЗАПРОС НА СОХРАНЕНИЕ ФАКТА ДЛЯ %s", contractID)
-
-	var payload struct {
-		Lines []struct {
-			ID           string  `json:"id"`
-			FactIncome   float64 `json:"fact_income"`
-			FactExpense  float64 `json:"fact_expense"`
-			IsConfirmed  bool    `json:"is_confirmed"`
-			IsManualEdit bool    `json:"is_manual_edit"`
-		} `json:"lines"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		log.Printf("ОШИБКА ДЕКОДИРОВАНИЯ JSON: %v", err)
-		http.Error(w, "Bad request", http.StatusBadRequest)
-		return
-	}
-
-	var updates []db.FactUpdateData
-	for _, l := range payload.Lines {
-		updates = append(updates, db.FactUpdateData{
-			ID:           l.ID,
-			FactIncome:   l.FactIncome,
-			FactExpense:  l.FactExpense,
-			IsConfirmed:  l.IsConfirmed,
-			IsManualEdit: l.IsManualEdit,
-		})
-	}
-
-	if err := h.svc.UpdateFactLinesBatch(r.Context(), updates); err != nil {
-		log.Printf("ОШИБКА БД ПРИ СОХРАНЕНИИ: %v", err)
-		http.Error(w, "Error", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"status":"ok"}`))
 }
 
 func (h *BudgetHandler) FactSaveForm(w http.ResponseWriter, r *http.Request) {
@@ -989,20 +931,14 @@ func (h *BudgetHandler) PlanFactIndex(w http.ResponseWriter, r *http.Request) {
 		return wkList[i].Name < wkList[j].Name
 	})
 
-	data := map[string]any{
-		"Title":       "Сравнение План vs Факт",
-		"User":        middleware.UserFromContext(r.Context()),
-		"Contract":    contract,
-		"Summary":     summary,
-		"WorkKinds":   workKinds,
-		"GroupedByWK": wkList,
-		"FactMode":    factMode,
-	}
+	data := BaseData(r, "Сравнение План vs Факт")
+	data["Contract"] = contract
+	data["Summary"] = summary
+	data["WorkKinds"] = workKinds
+	data["GroupedByWK"] = wkList
+	data["FactMode"] = factMode
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := h.tmpl.ExecuteTemplate(w, "budget_compare.html", data); err != nil {
-		log.Printf("render budget_compare: %v", err)
-	}
+	RenderTemplate(w, h.tmpl, "budget_compare.html", data)
 }
 
 func (h *BudgetHandler) FactDeleteRow(w http.ResponseWriter, r *http.Request) {

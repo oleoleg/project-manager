@@ -47,8 +47,13 @@
     </label>
 
     <label>
+        Краткое имя *
+        <input type="text" name="short_name" value="{{ $c.ShortName }}" required title="Используется при отображении в списках">
+    </label>
+
+    <label>
         Ответственное лицо (главный РП по договору)
-        <small class="hint">Выбирается из активных пользователей. ФИО подставится автоматически.</small>
+        <small class="hint">Полный доступ к функциям управления будет предоставлен указанному пользователю.</small>
         <select name="responsible_user_id">
             <option value="">— не назначен —</option>
             {{ range .ActiveUsers }}
@@ -63,7 +68,7 @@
     <label>
         Статус
         <select name="status_code" required>
-            {{ range .Statuses }}
+            {{ range .ContractStatuses }}
                 <option value="{{ .Code }}" {{ if eq .Code $c.StatusCode }}selected{{ end }}>{{ .Code }} — {{ .Name }}</option>
             {{ end }}
         </select>
@@ -137,11 +142,6 @@
                 <option value="{{ .Code }}" {{ if eq .Code (deref $c.PlanScheduleStatus) }}selected{{ end }}>{{ .Name }}</option>
             {{ end }}
         </select>
-    </label>
-
-    <label>
-        Краткое имя
-        <input type="text" name="short_name" value="{{ $c.ShortName }}">
     </label>
 
     <label>

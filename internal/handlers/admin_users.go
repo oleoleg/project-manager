@@ -26,28 +26,6 @@ func NewAdminUserHandler(userSvc *services.UserService, tmpl *template.Template)
 	return &AdminUserHandler{userSvc: userSvc, tmpl: tmpl}
 }
 
-func (h *AdminUserHandler) commonData(r *http.Request, title string) map[string]any {
-	u := middleware.UserFromContext(r.Context())
-	data := map[string]any{
-		"Title": title,
-		"User":  u,
-		"RoleLabel": func(code string) string {
-			return models.RoleName(code)
-		},
-	}
-	if u != nil {
-		data["RoleName"] = models.RoleName(u.RoleCode)
-	}
-	return data
-}
-
-func (h *AdminUserHandler) render(w http.ResponseWriter, name string, data any) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := h.tmpl.ExecuteTemplate(w, name, data); err != nil {
-		log.Printf("template %s: %v", name, err)
-	}
-}
-
 // ---------- List ----------
 
 func (h *AdminUserHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -57,22 +35,23 @@ func (h *AdminUserHandler) List(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	data := h.commonData(r, "Пользователи")
+	data := BaseData(r, "Пользователи")
 	data["Users"] = users
 	data["Flash"] = r.URL.Query().Get("flash")
-	h.render(w, "admin_users_list.html", data)
+
+	RenderTemplate(w, h.tmpl, "admin_users_list.html", data)
 }
 
 // ---------- New / Create ----------
 
 func (h *AdminUserHandler) New(w http.ResponseWriter, r *http.Request) {
 	roles, _ := h.userSvc.ListRoles(r.Context())
-	data := h.commonData(r, "Новый пользователь")
+	data := BaseData(r, "Новый пользователь")
 	data["FormUser"] = &models.User{IsActive: true, Theme: "light"}
 	data["Roles"] = roles
 	data["IsNew"] = true
 	data["Error"] = ""
-	h.render(w, "admin_users_form.html", data)
+	RenderTemplate(w, h.tmpl, "admin_users_form.html", data)
 }
 
 func (h *AdminUserHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -178,7 +157,7 @@ func (h *AdminUserHandler) ToggleActive(w http.ResponseWriter, r *http.Request) 
 
 func (h *AdminUserHandler) renderFormWithError(w http.ResponseWriter, r *http.Request, u *models.User, isNew bool, errMsg string) {
 	roles, _ := h.userSvc.ListRoles(r.Context())
-	data := h.commonData(r, "Пользователь")
+	data := BaseData(r, "Пользователь")
 	data["FormUser"] = u
 	data["Roles"] = roles
 	data["IsNew"] = isNew
@@ -186,7 +165,7 @@ func (h *AdminUserHandler) renderFormWithError(w http.ResponseWriter, r *http.Re
 	if errMsg != "" {
 		w.WriteHeader(http.StatusBadRequest)
 	}
-	h.render(w, "admin_users_form.html", data)
+	RenderTemplate(w, h.tmpl, "admin_users_form.html", data)
 }
 
 func humanizeUserError(err error) string {

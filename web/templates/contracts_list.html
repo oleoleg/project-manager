@@ -27,7 +27,7 @@
         </button>
         
         <div id="status-dropdown-menu" style="display: none; position: absolute; z-index: 100; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 10px; min-width: 220px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-            {{ range .Statuses }}
+            {{ range .ContractStatuses }}
             <label style="display: block; margin-bottom: 5px; cursor: pointer; white-space: nowrap;">
                 <input type="checkbox" class="status-checkbox" value="{{ .Code }}"> {{ .Code }} — {{ .Name }}
             </label>
@@ -86,9 +86,9 @@
             <td><a href="/contracts/{{ .ID }}">{{ .ID }}</a></td>
             <td>{{ .ContractNumber }}</td>
             <td>{{ if .ContractDate }}{{ .ContractDate.Format "02.01.2006" }}{{ end }}</td>
-            <td>{{ .WorkName }}</td>
+            <td>{{ .ShortName }}</td>
             <td><a href="/counterparties/{{ .CounterpartyID }}">{{ .CounterpartyID }} — {{ counterpartyName $.Counterparties .CounterpartyID }}</a></td>
-            <td>{{ .StatusCode }} — {{ statusName $.Statuses .StatusCode }}</td>
+            <td>{{ .StatusCode }} — {{ statusName $.ContractStatuses .StatusCode }}</td>
             <td>{{ call $.TypeNameFunc .ContractType }}</td>
             <td class="actions">
                 <a href="/contracts/{{ .ID }}" class="btn btn-sm">Открыть</a>

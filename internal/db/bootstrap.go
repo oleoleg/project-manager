@@ -48,3 +48,28 @@ func BootstrapAdmin(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config)
 	log.Printf("bootstrap: created admin user %q (id=%d)", u.Username, u.ID)
 	return nil
 }
+
+// BootstrapRoles заполняет справочник ролей базовыми значениями.
+// Вызывается один раз при старте, до BootstrapAdmin.
+func BootstrapRoles(ctx context.Context, pool *pgxpool.Pool) error {
+	roles := []struct {
+		code, name, desc string
+	}{
+		{"admin", "Администратор", "Создаёт пользователей, полный доступ"},
+		{"rp_chief", "Начальник РП", "Полный доступ ко всему"},
+		{"director", "Директор", "Строит графики, видит статистику по фирме"},
+		{"rp", "Руководитель проектов", "Управляет своими проектами и персоналом"},
+		{"accountant", "Бухгалтер", "Доступ на чтение ко всему"},
+	}
+
+	for _, r := range roles {
+		_, err := pool.Exec(ctx,
+			`INSERT INTO roles (code, name, description) VALUES ($1, $2, $3) ON CONFLICT (code) DO NOTHING`,
+			r.code, r.name, r.desc,
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}

@@ -1,3 +1,0 @@
-DROP TABLE IF EXISTS act_attachments;
-DROP TABLE IF EXISTS act_stages;
-DROP TABLE IF EXISTS acts;

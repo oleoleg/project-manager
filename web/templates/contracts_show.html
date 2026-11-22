@@ -129,12 +129,7 @@
                    class="btn btn-sm">Развернуть стоимости</a>
             {{ end }}
 
-            {{ if or
-                (eq .User.RoleCode "admin")
-                (eq .User.RoleCode "rp_chief")
-                (eq .User.RoleCode "director")
-                (and (eq .User.RoleCode "rp") .Responsible (eq .Responsible.ID .User.ID))
-            }}
+            {{ if .CanEdit }}
                 <a href="/contracts/{{ $c.ID }}/stages" class="btn btn-sm">Редактировать</a>
             {{ end }}
             <button type="button" class="toggle-btn" aria-expanded="true"
@@ -238,12 +233,7 @@
     <header class="collapsible-header">
         <h3>Реквизиты договора</h3>
         <div class="collapsible-actions">
-            {{ if or
-                (eq .User.RoleCode "admin")
-                (eq .User.RoleCode "rp_chief")
-                (eq .User.RoleCode "director")
-                (and (eq .User.RoleCode "rp") .Responsible (eq .Responsible.ID .User.ID))
-            }}
+            {{ if .CanEdit }}
                 <a href="/contracts/{{ $c.ID }}/edit" class="btn btn-sm">Редактировать</a>
             {{ end }}
             <button type="button" class="toggle-btn" aria-expanded="true"

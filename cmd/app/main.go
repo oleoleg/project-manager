@@ -109,6 +109,10 @@ func startHTTPServer(stopCh <-chan struct{}) {
 	}
 	defer pool.Close()
 
+	if err := db.BootstrapRoles(ctx, pool); err != nil {
+		log.Fatalf("bootstrap roles: %v", err)
+	}
+
 	if err := db.BootstrapAdmin(ctx, pool, cfg); err != nil {
 		log.Fatalf("bootstrap admin: %v", err)
 	}
@@ -260,7 +264,6 @@ func startHTTPServer(stopCh <-chan struct{}) {
 	// =====================================================
 	// 7. Хендлеры
 	// =====================================================
-	healthH := handlers.NewHealthHandler(cfg.AppEnv)
 	authH := handlers.NewAuthHandler(authSvc, sessMgr, tmpl)
 	dashH := handlers.NewDashboardHandler(tmpl)
 	settingsH := handlers.NewSettingsHandler(userSvc, tmpl)
@@ -286,7 +289,6 @@ func startHTTPServer(stopCh <-chan struct{}) {
 	fs := http.FileServer(http.Dir(filepath.Join(baseDir, "web", "static")))
 	r.Handle("/static/*", http.StripPrefix("/static/", fs))
 
-	r.Get("/health", healthH.Health)
 	r.Get("/login", authH.LoginPage)
 	r.Post("/login", authH.LoginSubmit)
 	r.Post("/logout", authH.Logout)
@@ -313,36 +315,25 @@ func startHTTPServer(stopCh <-chan struct{}) {
 		r.Post("/settings/check-path", settingsH.SaveCheckPath)
 
 		r.Get("/counterparties", counterpartyH.List)
-		r.Get("/counterparties/new", counterpartyH.New)
 		r.Get("/counterparties/{id}", counterpartyH.Show)
-		r.Get("/counterparties/{id}/edit", counterpartyH.Edit)
 
 		r.Get("/contracts", contractH.List)
-		r.Get("/contracts/new", contractH.New)
-		r.Post("/contracts", contractH.Create)
 		r.Get("/contracts/{id}", contractH.Show)
-		r.Get("/contracts/{id}/edit", contractH.Edit)
 		r.Get("/contracts/{id}/open-folder", contractH.OpenFolder)
-
 		r.Get("/contracts/{id}/stages", stageH.List)
 		r.Get("/contracts/{id}/stages/costs", stageH.CostsIndex)
-		r.Get("/contracts/{id}/stages/new", stageH.New)
-		r.Get("/contracts/{id}/stages/{guid}/edit", stageH.Edit)
 
 		// Акты этапа (JSON API для модального окна)
 		r.Get("/contracts/{id}/stages/{guid}/acts.json", actH.ListJSON)
 		r.Get("/contracts/{id}/stages/{guid}/acts/sum.json", actH.SumJSON)
 		r.Get("/contracts/{id}/stages/{guid}/act-sum.json", stageH.StageActSumJSON)
 
-		// Формы создания/редактирования акта
-		r.Get("/contracts/{id}/stages/{guid}/acts/new", actH.NewForm)
-		r.Get("/contracts/{id}/acts/{actGuid}/edit", actH.EditForm)
+		// Формы  акта
 		r.Get("/contracts/{id}/acts/{actGuid}/open", actH.OpenFile)
 
 		// Приложения акта
-		r.Get("/contracts/{id}/acts/{actGuid}/attachments/new", actH.NewAttachmentForm)
 		r.Get("/contracts/{id}/attachments/{attGuid}/open", actH.OpenAttachment)
-		r.Get("/contracts/{id}/attachments/{attGuid}/edit", actH.EditAttachmentForm)
+
 		r.Get("/api/picked-path", actH.PickedPath)
 
 		// Рапорт сотрудников
@@ -350,40 +341,18 @@ func startHTTPServer(stopCh <-chan struct{}) {
 
 		r.Group(func(r chi.Router) {
 			r.Use(mw.RequireRole("admin", "rp_chief", "director", "rp"))
-			r.Post("/counterparties", counterpartyH.Create)
-			r.Post("/counterparties/{id}", counterpartyH.Update)
-			r.Post("/contracts/{id}/stages/{guid}/acts", actH.Create)
-			r.Post("/contracts/{id}/stages/{guid}/acts/toggle-manual", actH.ToggleStageManual)
-			r.Post("/contracts/{id}/stages/{guid}/acts/set-closed", actH.SetClosed)
-			r.Post("/contracts/{id}/acts/{actGuid}", actH.Update)
-			r.Post("/contracts/{id}/acts/{actGuid}/delete", actH.Delete)
-			r.Post("/contracts/{id}/acts/{actGuid}/attachments", actH.CreateAttachment)
-			r.Post("/contracts/{id}/attachments/{attGuid}", actH.UpdateAttachment)
-			r.Post("/contracts/{id}/attachments/{attGuid}/delete", actH.DeleteAttachment)
-			r.Post("/contracts/{id}/stages/costs/save", stageH.CostsSave)
+
+			//Создание нового договора
+			r.Get("/contracts/new", contractH.New)
+			r.Post("/contracts", contractH.Create)
 
 			// Бюджет (План)
 			r.Get("/contracts/{id}/budget", budgetH.Index)
-			r.Get("/contracts/{id}/budget/new", budgetH.NewVersion)
-			r.Post("/contracts/{id}/budget/generate", budgetH.Generate)
-			r.Post("/contracts/{id}/budget/settings", budgetH.SaveSettings)
-			r.Post("/contracts/{id}/budget/snapshots/{snapshotID}/delete", budgetH.DeleteSnapshot)
-			r.Post("/contracts/{id}/budget/snapshots/{snapshotID}/activate", budgetH.ActivateSnapshot)
 			r.Get("/contracts/{id}/budget/charts.json", budgetH.GetSummaryChart)
 			r.Get("/contracts/{id}/budget/timeline.json", budgetH.GetTimelineChart)
 
 			// Бюджет (Факт)
 			r.Get("/contracts/{id}/budget/fact", budgetH.FactIndex)
-			r.Post("/contracts/{id}/budget/fact/generate", budgetH.FactGenerate)
-			r.Post("/contracts/{id}/budget/fact/delete", budgetH.FactDelete)
-			r.Post("/contracts/{id}/budget/fact/{factID}/update", budgetH.FactUpdate)
-			//r.Post("/contracts/{id}/budget/fact/save", budgetH.FactSaveBatch)
-			r.Post("/contracts/{id}/budget/fact/save-form", budgetH.FactSaveForm)
-			r.Post("/contracts/{id}/budget/fact/delete-row", budgetH.FactDeleteRow)
-			r.Post("/contracts/{id}/budget/fact/auto-confirm", budgetH.FactAutoConfirmAutoRows)
-			r.Post("/contracts/{id}/budget/fact/append", budgetH.FactAppendFromPlan)
-			r.Post("/contracts/{id}/budget/fact/append-preview", budgetH.FactAppendPreview)
-			r.Post("/contracts/{id}/budget/fact/append-selected", budgetH.FactAppendSelected)
 			r.Get("/contracts/{id}/budget/fact/charts.json", budgetH.FactGetSummaryChart)
 			r.Get("/contracts/{id}/budget/fact/timeline.json", budgetH.FactGetTimelineChart)
 
@@ -402,20 +371,61 @@ func startHTTPServer(stopCh <-chan struct{}) {
 					ownerCheck,
 				)(next)
 			})
+			r.Get("/contracts/{id}/edit", contractH.Edit)
 			r.Post("/contracts/{id}", contractH.Update)
+
 			r.Post("/contracts/{id}/stages", stageH.Create)
 			r.Post("/contracts/{id}/stages/{guid}", stageH.Update)
 			r.Post("/contracts/{id}/stages/{guid}/move", stageH.Move)
-		})
-
-		r.Group(func(r chi.Router) {
-			r.Use(mw.RequireRole("admin", "rp_chief"))
-			r.Post("/contracts/{id}/delete", contractH.Delete)
 			r.Post("/contracts/{id}/stages/{guid}/delete", stageH.Delete)
+			r.Get("/contracts/{id}/stages/new", stageH.New)
+			r.Get("/contracts/{id}/stages/{guid}/edit", stageH.Edit)
+
+			r.Get("/contracts/{id}/stages/{guid}/acts/new", actH.NewForm)
+			r.Post("/contracts/{id}/stages/{guid}/acts", actH.Create)
+			r.Post("/contracts/{id}/stages/{guid}/acts/toggle-manual", actH.ToggleStageManual)
+			r.Post("/contracts/{id}/stages/{guid}/acts/set-closed", actH.SetClosed)
+			r.Get("/contracts/{id}/acts/{actGuid}/edit", actH.EditForm)
+			r.Post("/contracts/{id}/acts/{actGuid}", actH.Update)
+			r.Post("/contracts/{id}/acts/{actGuid}/delete", actH.Delete)
+			r.Get("/contracts/{id}/acts/{actGuid}/attachments/new", actH.NewAttachmentForm)
+			r.Post("/contracts/{id}/acts/{actGuid}/attachments", actH.CreateAttachment)
+			r.Get("/contracts/{id}/attachments/{attGuid}/edit", actH.EditAttachmentForm)
+			r.Post("/contracts/{id}/attachments/{attGuid}", actH.UpdateAttachment)
+			r.Post("/contracts/{id}/attachments/{attGuid}/delete", actH.DeleteAttachment)
+
+			r.Post("/contracts/{id}/stages/costs/save", stageH.CostsSave) //Поему этот руот лишний и нужно будет удалить
+
+			r.Get("/contracts/{id}/budget/new", budgetH.NewVersion)
+			r.Post("/contracts/{id}/budget/generate", budgetH.Generate)
+			r.Post("/contracts/{id}/budget/settings", budgetH.SaveSettings)
+			r.Post("/contracts/{id}/budget/snapshots/{snapshotID}/delete", budgetH.DeleteSnapshot)
+			r.Post("/contracts/{id}/budget/snapshots/{snapshotID}/activate", budgetH.ActivateSnapshot)
+
+			r.Post("/contracts/{id}/budget/fact/generate", budgetH.FactGenerate)
+			r.Post("/contracts/{id}/budget/fact/delete", budgetH.FactDelete)
+			r.Post("/contracts/{id}/budget/fact/{factID}/update", budgetH.FactUpdate)
+			r.Post("/contracts/{id}/budget/fact/save-form", budgetH.FactSaveForm)
+			r.Post("/contracts/{id}/budget/fact/delete-row", budgetH.FactDeleteRow)
+			r.Post("/contracts/{id}/budget/fact/auto-confirm", budgetH.FactAutoConfirmAutoRows)
+			r.Post("/contracts/{id}/budget/fact/append", budgetH.FactAppendFromPlan)
+			r.Post("/contracts/{id}/budget/fact/append-preview", budgetH.FactAppendPreview)
+			r.Post("/contracts/{id}/budget/fact/append-selected", budgetH.FactAppendSelected)
 		})
 
 		r.Group(func(r chi.Router) {
 			r.Use(mw.RequireRole("admin", "rp_chief", "director"))
+
+			r.Get("/counterparties/new", counterpartyH.New)
+			r.Post("/counterparties", counterpartyH.Create)
+
+			r.Get("/counterparties/{id}/edit", counterpartyH.Edit)
+			r.Post("/counterparties/{id}", counterpartyH.Update)
+
+		})
+
+		r.Group(func(r chi.Router) {
+			r.Use(mw.RequireRole("admin", "director"))
 			r.Post("/contracts/{id}/budget/snapshots/{snapshotID}/approve", budgetH.ApproveSnapshot)
 			r.Post("/contracts/{id}/budget/snapshots/{snapshotID}/unapprove", budgetH.UnapproveSnapshot)
 		})
@@ -430,7 +440,7 @@ func startHTTPServer(stopCh <-chan struct{}) {
 			r.Post("/admin/users/{id}/password", adminUserH.ChangePassword)
 			r.Post("/admin/users/{id}/toggle", adminUserH.ToggleActive)
 			r.Post("/counterparties/{id}/delete", counterpartyH.Delete)
-
+			r.Post("/contracts/{id}/delete", contractH.Delete)
 		})
 	})
 

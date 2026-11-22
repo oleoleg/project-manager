@@ -14,7 +14,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/oleoleg/project-manager/internal/db"
-	"github.com/oleoleg/project-manager/internal/middleware"
 	"github.com/oleoleg/project-manager/internal/models"
 	"github.com/oleoleg/project-manager/internal/services"
 )
@@ -44,22 +43,6 @@ func NewStageHandler(
 	}
 }
 
-func (h *StageHandler) commonData(r *http.Request, title string) map[string]any {
-	u := middleware.UserFromContext(r.Context())
-	data := map[string]any{"Title": title, "User": u}
-	if u != nil {
-		data["RoleName"] = models.RoleName(u.RoleCode)
-	}
-	return data
-}
-
-func (h *StageHandler) render(w http.ResponseWriter, name string, data any) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := h.tmpl.ExecuteTemplate(w, name, data); err != nil {
-		log.Printf("template %s: %v", name, err)
-	}
-}
-
 // ---------- List ----------
 
 func (h *StageHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -84,7 +67,6 @@ func (h *StageHandler) List(w http.ResponseWriter, r *http.Request) {
 	statuses := models.GetStageStatuses()
 	workKinds, _ := h.svc.WorkKinds(r.Context())
 	totals, _ := h.svc.Totals(r.Context(), contractID)
-	cp, _ := h.cpSvc.GetByID(r.Context(), contract.CounterpartyID)
 	costTotals, _ := h.budgetSvc.GetPlanCostTotalsByStage(r.Context(), contractID)
 	actCounts, _ := h.actSvc.CountByContract(r.Context(), contractID)
 	factCostTotals, _ := h.budgetSvc.GetFactCostTotalsByStage(r.Context(), contractID)
@@ -92,14 +74,14 @@ func (h *StageHandler) List(w http.ResponseWriter, r *http.Request) {
 	factConfirmed, _ := h.budgetSvc.GetFactConfirmedTotal(r.Context(), contractID)
 	showDetails := r.URL.Query().Get("details") == "1"
 
-	data := h.commonData(r, "Этапы договора "+contractID)
-	data["Contract"] = contract
+	data := ContractBaseData(r, "Этапы договора "+contractID, contract, h.cpSvc)
+	data["CanEdit"] = CanEditContract(r, contract)
+
 	data["Stages"] = stages
-	data["Statuses"] = statuses
+	data["StageStatuses"] = statuses
 	data["WorkKinds"] = workKinds
 	data["Totals"] = totals
-	data["Counterparty"] = cp
-	data["StatusName"] = func(code int16) string { return findStageStatusName(statuses, code) }
+	data["StageStatusName"] = func(code int16) string { return findStageStatusName(statuses, code) }
 	data["WorkKindName"] = func(code string) string { return code }
 	data["Flash"] = r.URL.Query().Get("flash")
 	data["CostTotals"] = costTotals
@@ -137,7 +119,7 @@ func (h *StageHandler) List(w http.ResponseWriter, r *http.Request) {
 	data["CostTotals"] = costTotals
 	data["ShowDetails"] = showDetails
 
-	h.render(w, "stages_list.html", data)
+	RenderTemplate(w, h.tmpl, "stages_list.html", data)
 }
 
 // ---------- New / Create ----------
@@ -157,18 +139,18 @@ func (h *StageHandler) New(w http.ResponseWriter, r *http.Request) {
 	workKinds, _ := h.svc.WorkKinds(r.Context())
 	nextOrder, _ := h.svc.Totals(r.Context(), contractID)
 
-	data := h.commonData(r, "Новый этап")
-	data["Contract"] = contract
+	data := ContractBaseData(r, "Новый этап", contract, h.cpSvc)
 	data["Stage"] = &models.Stage{
 		ContractID: contractID,
 		RowOrder:   nextOrder.Count + 1,
 		StatusCode: 0,
 	}
-	data["Statuses"] = models.GetStageStatuses()
+	data["StageStatuses"] = models.GetStageStatuses()
 	data["WorkKinds"] = workKinds
 	data["IsNew"] = true
 	data["Error"] = ""
-	h.render(w, "stages_form.html", data)
+
+	RenderTemplate(w, h.tmpl, "stages_form.html", data)
 }
 
 func (h *StageHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -325,11 +307,10 @@ func (h *StageHandler) renderFormWithError(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	data := h.commonData(r, "Этап")
-	data["Contract"] = contract
+	data := ContractBaseData(r, "Этап", contract, h.cpSvc)
 	data["Stage"] = st
 	data["Costs"] = costs
-	data["Statuses"] = models.GetStageStatuses()
+	data["StageStatuses"] = models.GetStageStatuses()
 	data["WorkKinds"] = workKinds
 	data["CostWorkKinds"] = costWorkKinds
 	data["IsNew"] = isNew
@@ -337,7 +318,8 @@ func (h *StageHandler) renderFormWithError(w http.ResponseWriter, r *http.Reques
 	if errMsg != "" {
 		w.WriteHeader(http.StatusBadRequest)
 	}
-	h.render(w, "stages_form.html", data)
+
+	RenderTemplate(w, h.tmpl, "stages_form.html", data)
 }
 
 func parseStageForm(r *http.Request) (*models.Stage, error) {
@@ -421,7 +403,7 @@ func parseStageCostsForm(r *http.Request) []models.StageCost {
 	subs := r.Form["cost_subcontract"]
 	comms := r.Form["cost_commission"]
 	others := r.Form["cost_other"]
-	calcFields := r.Form["cost_calc_field[]"]
+	calcFields := r.Form["cost_calc_field"]
 
 	n := len(workKinds)
 	res := make([]models.StageCost, 0, n)
@@ -570,7 +552,7 @@ func (h *StageHandler) CostsIndex(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	data := h.commonData(r, "Затраты этапов договора "+contractID)
+	data := BaseData(r, "Затраты этапов договора "+contractID)
 	data["Contract"] = contract
 	data["DisplayRows"] = displayRows
 	data["Stages"] = stages
@@ -578,7 +560,7 @@ func (h *StageHandler) CostsIndex(w http.ResponseWriter, r *http.Request) {
 	data["OverheadRate"] = overheadRate
 	data["HasActivePlan"] = hasActivePlan
 
-	h.render(w, "stage_costs_index.html", data)
+	RenderTemplate(w, h.tmpl, "stage_costs_index.html", data)
 }
 
 func (h *StageHandler) CostsSave(w http.ResponseWriter, r *http.Request) {

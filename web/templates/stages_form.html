@@ -3,19 +3,34 @@
 {{ $s := .Stage }}
 {{ $isNew := .IsNew }}
 
-<p class="back-link">
-    <a href="/contracts/{{ .Contract.ID }}/stages">← Назад к этапам</a>
-</p>
-
+ 
 <div class="page-header">
-    <h2>{{ if $isNew }}Новый этап{{ else }}Этап: {{ $s.Name }}{{ end }}</h2>
+    <div class="contract-title">
+        <h2>
+            {{ if $isNew }}
+                Новый этап. 
+            {{ else }}
+                Этап: {{ $s.Name }}. 
+            {{ end }}
+            {{ if .Contract.ContractNumber }}
+               Договор № {{ .Contract.ContractNumber }} от {{ if .Contract.ContractDate }}{{ .Contract.ContractDate.Format "02.01.2006" }}{{ else }}—{{ end }}
+            {{ end }}
+            <span class="contract-id">ID: {{ .Contract.ID }}</span>
+        </h2>
+        <p class="contract-subtitle">
+            {{ if .Contract.WorkName }}{{ .Contract.WorkName }}{{ else }}<span class="muted">наименование не указано</span>{{ end }}
+            {{ if .Counterparty }}
+                &nbsp;·&nbsp;
+                <a href="/counterparties/{{ .Counterparty.ID }}">{{ .Counterparty.Name }}</a>
+            {{ end }}
+        </p>
+        <div class="breadcrumb" style="margin-bottom: 16px;">
+            <a href="/contracts/{{ .Contract.ID }}">Договор {{ .Contract.ID }}</a>
+            &rarr; <a href="/contracts/{{ .Contract.ID }}/stages">Этапы</a>
+            &rarr; <span style="color: var(--text-soft);">{{ if $isNew }}Новый этап{{ else }}Редактирование{{ end }}</span>
+        </div>
+    </div>
 </div>
-
-<p class="breadcrumb">
-    <a href="/contracts">Договоры</a> →
-    <a href="/contracts/{{ .Contract.ID }}">{{ .Contract.ID }}</a> →
-    <a href="/contracts/{{ .Contract.ID }}/stages">Этапы</a>
-</p>
 
 {{ if .Error }}<div class="error">{{ .Error }}</div>{{ end }}
 
@@ -105,7 +120,7 @@
     <label>
         Статус
         <select name="status_code" required>
-            {{ range .Statuses }}
+            {{ range .StageStatuses }}
                 <option value="{{ .Code }}" {{ if eq .Code $s.StatusCode }}selected{{ end }}>{{ .Code }} — {{ .Name }}</option>
             {{ end }}
         </select>

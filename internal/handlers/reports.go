@@ -12,7 +12,6 @@ import (
 
 	"github.com/oleoleg/project-manager/internal/clients"
 	"github.com/oleoleg/project-manager/internal/db"
-	"github.com/oleoleg/project-manager/internal/middleware"
 	"github.com/oleoleg/project-manager/internal/models"
 	"github.com/oleoleg/project-manager/internal/services"
 )
@@ -106,7 +105,7 @@ func (h *ReportsHandler) Index(w http.ResponseWriter, r *http.Request) {
 	contracts, _ := h.contractSvc.List(r.Context(), db.ContractFilter{})
 
 	// 4. Данные для шаблона
-	data := h.commonData(r, "Рапорт сотрудников")
+	data := BaseData(r, "Рапорт сотрудников")
 	data["Reports"] = page.Rows
 	data["Total"] = page.Total
 	data["Limit"] = page.Limit
@@ -136,15 +135,10 @@ func (h *ReportsHandler) Index(w http.ResponseWriter, r *http.Request) {
 	data["Employees"] = dict.Users
 	data["Departments"] = dict.Departments
 	data["WorkKinds"] = models.WorkKinds
-
 	data["Flash"] = q.Get("flash")
 	data["UpdateError"] = q.Get("update_error")
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := h.tmpl.ExecuteTemplate(w, "reports.html", data); err != nil {
-		log.Printf("render reports.html: %v", err)
-		http.Error(w, "Ошибка рендера: "+err.Error(), http.StatusInternalServerError)
-	}
+	RenderTemplate(w, h.tmpl, "reports.html", data)
 }
 
 func reportsQueryString(q url.Values) string {
@@ -209,18 +203,6 @@ func (h *ReportsHandler) UpdateMappings(w http.ResponseWriter, r *http.Request) 
 		sep = "&"
 	}
 	http.Redirect(w, r, referer+sep+"flash="+urlQueryEscape(msg), http.StatusSeeOther)
-}
-
-func (h *ReportsHandler) commonData(r *http.Request, title string) map[string]any {
-	u := middleware.UserFromContext(r.Context())
-	data := map[string]any{
-		"Title": title,
-		"User":  u,
-	}
-	if u != nil {
-		data["RoleName"] = models.RoleName(u.RoleCode)
-	}
-	return data
 }
 
 // --- мелкие хелперы (можно вынести в util, если уже есть) ---

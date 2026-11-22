@@ -11,7 +11,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/oleoleg/project-manager/internal/db"
-	"github.com/oleoleg/project-manager/internal/middleware"
 	"github.com/oleoleg/project-manager/internal/models"
 	"github.com/oleoleg/project-manager/internal/services"
 )
@@ -23,26 +22,6 @@ type CounterpartyHandler struct {
 
 func NewCounterpartyHandler(svc *services.CounterpartyService, tmpl *template.Template) *CounterpartyHandler {
 	return &CounterpartyHandler{svc: svc, tmpl: tmpl}
-}
-
-// commonData — общие поля для layout (User, RoleName, Title).
-func (h *CounterpartyHandler) commonData(r *http.Request, title string) map[string]any {
-	u := middleware.UserFromContext(r.Context())
-	data := map[string]any{
-		"Title": title,
-		"User":  u,
-	}
-	if u != nil {
-		data["RoleName"] = models.RoleName(u.RoleCode)
-	}
-	return data
-}
-
-func (h *CounterpartyHandler) render(w http.ResponseWriter, name string, data any) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := h.tmpl.ExecuteTemplate(w, name, data); err != nil {
-		log.Printf("template %s: %v", name, err)
-	}
 }
 
 // ---------- List ----------
@@ -57,11 +36,11 @@ func (h *CounterpartyHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := h.commonData(r, "Контрагенты")
+	data := BaseData(r, "Контрагенты")
 	data["List"] = list
 	data["Search"] = search
 	data["Flash"] = r.URL.Query().Get("flash")
-	h.render(w, "counterparties_list.html", data)
+	RenderTemplate(w, h.tmpl, "counterparties_list.html", data)
 }
 
 // ---------- Show ----------
@@ -79,19 +58,19 @@ func (h *CounterpartyHandler) Show(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := h.commonData(r, "Контрагент "+c.ID)
+	data := BaseData(r, "Контрагент "+c.ID)
 	data["Counterparty"] = c
-	h.render(w, "counterparties_show.html", data)
+	RenderTemplate(w, h.tmpl, "counterparties_show.html", data)
 }
 
 // ---------- New / Create ----------
 
 func (h *CounterpartyHandler) New(w http.ResponseWriter, r *http.Request) {
-	data := h.commonData(r, "Новый контрагент")
+	data := BaseData(r, "Новый контрагент")
 	data["Counterparty"] = &models.Counterparty{}
 	data["IsNew"] = true
 	data["Error"] = ""
-	h.render(w, "counterparties_form.html", data)
+	RenderTemplate(w, h.tmpl, "counterparties_form.html", data)
 }
 
 func (h *CounterpartyHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -100,12 +79,12 @@ func (h *CounterpartyHandler) Create(w http.ResponseWriter, r *http.Request) {
 	err := h.svc.Create(r.Context(), c)
 	if err != nil {
 		msg := humanizeCounterpartyError(err)
-		data := h.commonData(r, "Новый контрагент")
+		data := BaseData(r, "Новый контрагент")
 		data["Counterparty"] = c
 		data["IsNew"] = true
 		data["Error"] = msg
 		w.WriteHeader(http.StatusBadRequest)
-		h.render(w, "counterparties_form.html", data)
+		RenderTemplate(w, h.tmpl, "counterparties_form.html", data)
 		return
 	}
 
@@ -127,11 +106,11 @@ func (h *CounterpartyHandler) Edit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := h.commonData(r, "Редактирование "+c.ID)
+	data := BaseData(r, "Редактирование "+c.ID)
 	data["Counterparty"] = c
 	data["IsNew"] = false
 	data["Error"] = ""
-	h.render(w, "counterparties_form.html", data)
+	RenderTemplate(w, h.tmpl, "counterparties_form.html", data)
 }
 
 func (h *CounterpartyHandler) Update(w http.ResponseWriter, r *http.Request) {
@@ -142,12 +121,12 @@ func (h *CounterpartyHandler) Update(w http.ResponseWriter, r *http.Request) {
 	err := h.svc.Update(r.Context(), c)
 	if err != nil {
 		msg := humanizeCounterpartyError(err)
-		data := h.commonData(r, "Редактирование "+c.ID)
+		data := BaseData(r, "Редактирование "+c.ID)
 		data["Counterparty"] = c
 		data["IsNew"] = false
 		data["Error"] = msg
 		w.WriteHeader(http.StatusBadRequest)
-		h.render(w, "counterparties_form.html", data)
+		RenderTemplate(w, h.tmpl, "counterparties_form.html", data)
 		return
 	}
 

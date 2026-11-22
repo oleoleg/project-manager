@@ -1,1 +1,0 @@
-ALTER TABLE stage_costs DROP COLUMN IF EXISTS fot_ratio;
