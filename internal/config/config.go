@@ -56,7 +56,7 @@ func Load() (*Config, error) {
 		BootstrapAdminPassword: getEnv("BOOTSTRAP_ADMIN_PASSWORD", ""),
 		BootstrapAdminFullName: getEnv("BOOTSTRAP_ADMIN_FULLNAME", "Администратор"),
 
-		ReportsAPIURL: getEnv("REPORTS_API_URL", "http://192.168.0.200:8000/reports/api/database"),
+		ReportsAPIURL: getEnv("REPORTS_API_URL", "http://192.168.0.200:8005/reports/api/database"),
 	}
 
 	if _, err := strconv.Atoi(cfg.HTTPPort); err != nil {

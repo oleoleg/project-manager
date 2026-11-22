@@ -8,7 +8,7 @@
 - Даты/время в формате `YYYY-MM-DDTHH:MM:SS` (локальное время источника, без таймзоны), например `2024-01-16T09:00:00`.
 - Пагинация: `limit` (по умолчанию `1000`, максимум `5000`), `offset` (по умолчанию `0`).
 - Сортировка `Reports` — по `id ASC` (для стабильной пагинации).
-- API только на чтение (GET), без аутентификации.
+- API только на чтение (GET), без аутентификации. Но можно POST где будем искать по Reports.id  и перезаписывать только два поля work_kind и prj_stage
 
 Устаревшие поля НЕ отдавать: `disable`, `mission_on`, `mission_place`, `mission_road`, `password`.
 
@@ -154,3 +154,20 @@
 - `id` — `department.id`.
 - `department` — `department.department`.
 - `work_kind` — `department.work_kind_default`.
+
+
+## 6) POST /reports/update
+
+Обновить только work_kind и prj_stage (остальное оставить)
+
+Запрос:
+массив объектов {"id": ..., "work_kind": ..., "prj_stage": ...}
+
+Ответ:
+```
+{
+  "updated": 2,
+  "failed": [ { "id": 12345, "error": "not found" } ]
+}
+```
+

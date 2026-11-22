@@ -3,24 +3,50 @@ package services
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/oleoleg/project-manager/internal/clients"
-	"github.com/oleoleg/project-manager/internal/db"
-	"github.com/oleoleg/project-manager/internal/models"
 )
 
+const reportDateTimeLayout = "2006-01-02T15:04:05"
+
 // =====================================================
-// 1. Логика расчета табеля (Worklog)
+// 1. Расчёт строки табеля (на лету, не хранится)
 // =====================================================
 
-// BuildWorklogRow рассчитывает строку табеля по сырой записи.
-func BuildWorklogRow(r models.EmployeeReport) models.WorklogRow {
-	raw := r.EndTime.Sub(r.StartTime).Hours()
+// WorklogRow — расчётная строка табеля. Соответствует логике MainExport источника.
+type WorklogRow struct {
+	SourceID       int64
+	ReportDate     time.Time
+	Weekday        string
+	StartTime      time.Time
+	EndTime        time.Time
+	Hours          float64
+	Overwork       float64
+	Pause          int
+	Place          string // WorkTypeName
+	PrjID          string
+	Description    string
+	EmployeeName   string
+	DepartmentName string
+	WorkKind       *string
+	StageNumber    *string
+}
+
+// BuildWorklogRow собирает WorklogRow из сырой записи и разрешённых справочников.
+func BuildWorklogRow(
+	it clients.ReportItem,
+	start, end time.Time,
+	workTypeName string,
+	calculateHours bool,
+	employeeName, departmentName string,
+) WorklogRow {
+	raw := end.Sub(start).Hours()
 
 	var hours, overwork float64
 	var pause int
-	if r.CalculateHours {
+	if calculateHours {
 		if raw > 8 {
 			hours = raw - 1
 		} else {
@@ -34,22 +60,22 @@ func BuildWorklogRow(r models.EmployeeReport) models.WorklogRow {
 		}
 	}
 
-	return models.WorklogRow{
-		ReportDate:     r.StartTime,
-		SourceID:       r.SourceID,
-		Weekday:        weekdayRU(r.StartTime.Weekday()),
-		StartTime:      r.StartTime,
-		EndTime:        r.EndTime,
+	return WorklogRow{
+		SourceID:       it.ID,
+		ReportDate:     start,
+		Weekday:        weekdayRU(start.Weekday()),
+		StartTime:      start,
+		EndTime:        end,
 		Hours:          hours,
 		Overwork:       overwork,
 		Pause:          pause,
-		Place:          r.WorkTypeName,
-		PrjID:          r.PrjID,
-		Description:    r.Description,
-		EmployeeName:   r.EmployeeName,
-		DepartmentName: r.DepartmentName,
-		WorkKind:       r.WorkKind,
-		StageNumber:    r.StageNumber,
+		Place:          workTypeName,
+		PrjID:          it.PrjID,
+		Description:    it.Description,
+		EmployeeName:   employeeName,
+		DepartmentName: departmentName,
+		WorkKind:       it.WorkKind,
+		StageNumber:    it.PrjStage,
 	}
 }
 
@@ -73,137 +99,179 @@ func weekdayRU(d time.Weekday) string {
 }
 
 // =====================================================
-// 2. Синхронизация (ReportSyncService)
+// 2. Проксирующий сервис отчётов
 // =====================================================
 
-type SyncResult struct {
-	Departments int
-	Employees   int
-	WorkTypes   int
-	Projects    int
-	Reports     int
-	Skipped     int
-	Errors      []string
+type ReportsService struct {
+	client *clients.ReportsClient
 }
 
-type ReportSyncService struct {
-	repo         *db.EmployeeRepo
-	settingsRepo *db.SettingsRepo
-	defaultURL   string
+func NewReportsService(client *clients.ReportsClient) *ReportsService {
+	return &ReportsService{client: client}
 }
 
-func NewReportSyncService(repo *db.EmployeeRepo, settingsRepo *db.SettingsRepo, defaultURL string) *ReportSyncService {
-	return &ReportSyncService{repo: repo, settingsRepo: settingsRepo, defaultURL: defaultURL}
+// ListFilter — фильтры страницы отчётов (из UI).
+type ListFilter struct {
+	From         *time.Time
+	To           *time.Time
+	PrjID        *string
+	UserID       *int64
+	DepartmentID *string
+	PrjStage     *string
+	Limit        int
+	Offset       int
 }
 
-func (s *ReportSyncService) Sync(ctx context.Context, p clients.ReportsParams) (*SyncResult, error) {
-	apiURL, err := s.settingsRepo.Get(ctx, "reports_api_url")
-	if err != nil || apiURL == "" {
-		apiURL = s.defaultURL
+// ReportsPage — результат для хендлера: строки табеля + общее количество.
+type ReportsPage struct {
+	Rows   []WorklogRow
+	Total  int
+	Limit  int
+	Offset int
+}
+
+// List делает один GET к источнику, обогащает строки справочниками и возвращает страницу.
+// Справочники грузятся параллельно (все четыре — быстрые, без пагинации).
+func (s *ReportsService) List(ctx context.Context, f ListFilter) (*ReportsPage, error) {
+	// 1. Параллельно — страница отчётов и справочники.
+	type dictResult struct {
+		users       []clients.UserItem
+		workTypes   []clients.WorktypeItem
+		departments []clients.DepartmentItem
 	}
+	// (Дальше — простой последовательный вариант; параллельность добавим, когда
+	//  понадобится. Один источник, 4 GET-а — это десятки миллисекунд.)
 
-	client := clients.NewReportsClient(apiURL)
-	res := &SyncResult{}
-
-	// 1. Типы работ
-	wts, err := client.FetchWorkTypes(ctx)
+	resp, err := s.client.FetchReports(ctx, clients.ReportsQuery{
+		From:         f.From,
+		To:           f.To,
+		PrjID:        f.PrjID,
+		UserID:       f.UserID,
+		DepartmentID: f.DepartmentID,
+		PrjStage:     f.PrjStage,
+		Limit:        f.Limit,
+		Offset:       f.Offset,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("fetch worktypes: %w", err)
+		return nil, err
 	}
-	if err := s.repo.UpsertWorkTypes(ctx, wts); err != nil {
-		return nil, fmt.Errorf("upsert worktypes: %w", err)
-	}
-	res.WorkTypes = len(wts)
 
-	// 2. Сотрудники и отделы
-	emps, err := client.FetchUsers(ctx)
+	users, err := s.client.FetchUsers(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("fetch users: %w", err)
 	}
+	workTypes, err := s.client.FetchWorkTypes(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("fetch worktypes: %w", err)
+	}
+	departments, err := s.client.FetchDepartments(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("fetch departments: %w", err)
+	}
 
-	deptSet := make(map[string]bool)
-	for _, e := range emps {
-		if e.DepartmentName != "" {
-			deptSet[e.DepartmentName] = true
+	usersByID := make(map[int64]clients.UserItem, len(users))
+	for _, u := range users {
+		usersByID[u.ID] = u
+	}
+	workTypesByID := make(map[int32]clients.WorktypeItem, len(workTypes))
+	for _, w := range workTypes {
+		workTypesByID[w.ID] = w
+	}
+	deptNames := make(map[string]string, len(departments))
+	for _, d := range departments {
+		deptNames[d.ID] = d.Department
+	}
+
+	rows := make([]WorklogRow, 0, len(resp.Items))
+	for _, it := range resp.Items {
+		start, err := time.ParseInLocation(reportDateTimeLayout, it.StartTime, time.Local)
+		if err != nil {
+			continue
 		}
-	}
-	var deps []models.EmployeeDepartment
-	for name := range deptSet {
-		deps = append(deps, models.EmployeeDepartment{Name: name})
-	}
-	deptMap, err := s.repo.UpsertDepartments(ctx, deps)
-	if err != nil {
-		return nil, fmt.Errorf("upsert departments: %w", err)
-	}
-	res.Departments = len(deptMap)
-
-	empMap, err := s.repo.UpsertEmployees(ctx, emps, deptMap)
-	if err != nil {
-		return nil, fmt.Errorf("upsert employees: %w", err)
-	}
-	res.Employees = len(empMap)
-
-	// 3. Проекты
-	prjs, err := client.FetchProjects(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("fetch projects: %w", err)
-	}
-	if err := s.repo.UpsertProjects(ctx, prjs); err != nil {
-		return nil, fmt.Errorf("upsert projects: %w", err)
-	}
-	res.Projects = len(prjs)
-
-	// 4. Отчеты
-	rawReps, err := client.FetchReports(ctx, p)
-	if err != nil {
-		return nil, fmt.Errorf("fetch reports: %w", err)
-	}
-
-	// Получаем маппинг отделов
-	deptMappings, _ := s.repo.GetDepartmentMappings(ctx)
-
-	var validReps []models.EmployeeReport
-	for _, raw := range rawReps {
-		localEmpID, ok := empMap[raw.UserID]
-		if !ok {
-			res.Skipped++
+		end, err := time.ParseInLocation(reportDateTimeLayout, it.EndTime, time.Local)
+		if err != nil || !end.After(start) {
 			continue
 		}
 
-		// Ищем отдел сотрудника, чтобы проставить work_kind
-		// (в идеале нужно сохранить deptID при загрузке сотрудников,
-		// но для простоты найдем его здесь через маппинг)
-		workKind := ""
-		for _, emp := range emps {
-			if emp.SourceID == raw.UserID {
-				// Находим ID отдела по его названию
-				if deptID, ok := deptMap[emp.DepartmentName]; ok {
-					// Берем вид работ из нашего маппинга
-					if wk, ok := deptMappings[deptID]; ok {
-						workKind = wk
-					}
-				}
-				break
+		var employeeName, departmentName string
+		if u, ok := usersByID[it.UserID]; ok {
+			employeeName = u.Longname
+			if employeeName == "" {
+				employeeName = u.Username
 			}
+			departmentName = deptNames[u.DepartmentID]
 		}
 
-		validReps = append(validReps, models.EmployeeReport{
-			SourceID:    raw.SourceID,
-			EmployeeID:  localEmpID,
-			PrjID:       raw.PrjID,
-			WorkTypeID:  raw.WorkTypeID,
-			StartTime:   raw.StartTime,
-			EndTime:     raw.EndTime,
-			Description: raw.Description,
-			SourceTS:    raw.SourceTS,
-			WorkKind:    workKind,
-		})
+		var workTypeName string
+		var calcHours bool
+		if w, ok := workTypesByID[it.WorkType]; ok {
+			workTypeName = w.Name
+			calcHours = w.CalculateHours
+		}
+
+		rows = append(rows, BuildWorklogRow(it, start, end, workTypeName, calcHours, employeeName, departmentName))
 	}
 
-	if err := s.repo.UpsertReports(ctx, validReps); err != nil {
-		return nil, fmt.Errorf("upsert reports: %w", err)
-	}
-	res.Reports = len(validReps)
+	return &ReportsPage{
+		Rows:   rows,
+		Total:  resp.Total,
+		Limit:  resp.Limit,
+		Offset: resp.Offset,
+	}, nil
+}
 
-	return res, nil
+// Dictionaries — три справочника для выпадающих списков на странице.
+type Dictionaries struct {
+	Users       []clients.UserItem
+	Projects    []clients.ProjectItem
+	Departments []clients.DepartmentItem
+	WorkTypes   []clients.WorktypeItem
+}
+
+func (s *ReportsService) Dictionaries(ctx context.Context) (*Dictionaries, error) {
+	users, err := s.client.FetchUsers(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("fetch users: %w", err)
+	}
+	projects, err := s.client.FetchProjects(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("fetch projects: %w", err)
+	}
+	departments, err := s.client.FetchDepartments(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("fetch departments: %w", err)
+	}
+	workTypes, err := s.client.FetchWorkTypes(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("fetch worktypes: %w", err)
+	}
+
+	sort.Slice(users, func(i, j int) bool {
+		ni, nj := users[i].Longname, users[j].Longname
+		if ni == "" {
+			ni = users[i].Username
+		}
+		if nj == "" {
+			nj = users[j].Username
+		}
+		return ni < nj
+	})
+	sort.Slice(departments, func(i, j int) bool {
+		return departments[i].Department < departments[j].Department
+	})
+	sort.Slice(projects, func(i, j int) bool {
+		return projects[i].PrjID < projects[j].PrjID
+	})
+
+	return &Dictionaries{
+		Users:       users,
+		Projects:    projects,
+		Departments: departments,
+		WorkTypes:   workTypes,
+	}, nil
+}
+
+// UpdateMappings — пакетное обновление work_kind и prj_stage на источнике.
+func (s *ReportsService) UpdateMappings(ctx context.Context, updates []clients.ReportUpdate) (*clients.UpdateResult, error) {
+	return s.client.UpdateReports(ctx, updates)
 }

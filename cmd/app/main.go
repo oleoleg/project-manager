@@ -21,6 +21,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/kardianos/service"
 
+	"github.com/oleoleg/project-manager/internal/clients"
 	"github.com/oleoleg/project-manager/internal/config"
 	"github.com/oleoleg/project-manager/internal/db"
 	"github.com/oleoleg/project-manager/internal/handlers"
@@ -233,14 +234,13 @@ func startHTTPServer(stopCh <-chan struct{}) {
 	// 5. Репозитории
 	// =====================================================
 	userRepo := db.NewUserRepo(pool)
-	settingsRepo := db.NewSettingsRepo(pool)
+	//settingsRepo := db.NewSettingsRepo(pool)
 	counterpartyRepo := db.NewCounterpartyRepo(pool)
 	contractRepo := db.NewContractRepo(pool)
 	stageRepo := db.NewStageRepo(pool)
 	stageCostRepo := db.NewStageCostRepo(pool)
 	actRepo := db.NewActRepo(pool)
 	budgetRepo := db.NewBudgetRepo(pool)
-	employeeRepo := db.NewEmployeeRepo(pool)
 
 	// =====================================================
 	// 6. Сервисы
@@ -254,7 +254,8 @@ func startHTTPServer(stopCh <-chan struct{}) {
 	stageCostSvc := services.NewStageCostService(stageCostRepo)
 	actSvc := services.NewActService(actRepo, stageRepo)
 	budgetSvc := services.NewBudgetService(budgetRepo)
-	reportSyncSvc := services.NewReportSyncService(employeeRepo, settingsRepo, cfg.ReportsAPIURL)
+	reportsClient := clients.NewReportsClient(cfg.ReportsAPIURL)
+	reportsSvc := services.NewReportsService(reportsClient)
 
 	// =====================================================
 	// 7. Хендлеры
@@ -269,7 +270,7 @@ func startHTTPServer(stopCh <-chan struct{}) {
 	adminUserH := handlers.NewAdminUserHandler(userSvc, tmpl)
 	actH := handlers.NewActHandler(actSvc, stageSvc, contractSvc, tmpl)
 	budgetH := handlers.NewBudgetHandler(budgetSvc, contractSvc, stageSvc, stageCostSvc, counterpartySvc, tmpl)
-	reportsH := handlers.NewReportsHandler(reportSyncSvc, employeeRepo, contractSvc, settingsRepo, tmpl)
+	reportsH := handlers.NewReportsHandler(reportsSvc, contractSvc, tmpl)
 
 	// =====================================================
 	// 8. Роутер
@@ -346,7 +347,6 @@ func startHTTPServer(stopCh <-chan struct{}) {
 
 		// Рапорт сотрудников
 		r.Get("/reports", reportsH.Index)
-		r.Post("/reports/settings", reportsH.SaveSettings)
 
 		r.Group(func(r chi.Router) {
 			r.Use(mw.RequireRole("admin", "rp_chief", "director", "rp"))
@@ -390,10 +390,8 @@ func startHTTPServer(stopCh <-chan struct{}) {
 			// Сравнить Бюджет Факт vs План
 			r.Get("/contracts/{id}/budget/compare", budgetH.PlanFactIndex)
 
-			//  Рапорта сотрудников
-			r.Post("/reports/sync", reportsH.Sync)
-			r.Post("/reports/save-mapping", reportsH.SaveMapping)
-			r.Post("/reports/save-department-mapping", reportsH.SaveDepartmentMapping)
+			// Рапорт сотрудников
+			r.Post("/reports/update-mappings", reportsH.UpdateMappings)
 
 		})
 
@@ -432,7 +430,6 @@ func startHTTPServer(stopCh <-chan struct{}) {
 			r.Post("/admin/users/{id}/password", adminUserH.ChangePassword)
 			r.Post("/admin/users/{id}/toggle", adminUserH.ToggleActive)
 			r.Post("/counterparties/{id}/delete", counterpartyH.Delete)
-			r.Post("/reports/delete-all", reportsH.DeleteAll)
 
 		})
 	})

@@ -17,129 +17,198 @@ import (
 	"github.com/oleoleg/project-manager/internal/services"
 )
 
+const (
+	reportsPageLimit = 1000
+	dateLayout       = "2006-01-02"
+)
+
 type ReportsHandler struct {
-	syncSvc      *services.ReportSyncService
-	repo         *db.EmployeeRepo
-	contractSvc  *services.ContractService
-	settingsRepo *db.SettingsRepo
-	tmpl         *template.Template
+	reportsSvc  *services.ReportsService
+	contractSvc *services.ContractService
+	tmpl        *template.Template
 }
 
-func NewReportsHandler(syncSvc *services.ReportSyncService, repo *db.EmployeeRepo, contractSvc *services.ContractService, settingsRepo *db.SettingsRepo, tmpl *template.Template) *ReportsHandler {
+func NewReportsHandler(reportsSvc *services.ReportsService, contractSvc *services.ContractService, tmpl *template.Template) *ReportsHandler {
 	return &ReportsHandler{
-		syncSvc:      syncSvc,
-		repo:         repo,
-		contractSvc:  contractSvc,
-		settingsRepo: settingsRepo,
-		tmpl:         tmpl,
+		reportsSvc:  reportsSvc,
+		contractSvc: contractSvc,
+		tmpl:        tmpl,
 	}
 }
 
+// Index — GET /reports
 func (h *ReportsHandler) Index(w http.ResponseWriter, r *http.Request) {
-	filter := db.ReportFilter{}
+	q := r.URL.Query()
 
-	if cid := r.URL.Query().Get("contract_id"); cid != "" {
-		filter.PrjID = &cid
+	// 1. Фильтры
+	f := services.ListFilter{
+		Limit:  reportsPageLimit,
+		Offset: 0,
 	}
-	if eid := r.URL.Query().Get("employee_id"); eid != "" {
-		if id, err := strconv.ParseInt(eid, 10, 64); err == nil {
-			filter.EmployeeID = &id
+	if v := q.Get("contract_id"); v != "" {
+		f.PrjID = &v
+	}
+	if v := q.Get("employee_id"); v != "" {
+		if id, err := strconv.ParseInt(v, 10, 64); err == nil {
+			f.UserID = &id
 		}
 	}
-	if did := r.URL.Query().Get("department_id"); did != "" {
-		if id, err := strconv.ParseInt(did, 10, 64); err == nil {
-			filter.DepartmentID = &id
-		}
+	if v := q.Get("department_id"); v != "" {
+		f.DepartmentID = &v
 	}
-	if fromStr := r.URL.Query().Get("from"); fromStr != "" {
-		if t, err := time.Parse("2006-01-02", fromStr); err == nil {
-			filter.From = &t
-		}
-	}
-	if toStr := r.URL.Query().Get("to"); toStr != "" {
-		if t, err := time.Parse("2006-01-02", toStr); err == nil {
-			filter.To = &t
-		}
+	if v := q.Get("stage"); v != "" {
+		f.PrjStage = &v
 	}
 
-	currentURL, _ := h.settingsRepo.Get(r.Context(), "reports_api_url")
-	if currentURL == "" {
-		currentURL = "http://192.168.0.200:8000/reports/api/database" // дефолт
+	// from/to: если не заданы — с начала предыдущего года по сегодня.
+	now := time.Now()
+	from, to := f.From, f.To
+	if v := q.Get("from"); v != "" {
+		if t, err := time.Parse(dateLayout, v); err == nil {
+			from = &t
+		}
+	}
+	if v := q.Get("to"); v != "" {
+		if t, err := time.Parse(dateLayout, v); err == nil {
+			to = &t
+		}
+	}
+	if from == nil {
+		t := time.Date(now.Year()-1, time.January, 1, 0, 0, 0, 0, time.Local)
+		from = &t
+	}
+	if to == nil {
+		t := now
+		to = &t
+	}
+	f.From, f.To = from, to
+
+	if v := q.Get("offset"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			f.Offset = n
+		}
 	}
 
-	// 2. Получаем данные
-	reports, err := h.repo.ListReports(r.Context(), filter)
+	// 2. Данные
+	page, err := h.reportsSvc.List(r.Context(), f)
 	if err != nil {
 		log.Printf("list reports: %v", err)
-		http.Error(w, "Ошибка загрузки отчётов", http.StatusInternalServerError)
+		http.Error(w, "Ошибка загрузки отчётов: "+err.Error(), http.StatusBadGateway)
 		return
 	}
-
-	// 3. Считаем WorklogRow
-	var rows []models.WorklogRow
-	for _, rep := range reports {
-		rows = append(rows, services.BuildWorklogRow(rep))
+	dict, err := h.reportsSvc.Dictionaries(r.Context())
+	if err != nil {
+		log.Printf("load reports dictionaries: %v", err)
+		dict = &services.Dictionaries{}
 	}
 
-	// Получаем данные для фильтров (договоры и сотрудники)
+	// 3. Договоры (для фильтра «Введите или выберите договор»)
 	contracts, _ := h.contractSvc.List(r.Context(), db.ContractFilter{})
-	employees, _ := h.repo.ListEmployees(r.Context())
-	workKinds := models.WorkKinds // Берем из models/stage.go
 
-	// Получаем отделы и маппинг для формы
-	departments, _ := h.repo.GetDepartments(r.Context())
-	deptMappings, _ := h.repo.GetDepartmentMappings(r.Context())
-
-	// 4. Собираем данные для шаблона
+	// 4. Данные для шаблона
 	data := h.commonData(r, "Рапорт сотрудников")
-	data["Reports"] = rows
-	data["Filter"] = filter
+	data["Reports"] = page.Rows
+	data["Total"] = page.Total
+	data["Limit"] = page.Limit
+	data["Offset"] = page.Offset
+	data["HasNext"] = page.Offset+len(page.Rows) < page.Total
+	data["HasPrev"] = page.Offset > 0
+	data["PrevOffset"] = maxInt(page.Offset-page.Limit, 0)
+	data["NextOffset"] = page.Offset + page.Limit
+	data["QueryString"] = reportsQueryString(q)
+
+	data["Filter"] = struct {
+		PrjID        *string
+		UserID       *int64
+		DepartmentID *string
+		PrjStage     *string
+		From, To     *time.Time
+	}{
+		PrjID:        f.PrjID,
+		UserID:       f.UserID,
+		DepartmentID: f.DepartmentID,
+		PrjStage:     f.PrjStage,
+		From:         f.From,
+		To:           f.To,
+	}
+
 	data["Contracts"] = contracts
-	data["Employees"] = employees
-	data["WorkKinds"] = workKinds
-	data["Flash"] = r.URL.Query().Get("flash")
-	data["CurrentAPIURL"] = currentURL
-	data["Departments"] = departments
-	data["DepartmentMappings"] = deptMappings
+	data["Employees"] = dict.Users
+	data["Departments"] = dict.Departments
+	data["WorkKinds"] = models.WorkKinds
+
+	data["Flash"] = q.Get("flash")
+	data["UpdateError"] = q.Get("update_error")
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := h.tmpl.ExecuteTemplate(w, "reports.html", data); err != nil {
-		log.Printf("!!! ОШИБКА РЕНДЕРА reports.html: %v", err)
-		// Временно выводим ошибку прямо в браузер, чтобы увидеть, что не так
+		log.Printf("render reports.html: %v", err)
 		http.Error(w, "Ошибка рендера: "+err.Error(), http.StatusInternalServerError)
 	}
 }
 
-// Sync — POST /reports/sync
-func (h *ReportsHandler) Sync(w http.ResponseWriter, r *http.Request) {
+func reportsQueryString(q url.Values) string {
+	v := url.Values{}
+	for _, k := range []string{"contract_id", "employee_id", "department_id", "stage", "from", "to"} {
+		if val := q.Get(k); val != "" {
+			v.Set(k, val)
+		}
+	}
+	return v.Encode()
+}
+
+// UpdateMappings — POST /reports/update-mappings
+// Принимает форму с массивами report_id[] / work_kind[] / prj_stage[]
+// и одним POST-ом отправляет правки на источник.
+func (h *ReportsHandler) UpdateMappings(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 
-	params := clients.ReportsParams{}
-	if prjStr := r.FormValue("contract_id"); prjStr != "" {
-		params.PrjID = &prjStr
+	ids := r.Form["report_id[]"]
+	workKinds := r.Form["work_kind[]"]
+	stages := r.Form["prj_stage[]"]
+
+	updates := make([]clients.ReportUpdate, 0, len(ids))
+	for i, idStr := range ids {
+		id, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil {
+			continue
+		}
+		var wk, st string
+		if i < len(workKinds) {
+			wk = workKinds[i]
+		}
+		if i < len(stages) {
+			st = stages[i]
+		}
+		updates = append(updates, clients.ReportUpdate{ID: id, WorkKind: wk, PrjStage: st})
 	}
 
-	res, err := h.syncSvc.Sync(r.Context(), params)
+	referer := r.Referer()
+	if referer == "" {
+		referer = "/reports"
+	}
 
-	w.Header().Set("Content-Type", "application/json")
-
-	if err != nil {
-		log.Printf("sync reports: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]any{"error": err.Error()})
+	if len(updates) == 0 {
+		http.Redirect(w, r, referer+"?flash="+urlQueryEscape("Нет изменений"), http.StatusSeeOther)
 		return
 	}
 
-	json.NewEncoder(w).Encode(map[string]any{
-		"success":     true,
-		"departments": res.Departments,
-		"employees":   res.Employees,
-		"worktypes":   res.WorkTypes,
-		"projects":    res.Projects,
-		"reports":     res.Reports,
-		"skipped":     res.Skipped,
-		"errors":      res.Errors,
-	})
+	res, err := h.reportsSvc.UpdateMappings(r.Context(), updates)
+	if err != nil {
+		log.Printf("update reports mappings: %v", err)
+		http.Redirect(w, r, referer+"?update_error="+urlQueryEscape(err.Error()), http.StatusSeeOther)
+		return
+	}
+
+	msg := "Обновлено: " + strconv.Itoa(res.Updated)
+	if len(res.Failed) > 0 {
+		msg += ", не удалось: " + strconv.Itoa(len(res.Failed))
+	}
+	sep := "?"
+	if len(referer) > 0 && containsQuery(referer) {
+		sep = "&"
+	}
+	http.Redirect(w, r, referer+sep+"flash="+urlQueryEscape(msg), http.StatusSeeOther)
 }
 
 func (h *ReportsHandler) commonData(r *http.Request, title string) map[string]any {
@@ -154,95 +223,18 @@ func (h *ReportsHandler) commonData(r *http.Request, title string) map[string]an
 	return data
 }
 
-func (h *ReportsHandler) SaveMapping(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
+// --- мелкие хелперы (можно вынести в util, если уже есть) ---
 
-	ids := r.Form["report_id[]"]
-	workKinds := r.Form["work_kind[]"]
-	stageNumbers := r.Form["stage_number[]"]
+func urlQueryEscape(s string) string { return url.QueryEscape(s) }
 
-	if len(ids) == 0 {
-		http.Redirect(w, r, "/reports", http.StatusSeeOther)
-		return
+func containsQuery(u string) bool { return strings.Contains(u, "?") }
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
 	}
-
-	for i, idStr := range ids {
-		id, err := strconv.ParseInt(idStr, 10, 64)
-		if err != nil {
-			continue
-		}
-
-		wk := ""
-		if i < len(workKinds) {
-			wk = workKinds[i]
-		}
-
-		sn := ""
-		if i < len(stageNumbers) {
-			sn = stageNumbers[i]
-		}
-
-		if err := h.repo.UpdateReportMapping(r.Context(), id, wk, sn); err != nil {
-			log.Printf("save mapping for report %d: %v", id, err)
-		}
-	}
-
-	// Возвращаемся на ту же страницу, откуда пришли (с фильтрами)
-	referer := r.Referer()
-	if referer == "" || !strings.Contains(referer, "/reports") {
-		referer = "/reports"
-	}
-
-	// Добавляем flash-сообщение
-	sep := "?"
-	if strings.Contains(referer, "?") {
-		sep = "&"
-	}
-	redirectURL := referer + sep + "flash=Изменения+сохранены"
-
-	http.Redirect(w, r, redirectURL, http.StatusSeeOther)
+	return b
 }
 
-func (h *ReportsHandler) SaveSettings(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	url := r.FormValue("api_url")
-
-	if err := h.settingsRepo.Set(r.Context(), "reports_api_url", url); err != nil {
-		log.Printf("save settings: %v", err)
-	}
-
-	http.Redirect(w, r, "/reports?flash=URL+API+сохранен", http.StatusSeeOther)
-}
-
-func (h *ReportsHandler) DeleteAll(w http.ResponseWriter, r *http.Request) {
-	if err := h.repo.DeleteAllReports(r.Context()); err != nil {
-		log.Printf("delete all reports: %v", err)
-		http.Redirect(w, r, "/reports?flash="+url.QueryEscape("Ошибка удаления: "+err.Error()), http.StatusSeeOther)
-		return
-	}
-	http.Redirect(w, r, "/reports?flash=Все+записи+удалены", http.StatusSeeOther)
-}
-
-func (h *ReportsHandler) SaveDepartmentMapping(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-
-	// Проходим по всем полям формы (они имеют вид dept_1, dept_2 и т.д.)
-	for key, values := range r.Form {
-		if strings.HasPrefix(key, "dept_") && len(values) > 0 {
-			deptIDStr := strings.TrimPrefix(key, "dept_")
-			deptID, err := strconv.ParseInt(deptIDStr, 10, 64)
-			if err != nil {
-				continue
-			}
-
-			workKind := values[0]
-			if workKind != "" {
-				if err := h.repo.SaveDepartmentMapping(r.Context(), deptID, workKind); err != nil {
-					log.Printf("save dept mapping %d: %v", deptID, err)
-				}
-			}
-		}
-	}
-
-	http.Redirect(w, r, "/reports?flash=Настройки+отделов+сохранены", http.StatusSeeOther)
-}
+// на случай, если json понадобится ниже — оставим импорт «живым»
+var _ = json.Marshal

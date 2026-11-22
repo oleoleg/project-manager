@@ -1,14 +1,20 @@
 package clients
 
-// reportsResponse — ответ GET /reports.
-type reportsResponse struct {
-	Items  []reportItem `json:"items"`
+// =====================================================
+// GET /reports
+// =====================================================
+
+// ReportsResponse — ответ GET /reports.
+type ReportsResponse struct {
+	Items  []ReportItem `json:"items"`
 	Total  int          `json:"total"`
 	Limit  int          `json:"limit"`
 	Offset int          `json:"offset"`
 }
 
-type reportItem struct {
+// ReportItem — одна сырая запись Reports источника.
+// Даты приходят строками в формате 2006-01-02T15:04:05 (локальное, без TZ).
+type ReportItem struct {
 	ID          int64   `json:"id"`
 	UserID      int64   `json:"userid"`
 	PrjID       string  `json:"prj_id"`
@@ -17,41 +23,66 @@ type reportItem struct {
 	EndTime     string  `json:"end_time"`
 	Description string  `json:"description"`
 	Timestamp   *string `json:"timestamp"`
+	WorkKind    *string `json:"work_kind"`
+	PrjStage    *string `json:"prj_stage"`
 }
 
-// worktypesResponse — ответ GET /worktypes.
-type worktypesResponse struct {
-	Items []worktypeItem `json:"items"`
+// =====================================================
+// GET /worktypes
+// =====================================================
+
+type WorktypesResponse struct {
+	Items []WorktypeItem `json:"items"`
 }
 
-type worktypeItem struct {
+type WorktypeItem struct {
 	ID             int32  `json:"id"`
 	Name           string `json:"name"`
 	CalculateHours bool   `json:"calculate_hours"`
 }
 
-// usersResponse — ответ GET /users.
-type usersResponse struct {
-	Items []userItem `json:"items"`
+// =====================================================
+// GET /users
+// =====================================================
+
+type UsersResponse struct {
+	Items []UserItem `json:"items"`
 }
 
-type userItem struct {
-	ID         int64  `json:"id"`
-	Username   string `json:"username"`
-	Longname   string `json:"longname"`
-	City       string `json:"city"`
-	Email      string `json:"email"`
-	IsAdmin    bool   `json:"is_admin"`
-	IsBlocked  bool   `json:"is_blocked"`
-	Department string `json:"department"`
+type UserItem struct {
+	ID           int64  `json:"id"`
+	Username     string `json:"username"`
+	Longname     string `json:"longname"`
+	City         string `json:"city"`
+	Email        string `json:"email"`
+	IsAdmin      bool   `json:"is_admin"`
+	IsBlocked    bool   `json:"is_blocked"`
+	DepartmentID string `json:"department_id"`
 }
 
-// projectsResponse — ответ GET /projects.
-type projectsResponse struct {
-	Items []projectItem `json:"items"`
+// =====================================================
+// GET /projects
+// =====================================================
+
+type ProjectsResponse struct {
+	Items []ProjectItem `json:"items"`
 }
 
-type projectItem struct {
+type ProjectItem struct {
 	PrjID       string `json:"prj_id"`
 	Description string `json:"description"`
+}
+
+// =====================================================
+// GET /departments
+// =====================================================
+
+type DepartmentsResponse struct {
+	Items []DepartmentItem `json:"items"`
+}
+
+type DepartmentItem struct {
+	ID         string `json:"id"`
+	Department string `json:"department"`
+	WorkKind   string `json:"work_kind"`
 }
