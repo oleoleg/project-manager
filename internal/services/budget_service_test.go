@@ -53,7 +53,11 @@ func TestBudgetService_GeneratePlan(t *testing.T) {
 
 	_, _ = testPool.Exec(ctx, `INSERT INTO counterparties (id, name) VALUES ($1, 'Cp')`, cpID)
 	_, _ = testPool.Exec(ctx, `INSERT INTO users (id, username, full_name, password_hash, role_code, is_active) VALUES ($1, 'u', 'U', 'h', 'admin', true)`, userID)
-	_, _ = testPool.Exec(ctx, `INSERT INTO contracts (id, contract_number, contract_date, status_code, counterparty_id, contract_type) VALUES ($1, 'TEST', NOW(), 1, $2, 'contract')`, contractID, cpID)
+	_, _ = testPool.Exec(ctx, `INSERT INTO contracts (id, contract_number, contract_date, status_code, counterparty_id, contract_type, work_name, short_name) VALUES ($1, 'TEST', NOW(), 1, $2, 'contract', 'Тестовые работы', 'Тест')`, contractID, cpID)
+
+	if _, err := testPool.Exec(ctx, `INSERT INTO ...`); err != nil {
+		t.Fatalf("setup contract: %v", err)
+	}
 
 	// 2. Создаем этап
 	closeDate := time.Now().AddDate(0, 1, 0) // Закрытие через месяц

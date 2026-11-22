@@ -80,8 +80,8 @@ func setupBaseData(t *testing.T) {
 
 	// 3. Договор
 	_, err = testPool.Exec(ctx, `
-		INSERT INTO contracts (id, contract_number, contract_date, status_code, counterparty_id, contract_type) 
-		VALUES ($1, 'TEST-001', NOW(), 1, $2, 'contract') 
+		INSERT INTO contracts (id, contract_number, contract_date, status_code, counterparty_id, contract_type, work_name, short_name) 
+		VALUES ($1, 'TEST-001', NOW(), 1, $2, 'contract', 'Тестовые работы', 'Тест') 
 		ON CONFLICT (id) DO NOTHING
 	`, testContractID, testCpID)
 	if err != nil {
