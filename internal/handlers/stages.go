@@ -150,7 +150,7 @@ func (h *StageHandler) New(w http.ResponseWriter, r *http.Request) {
 	data["IsNew"] = true
 	data["Error"] = ""
 
-	RenderTemplate(w, h.tmpl, "stages_form.html", data)
+	RenderTemplate(w, h.tmpl, "stage_form.html", data)
 }
 
 func (h *StageHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -319,7 +319,7 @@ func (h *StageHandler) renderFormWithError(w http.ResponseWriter, r *http.Reques
 		w.WriteHeader(http.StatusBadRequest)
 	}
 
-	RenderTemplate(w, h.tmpl, "stages_form.html", data)
+	RenderTemplate(w, h.tmpl, "stage_form.html", data)
 }
 
 func parseStageForm(r *http.Request) (*models.Stage, error) {

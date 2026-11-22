@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS counterparties (
     created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT counterparties_id_format CHECK (id ~ '^[0-9]{4}$')
+    CONSTRAINT counterparties_id_range CHECK (id::int BETWEEN 1 AND 1999)
 );
 
 -- ---------------------------------------------------------
@@ -67,7 +68,8 @@ CREATE TABLE IF NOT EXISTS contracts (
     updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     responsible_user_id     BIGINT REFERENCES users(id) ON DELETE SET NULL,
     server_path             TEXT NOT NULL DEFAULT '',
-    CONSTRAINT contracts_id_format CHECK (id ~ '^[0-9]{4}(-[A-Za-zА-Яа-я0-9]{1,5})?$')
+    CONSTRAINT contracts_id_range CHECK (SUBSTRING(id FROM 1 FOR 4)::int BETWEEN 2000 AND 9999)
+    CONSTRAINT contracts_id_format CHECK (id ~ '^[0-9]{4}(-[A-Z]{1}[0-9]{1,2})?$')
 );
 
 -- ---------------------------------------------------------

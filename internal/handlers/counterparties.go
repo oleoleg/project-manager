@@ -60,7 +60,7 @@ func (h *CounterpartyHandler) Show(w http.ResponseWriter, r *http.Request) {
 
 	data := BaseData(r, "Контрагент "+c.ID)
 	data["Counterparty"] = c
-	RenderTemplate(w, h.tmpl, "counterparties_show.html", data)
+	RenderTemplate(w, h.tmpl, "counterpart_show.html", data)
 }
 
 // ---------- New / Create ----------
@@ -70,7 +70,7 @@ func (h *CounterpartyHandler) New(w http.ResponseWriter, r *http.Request) {
 	data["Counterparty"] = &models.Counterparty{}
 	data["IsNew"] = true
 	data["Error"] = ""
-	RenderTemplate(w, h.tmpl, "counterparties_form.html", data)
+	RenderTemplate(w, h.tmpl, "counterpart_form.html", data)
 }
 
 func (h *CounterpartyHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -84,7 +84,7 @@ func (h *CounterpartyHandler) Create(w http.ResponseWriter, r *http.Request) {
 		data["IsNew"] = true
 		data["Error"] = msg
 		w.WriteHeader(http.StatusBadRequest)
-		RenderTemplate(w, h.tmpl, "counterparties_form.html", data)
+		RenderTemplate(w, h.tmpl, "counterpart_form.html", data)
 		return
 	}
 
@@ -110,7 +110,7 @@ func (h *CounterpartyHandler) Edit(w http.ResponseWriter, r *http.Request) {
 	data["Counterparty"] = c
 	data["IsNew"] = false
 	data["Error"] = ""
-	RenderTemplate(w, h.tmpl, "counterparties_form.html", data)
+	RenderTemplate(w, h.tmpl, "counterpart_form.html", data)
 }
 
 func (h *CounterpartyHandler) Update(w http.ResponseWriter, r *http.Request) {
@@ -126,7 +126,7 @@ func (h *CounterpartyHandler) Update(w http.ResponseWriter, r *http.Request) {
 		data["IsNew"] = false
 		data["Error"] = msg
 		w.WriteHeader(http.StatusBadRequest)
-		RenderTemplate(w, h.tmpl, "counterparties_form.html", data)
+		RenderTemplate(w, h.tmpl, "counterpart_form.html", data)
 		return
 	}
 

@@ -47,8 +47,8 @@ func TestBudgetService_GeneratePlan(t *testing.T) {
 	// 1. Подготовка БД (очистка и базовые данные)
 	clearTestDB(t)
 
-	contractID := "9999-01"
-	cpID := "9999"
+	contractID := "9999-W1"
+	cpID := "0100"
 	userID := int64(1)
 
 	_, _ = testPool.Exec(ctx, `INSERT INTO counterparties (id, name) VALUES ($1, 'Cp')`, cpID)

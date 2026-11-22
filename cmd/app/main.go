@@ -245,6 +245,7 @@ func startHTTPServer(stopCh <-chan struct{}) {
 	stageCostRepo := db.NewStageCostRepo(pool)
 	actRepo := db.NewActRepo(pool)
 	budgetRepo := db.NewBudgetRepo(pool)
+	docRepo := db.NewDocumentRepo(pool)
 
 	// =====================================================
 	// 6. Сервисы
@@ -260,6 +261,8 @@ func startHTTPServer(stopCh <-chan struct{}) {
 	budgetSvc := services.NewBudgetService(budgetRepo)
 	reportsClient := clients.NewReportsClient(cfg.ReportsAPIURL)
 	reportsSvc := services.NewReportsService(reportsClient)
+	docxTemplatesDir := filepath.Join(baseDir, "templates_docx")
+	docSvc := services.NewDocumentService(docRepo, contractRepo, counterpartyRepo, docxTemplatesDir)
 
 	// =====================================================
 	// 7. Хендлеры
@@ -274,6 +277,7 @@ func startHTTPServer(stopCh <-chan struct{}) {
 	actH := handlers.NewActHandler(actSvc, stageSvc, contractSvc, tmpl)
 	budgetH := handlers.NewBudgetHandler(budgetSvc, contractSvc, stageSvc, stageCostSvc, counterpartySvc, tmpl)
 	reportsH := handlers.NewReportsHandler(reportsSvc, contractSvc, tmpl)
+	docH := handlers.NewDocumentHandler(docSvc, contractSvc, counterpartySvc, tmpl)
 
 	// =====================================================
 	// 8. Роутер
@@ -338,6 +342,11 @@ func startHTTPServer(stopCh <-chan struct{}) {
 
 		// Рапорт сотрудников
 		r.Get("/reports", reportsH.Index)
+
+		// Документы
+		r.Get("/contracts/{id}/documents", docH.Index)
+		r.Get("/contracts/{id}/documents/{docID}", docH.Show)
+		r.Get("/contracts/{id}/documents/versions/{verID}/open", docH.OpenVersion)
 
 		r.Group(func(r chi.Router) {
 			r.Use(mw.RequireRole("admin", "rp_chief", "director", "rp"))
@@ -411,6 +420,18 @@ func startHTTPServer(stopCh <-chan struct{}) {
 			r.Post("/contracts/{id}/budget/fact/append", budgetH.FactAppendFromPlan)
 			r.Post("/contracts/{id}/budget/fact/append-preview", budgetH.FactAppendPreview)
 			r.Post("/contracts/{id}/budget/fact/append-selected", budgetH.FactAppendSelected)
+
+			r.Get("/contracts/{id}/documents/new", docH.New)
+			r.Post("/contracts/{id}/documents", docH.CreateDocument)
+			r.Get("/contracts/{id}/documents/{docID}/edit", docH.Edit)
+			r.Post("/contracts/{id}/documents/{docID}", docH.Update)
+			r.Post("/contracts/{id}/documents/{docID}/delete", docH.DeleteDocument)
+
+			r.Post("/contracts/{id}/documents/{docID}/versions", docH.UploadVersion)
+			r.Post("/contracts/{id}/documents/{docID}/versions/{verID}/delete", docH.DeleteVersion)
+			r.Post("/contracts/{id}/documents/{docID}/generate", docH.GenerateFromTemplate)
+			r.Post("/contracts/{id}/documents/{docID}/history", docH.AddHistory)
+
 		})
 
 		r.Group(func(r chi.Router) {

@@ -19,7 +19,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-// Сворачивание секций (используется на contracts_show.html).
+// Сворачивание секций (используется на contract_show.html).
 window.toggleSection = function (id) {
     const sec = document.getElementById(id);
     if (!sec) return;

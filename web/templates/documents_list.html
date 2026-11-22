@@ -1,0 +1,111 @@
+{{ define "documents_list.html" }}
+{{ template "layout_header" . }}
+
+{{ $c := .Contract }}
+{{ $base := printf "/contracts/%s" $c.ID }}
+
+<div class="page-header">
+    <div class="contract-title">
+       <h2>
+            Документы по договору
+            {{ if $c.ContractNumber }}
+                № {{ $c.ContractNumber }} от {{ if $c.ContractDate }}{{ $c.ContractDate.Format "02.01.2006" }}{{ else }}—{{ end }}
+            {{ else }}
+                № не присвоен
+            {{ end }}
+            <span class="contract-id">ID: {{ $c.ID }}</span>
+        </h2>
+        <p class="contract-subtitle">
+            {{ if $c.WorkName }}{{ $c.WorkName }}{{ else }}<span class="muted">наименование не указано</span>{{ end }}
+            {{ if .Counterparty }}
+                &nbsp;·&nbsp;
+                <a href="/counterparties/{{ .Counterparty.ID }}">{{ .Counterparty.Name }}</a>
+            {{ end }}
+        </p>
+        <div class="breadcrumb" style="margin-bottom: 16px;">
+            <a href="{{ $base }}">Договор {{ $c.ID }}</a>
+            &rarr; <a href="/contracts/{{ $c.ID }}/stages">Этапы</a> 
+            &rarr; <a href="/contracts/{{ $c.ID }}/stages/costs">Затраты этапов</a>
+            &rarr; <a href="/contracts/{{ $c.ID }}/budget">ФинПлан</a>
+            &rarr; <a href="/contracts/{{ $c.ID }}/budget/fact">ФинФакт</a>
+            &rarr; <a href="/contracts/{{ $c.ID }}/budget/compare">Сравнение</a>
+            &rarr; <span style="color: var(--text-soft);">Документы</span>
+        </div>
+    </div>
+    
+    <div class="actions">
+        {{ if $c.ProjectURL }}
+            <a href="{{ $base }}/open-folder" target="_blank" class="btn btn-sm">📁 Открыть папку</a>
+        {{ end }}
+        {{ if .CanEdit }}
+            <a href="{{ $base }}/documents/new" class="btn btn-sm btn-primary">+ Добавить документ</a>
+        {{ end }}
+    </div>
+    
+</div>
+ 
+
+{{ if .Flash }}<div class="flash">{{ .Flash }}</div>{{ end }}
+{{ if .Error }}<div class="error">{{ .Error }}</div>{{ end }}
+
+{{ if not .Documents }}
+    <div class="info-box">
+        Документов пока нет. Нажмите «+ Добавить документ», чтобы создать карточку основного договора, ДС или приложения.
+    </div>
+{{ else }}
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Тип</th>
+                <th>Номер и наименование</th>
+                <th>Крайняя версия</th>
+                <th>Этап согласования</th>
+                <th>Вид</th>
+                <th>У кого находится</th>
+                <th class="actions">Действия</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{ range .Documents }}
+            {{ $doc := . }}
+            <tr>
+                <td>{{ call $.DocTypeName $doc.DocType }}</td>
+                <td>
+                    <a href="{{ $base }}/documents/{{ $doc.ID }}">
+                        <strong>{{ if $doc.Number }}№ {{ $doc.Number }} — {{ end }}{{ $doc.Title }}</strong>
+                    </a>
+                </td>
+                <td>
+                    {{ if $doc.Versions }}
+                        {{ $latest := index $doc.Versions 0 }}
+                        <strong>v{{ $latest.VersionNum }}</strong>
+                        <span class="muted">({{ $latest.CreatedAt.Format "02.01.2006" }})</span>
+                    {{ else }}
+                        <span class="muted">Нет файла</span>
+                    {{ end }}
+                </td>
+                <td>
+                    <span class="tag {{ if eq $doc.CurrentStage "signed" }}tag-status-3{{ else if eq $doc.CurrentStage "rework" }}tag-status-4{{ else }}tag-status-1{{ end }}">
+                        {{ call $.DocStageName $doc.CurrentStage }}
+                    </span>
+                </td>
+                <td>{{ call $.DocFormName $doc.CurrentForm }}</td>
+                <td>{{ if $doc.HolderInfo }}{{ $doc.HolderInfo }}{{ else }}<span class="muted">—</span>{{ end }}</td>
+                <td class="actions">
+                    {{ if $doc.Versions }}
+                        {{ $latest := index $doc.Versions 0 }}
+                        <button type="button" class="btn btn-sm js-open-doc-file" data-path="{{ $c.ProjectURL }}\{{ $latest.RelPath }}">📄 Открыть файл</button>
+                    {{ end }}
+                    <a href="{{ $base }}/documents/{{ $doc.ID }}" class="btn btn-sm btn-primary">Версии и история</a>
+                </td>
+            </tr>
+            {{ end }}
+        </tbody>
+    </table>
+{{ end }}
+
+
+<script src="/static/documents.js"></script>
+
+{{ template "layout_footer" . }}
+{{ end }}

@@ -243,7 +243,7 @@ func (h *ContractHandler) Show(w http.ResponseWriter, r *http.Request) {
 	data["VatSingle"] = vatSingle
 	data["VatMixed"] = vatMixed
 
-	RenderTemplate(w, h.tmpl, "contracts_show.html", data)
+	RenderTemplate(w, h.tmpl, "contract_show.html", data)
 }
 
 // ---------- New / Create ----------
@@ -270,7 +270,7 @@ func (h *ContractHandler) New(w http.ResponseWriter, r *http.Request) {
 	data["IsNew"] = true
 	data["Error"] = ""
 	data["ActiveUsers"] = users
-	RenderTemplate(w, h.tmpl, "contracts_form.html", data)
+	RenderTemplate(w, h.tmpl, "contract_form.html", data)
 }
 
 func (h *ContractHandler) Create(w http.ResponseWriter, r *http.Request) {
@@ -379,7 +379,7 @@ func (h *ContractHandler) renderFormWithError(w http.ResponseWriter, r *http.Req
 	if errMsg != "" {
 		w.WriteHeader(http.StatusBadRequest)
 	}
-	RenderTemplate(w, h.tmpl, "contracts_form.html", data)
+	RenderTemplate(w, h.tmpl, "contract_form.html", data)
 }
 
 func parseContractForm(r *http.Request) *models.Contract {

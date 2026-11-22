@@ -1,0 +1,115 @@
+{{ define "documents_form.html" }}
+{{ template "layout_header" . }}
+
+{{ $c := .Contract }}
+{{ $doc := .Document }}
+{{ $base := printf "/contracts/%s" $c.ID }}
+
+<div class="breadcrumb">
+    <a href="{{ $base }}">Договор {{ $c.ID }}</a> →
+    <a href="{{ $base }}/documents">Документы</a> →
+    <span>{{ if .IsNew }}Новый документ{{ else }}Редактирование{{ end }}</span>
+</div>
+
+<h2>{{ if .IsNew }}Новый документ по договору {{ $c.ID }}{{ else }}Редактирование реквизитов документа{{ end }}</h2>
+
+{{ if .Error }}<div class="error">{{ .Error }}</div>{{ end }}
+
+<form method="POST"
+      action="{{ if .IsNew }}{{ $base }}/documents{{ else }}{{ $base }}/documents/{{ $doc.ID }}{{ end }}"
+      {{ if .IsNew }}enctype="multipart/form-data"{{ end }}
+      class="form" style="max-width: 720px;">
+
+    <h3 class="form-section-title">1. Основные сведения</h3>
+    <label>
+        Тип документа *
+        <select name="doc_type" required style="padding: 9px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text);">
+            {{ range .DocTypes }}
+                <option value="{{ .Code }}" {{ if eq $doc.DocType .Code }}selected{{ end }}>{{ .Name }}</option>
+            {{ end }}
+        </select>
+    </label>
+
+    <label>
+        Номер документа (необязательно для проекта)
+        <input type="text" name="number" value="{{ $doc.Number }}" placeholder="Например: 1 или ДС-1">
+    </label>
+
+    <label>
+        Наименование / Суть документа *
+        <input type="text" name="title" value="{{ $doc.Title }}" placeholder="Например: Договор подряда на СМР" required>
+    </label>
+
+    {{ if .IsNew }}
+    <h3 class="form-section-title">2. Файл первой версии (v1)</h3>
+    <label>
+        Загрузить готовый файл (PDF / Word)
+        <input type="file" name="file" accept=".pdf,.doc,.docx">
+    </label>
+
+    {{ if .DocxTemplates }}
+    <label>
+        Или сформировать из шаблона Word (если файл не выбран выше)
+        <select name="template_name" style="padding: 9px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text);">
+            <option value="">— Не использовать шаблон —</option>
+            {{ range .DocxTemplates }}
+                <option value="{{ . }}">{{ . }}</option>
+            {{ end }}
+        </select>
+    </label>
+    {{ end }}
+
+    <label>
+        Комментарий к файлу
+        <input type="text" name="comment" placeholder="Например: Первичный проект от РП">
+    </label>
+
+    <h3 class="form-section-title">3. Начальный этап согласования / отправки</h3>
+    <label>
+        Этап согласования
+        <select name="stage" style="padding: 9px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text);">
+            {{ range .DocStages }}
+                <option value="{{ .Code }}">{{ .Name }}</option>
+            {{ end }}
+        </select>
+    </label>
+
+    <label>
+        Вид документа
+        <select name="form_type" style="padding: 9px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text);">
+            {{ range .DocForms }}
+                <option value="{{ .Code }}">{{ .Name }}</option>
+            {{ end }}
+        </select>
+    </label>
+
+    <label>
+        Кому отправлено / У кого находится
+        <input type="text" name="holder_info" list="users-list-new" value="{{ $doc.HolderInfo }}" placeholder="Например: Юридический отдел или Контрагент">
+        <datalist id="users-list-new">
+            <option value="Контрагент (Заказчик)">
+            <option value="Юридический отдел">
+            <option value="Бухгалтерия">
+            {{ range .ActiveUsers }}<option value="{{ .FullName }}">{{ end }}
+        </datalist>
+    </label>
+
+    <label>
+        Примечание к отправке
+        <input type="text" name="note" placeholder="Например: Отправлено на согласование по эл. почте">
+    </label>
+    {{ else }}
+    <label>
+        У кого сейчас находится
+        <input type="text" name="holder_info" value="{{ $doc.HolderInfo }}">
+    </label>
+    {{ end }}
+
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Сохранить</button>
+        <a href="{{ if .IsNew }}{{ $base }}/documents{{ else }}{{ $base }}/documents/{{ $doc.ID }}{{ end }}" class="btn btn-sm">Отмена</a>
+    </div>
+</form>
+
+{{ template "layout_footer" . }}
+{{ end }}

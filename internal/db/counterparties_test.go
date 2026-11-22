@@ -15,7 +15,7 @@ func TestCounterpartyRepo(t *testing.T) {
 		repo := db.NewCounterpartyRepo(testPool)
 
 		cp := &models.Counterparty{
-			ID:        "8888",
+			ID:        "1000",
 			Name:      "ООО Ромашка",
 			Partner:   "Иванов",
 			ShortName: "Ромашка",
@@ -28,7 +28,7 @@ func TestCounterpartyRepo(t *testing.T) {
 		}
 
 		// 2. Получаем
-		got, err := repo.GetByID(ctx, "8888")
+		got, err := repo.GetByID(ctx, "1000")
 		if err != nil {
 			t.Fatalf("ошибка получения контрагента: %v", err)
 		}

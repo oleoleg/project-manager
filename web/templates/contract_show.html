@@ -1,4 +1,4 @@
-{{ define "contracts_show.html" }}
+{{ define "contract_show.html" }}
 {{ template "layout_header" . }}
 {{ $c := .Contract }}
 {{ $vatMode := .VATMode }}
@@ -38,6 +38,7 @@
             &rarr; <a href="/contracts/{{ $c.ID }}/budget">ФинПлан</a>
             &rarr; <a href="/contracts/{{ $c.ID }}/budget/fact">ФинФакт</a>
             &rarr; <a href="/contracts/{{ $c.ID }}/budget/compare">Сравнение</a>
+            &rarr; <a href="{{ $base }}/documents">Документы</a>
         </div>
     </div>
 

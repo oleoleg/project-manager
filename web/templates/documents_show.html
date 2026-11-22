@@ -1,0 +1,319 @@
+{{ define "documents_show.html" }}
+{{ template "layout_header" . }}
+
+{{ $c := .Contract }}
+{{ $doc := .Document }}
+{{ $base := printf "/contracts/%s" $c.ID }}
+
+<div class="page-header">
+    <div class="contract-title">
+        <h2>
+            {{ call .DocTypeName $doc.DocType }}
+            {{ if $doc.Number }}№ {{ $doc.Number }}{{ end }}:
+            {{ $doc.Title }}
+        </h2>
+        <div class="contract-subtitle">
+            Договор {{ if $c.ContractNumber }}№ {{ $c.ContractNumber }}{{ else }}{{ $c.ID }}{{ end }}
+            {{ if .Counterparty }} · {{ .Counterparty.Name }}{{ end }}
+        </div>
+    </div>
+    <div class="actions">
+        <a href="{{ $base }}/documents" class="btn btn-sm">← К списку документов</a>
+        {{ if .CanEdit }}
+            <a href="{{ $base }}/documents/{{ $doc.ID }}/edit" class="btn btn-sm">Редактировать название</a>
+        {{ end }}
+    </div>
+</div>
+
+<div class="breadcrumb">
+    <a href="{{ $base }}">Договор {{ $c.ID }}</a> →
+    <a href="{{ $base }}/documents">Документы</a> →
+    <span>{{ call .DocTypeName $doc.DocType }} {{ if $doc.Number }}№ {{ $doc.Number }}{{ end }}</span>
+</div>
+
+{{ if .Flash }}<div class="flash">{{ .Flash }}</div>{{ end }}
+{{ if .Error }}<div class="error">{{ .Error }}</div>{{ end }}
+
+<!-- Карточки текущего состояния -->
+<div class="totals">
+    <div class="total-card">
+        <span>Крайняя версия</span>
+        <strong>
+            {{ if .LatestVersion }}
+                v{{ .LatestVersion.VersionNum }} ({{ .LatestVersion.FileExt }})
+            {{ else }}
+                Нет файла
+            {{ end }}
+        </strong>
+        {{ if .LatestVersion }}
+            <div style="margin-top:6px;">
+                <button type="button" class="btn btn-sm btn-primary js-open-doc-file" data-path="{{ $c.ProjectURL }}\{{ .LatestVersion.RelPath }}">📄 Открыть файл</button>
+            </div>
+        {{ end }}
+    </div>
+    <div class="total-card">
+        <span>Текущий этап</span>
+        <strong>{{ call .DocStageName $doc.CurrentStage }}</strong>
+    </div>
+    <div class="total-card">
+        <span>Вид документа</span>
+        <strong>{{ call .DocFormName $doc.CurrentForm }}</strong>
+    </div>
+    <div class="total-card">
+        <span>У кого находится</span>
+        <strong>{{ if $doc.HolderInfo }}{{ $doc.HolderInfo }}{{ else }}—{{ end }}</strong>
+    </div>
+</div>
+
+{{ if .CanEdit }}
+<!-- Блок действий с крайней версией (2 колонки) -->
+<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap:20px; margin-bottom:20px;">
+
+    <!-- 1. Этап согласования (только для крайней версии) -->
+    <div class="collapsible" style="margin-bottom:0;">
+        <div class="collapsible-header">
+            <h3>1. Этап согласования {{ if .LatestVersion }}(для версии v{{ .LatestVersion.VersionNum }}){{ end }}</h3>
+        </div>
+        <div class="collapsible-body">
+            <form method="POST" action="{{ $base }}/documents/{{ $doc.ID }}/history" class="form" style="box-shadow:none; padding:0;">
+                {{ if .LatestVersion }}
+                    <input type="hidden" name="version_id" value="{{ .LatestVersion.ID }}">
+                {{ end }}
+                <label>
+                    Этап согласования
+                    <select name="stage" required style="padding:8px 10px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:var(--text);">
+                        {{ range .DocStages }}
+                            <option value="{{ .Code }}" {{ if eq $doc.CurrentStage .Code }}selected{{ end }}>{{ .Name }}</option>
+                        {{ end }}
+                    </select>
+                </label>
+                <label>
+                    Вид документа
+                    <select name="form_type" required style="padding:8px 10px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:var(--text);">
+                        {{ range .DocForms }}
+                            <option value="{{ .Code }}" {{ if eq $doc.CurrentForm .Code }}selected{{ end }}>{{ .Name }}</option>
+                        {{ end }}
+                    </select>
+                </label>
+                <label>
+                    У кого на рассмотрении
+                    <input type="text" name="recipient_info" list="users-stage-{{ $doc.ID }}" value="{{ $doc.HolderInfo }}" placeholder="Например: Юрист Иванов / Заказчик" required>
+                    <datalist id="users-stage-{{ $doc.ID }}">
+                        <option value="Контрагент (Заказчик)">
+                        <option value="Юридический отдел">
+                        <option value="Бухгалтерия">
+                        <option value="Директор на подпись">
+                        {{ range .ActiveUsers }}<option value="{{ .FullName }}">{{ end }}
+                    </datalist>
+                </label>
+                <label>
+                    Результат / Комментарий
+                    <input type="text" name="note" placeholder="Например: Согласовано с замечаниями по срокам">
+                </label>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Обновить этап</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 2. Информация об отправке (по умолчанию привязана к крайней версии) -->
+    <div class="collapsible" style="margin-bottom:0;">
+        <div class="collapsible-header">
+            <h3>2. Записать отправку документа</h3>
+        </div>
+        <div class="collapsible-body">
+            <form method="POST" action="{{ $base }}/documents/{{ $doc.ID }}/history" class="form" style="box-shadow:none; padding:0;">
+                <input type="hidden" name="stage" value="client_review">
+                <label>
+                    Отправляемая версия (по умолчанию крайняя)
+                    <select name="version_id" style="padding:8px 10px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:var(--text);">
+                        {{ range $idx, $v := $doc.Versions }}
+                            <option value="{{ $v.ID }}" {{ if eq $idx 0 }}selected{{ end }}>v{{ $v.VersionNum }} — {{ $v.FileName }}</option>
+                        {{ end }}
+                        <option value="">Без привязки к файлу</option>
+                    </select>
+                </label>
+                <label>
+                    Способ / Вид отправки
+                    <select name="form_type" required style="padding:8px 10px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:var(--text);">
+                        {{ range .DocForms }}
+                            <option value="{{ .Code }}">{{ .Name }}</option>
+                        {{ end }}
+                    </select>
+                </label>
+                <label>
+                    Кому отправлено *
+                    <input type="text" name="recipient_info" placeholder="Например: Контрагент (Иванов И.И.)" required>
+                </label>
+                <label>
+                    Детали отправки (трек-номер, пакет ЭДО, эл. почта)
+                    <input type="text" name="note" placeholder="Например: Отправлено в Диадок / Курьер СДЭК №12345">
+                </label>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Зафиксировать отправку</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{{ end }}
+
+<!-- Все версии файлов на сервере -->
+<div class="collapsible">
+    <div class="collapsible-header">
+        <h3>Версии файлов на сервере</h3>
+    </div>
+    <div class="collapsible-body">
+        {{ if $doc.Versions }}
+        <table class="data-table" style="margin-bottom:16px;">
+            <thead>
+                <tr>
+                    <th>Версия</th>
+                    <th>Файл на сервере</th>
+                    <th>Вид</th>
+                    <th>Загрузил</th>
+                    <th>Дата</th>
+                    <th class="actions">Файл</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{ range $idx, $v := $doc.Versions }}
+                <tr>
+                    <td>
+                        <strong>v{{ $v.VersionNum }}</strong>
+                        {{ if eq $idx 0 }}<span class="tag tag-status-3">Крайняя</span>{{ end }}
+                    </td>
+                    <td>
+                        <div>{{ $v.FileName }}</div>
+                        <div class="muted" style="font-size:11px;">{{ $v.RelPath }}</div>
+                        {{ if $v.Comment }}<div style="font-size:12px; margin-top:2px;">{{ $v.Comment }}</div>{{ end }}
+                    </td>
+                    <td>{{ call $.DocFormName $v.FormType }}</td>
+                    <td>{{ if $v.UploaderName }}{{ $v.UploaderName }}{{ else }}—{{ end }}</td>
+                    <td>{{ $v.CreatedAt.Format "02.01.2006 15:04" }}</td>
+                    <td class="actions">
+                        <button type="button" class="btn btn-sm js-open-doc-file" data-path="{{ $c.ProjectURL }}\{{ $v.RelPath }}">📄 Открыть</button>
+                    </td>
+                </tr>
+                {{ end }}
+            </tbody>
+        </table>
+        
+        {{ else }}
+            <p class="muted" style="margin-bottom:14px;">Файлы ещё не загружены.</p>
+        {{ end }}
+
+        {{ if .CanEdit }}
+        <div style="display:flex; flex-wrap:wrap; gap:16px; border-top:1px solid var(--border-soft); padding-top:14px;">
+            <form method="POST" action="{{ $base }}/documents/{{ $doc.ID }}/versions" enctype="multipart/form-data" style="flex:1 1 360px; display:flex; flex-direction:column; gap:8px;">
+                <strong>Загрузить новую версию файла (PDF / Word)</strong>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <input type="file" name="file" accept=".pdf,.doc,.docx" required style="flex:1;">
+                    <select name="form_type" style="padding:6px 10px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:var(--text);">
+                        {{ range .DocForms }}<option value="{{ .Code }}">{{ .Name }}</option>{{ end }}
+                    </select>
+                </div>
+                <div style="display:flex; gap:8px;">
+                    <input type="text" name="comment" placeholder="Комментарий к новой версии" style="flex:1; padding:6px 10px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:var(--text);">
+                    <button type="submit" class="btn btn-sm btn-primary">Загрузить версию</button>
+                </div>
+            </form>
+
+            {{ if .DocxTemplates }}
+            <form method="POST" action="{{ $base }}/documents/{{ $doc.ID }}/generate" style="flex:1 1 300px; display:flex; flex-direction:column; gap:8px;">
+                <strong>Сформировать новую версию из шаблона Word</strong>
+                <div style="display:flex; gap:8px;">
+                    <select name="template_name" required style="flex:1; padding:6px 10px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:var(--text);">
+                        <option value="">— Выберите шаблон —</option>
+                        {{ range .DocxTemplates }}<option value="{{ . }}">{{ . }}</option>{{ end }}
+                    </select>
+                    <button type="submit" class="btn btn-sm">Сформировать .docx</button>
+                </div>
+            </form>
+            {{ end }}
+        </div>
+        {{ end }}
+    </div>
+</div>
+
+<!-- История согласования и отправки -->
+<div class="collapsible">
+    <div class="collapsible-header">
+        <h3>История согласования и отправки</h3>
+    </div>
+    <div class="collapsible-body">
+        {{ if $doc.History }}
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Дата и время</th>
+                    <th>Версия</th>
+                    <th>Этап / Событие</th>
+                    <th>Вид</th>
+                    <th>Кому / Где</th>
+                    <th>Примечание</th>
+                    <th>Автор</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{ range $doc.History }}
+                <tr>
+                    <td>{{ .CreatedAt.Format "02.01.2006 15:04" }}</td>
+                    <td>{{ if gt .VersionNum 0 }}<strong>v{{ .VersionNum }}</strong>{{ else }}—{{ end }}</td>
+                    <td><strong>{{ call $.DocStageName .Stage }}</strong></td>
+                    <td>{{ call $.DocFormName .FormType }}</td>
+                    <td>{{ .RecipientInfo }}</td>
+                    <td>{{ if .Note }}{{ .Note }}{{ else }}—{{ end }}</td>
+                    <td>{{ if .AuthorName }}{{ .AuthorName }}{{ else }}—{{ end }}</td>
+                </tr>
+                {{ end }}
+            </tbody>
+        </table>
+        {{ else }}
+            <p class="muted">История пуста.</p>
+        {{ end }}
+    </div>
+</div>
+
+<!-- Опасная зона -->
+{{ if .CanEdit }}
+<div class="danger-zone">
+    <h3>Опасная зона</h3>
+    <p>
+        <strong>Внимание:</strong> удаление записей здесь очищает только историю в базе данных программы.
+        Сами файлы на файловом сервере <strong>не удаляются автоматически</strong> — при необходимости удалите их из папки вручную.
+    </p>
+
+    {{ if gt (len $doc.Versions) 1 }}
+    <div style="margin-bottom: 14px;">
+        <div style="font-size:13px; font-weight:600; margin-bottom:6px;">Удалить промежуточную (устаревшую) версию из базы:</div>
+        <div style="display:flex; flex-wrap:wrap; gap:8px;">
+            {{ range $idx, $v := $doc.Versions }}
+                {{ if gt $idx 0 }}
+                <form method="POST" action="{{ $base }}/documents/{{ $doc.ID }}/versions/{{ $v.ID }}/delete" onsubmit="return confirm('Удалить запись о версии v{{ $v.VersionNum }} из базы данных? Сам файл на сервере останется, его нужно удалить вручную.');" class="inline">
+                    <button type="submit" class="btn btn-sm btn-danger">Удалить v{{ $v.VersionNum }} ({{ $v.FileName }})</button>
+                </form>
+                {{ end }}
+            {{ end }}
+        </div>
+    </div>
+    {{ end }}
+
+    <form method="POST" action="{{ $base }}/documents/{{ $doc.ID }}/delete" onsubmit="return confirm('Удалить весь документ и его историю из базы данных? Файлы на сервере останутся.');">
+        <button type="submit" class="btn btn-sm btn-danger">Удалить карточку документа из реестра</button>
+    </form>
+</div>
+{{ end }}
+
+<script>
+document.addEventListener('click', function (e) {
+    const btn = e.target.closest('.js-open-doc-file');
+    if (!btn) return;
+    const p = btn.getAttribute('data-path');
+    if (p) window.location.href = 'pm-agent://open?path=' + encodeURIComponent(p);
+});
+</script>
+
+{{ template "layout_footer" . }}
+{{ end }}
