@@ -43,18 +43,18 @@ CREATE TABLE IF NOT EXISTS "Departments" (
 	UNIQUE("department")
 );
 
-INSERT INTO "Departments" ("id","department","work_kind_default") VALUES ('ПО','Проектный отдел', 'ПИР');
-INSERT INTO "Departments" ("id","department","work_kind_default") VALUES ('ПОиПНР','Отдел ПО и ПНР', 'ППО');
-INSERT INTO "Departments" ("id","department","work_kind_default") VALUES ('ПНР','Отдел ПНР', 'ПНР');
-INSERT INTO "Departments" ("id","department","work_kind_default") VALUES ('МО','Монтажный отдел', 'СМР');
-INSERT INTO "Departments" ("id","department","work_kind_default") VALUES ('МСС','Сборочный сектор', 'Сборка');
-INSERT INTO "Departments" ("id","department","work_kind_default") VALUES ('ОСО','Отдел сервисного обслуживания', 'Ремонт');
-INSERT INTO "Departments" ("id","department","work_kind_default") VALUES ('ССТ','Сектор склада ТМЦ', 'Продажа');
-INSERT INTO "Departments" ("id","department","work_kind_default") VALUES ('КО','Коммерческий отдел', 'Продажа');
-INSERT INTO "Departments" ("id","department","work_kind_default") VALUES ('ОУП','Отдел управления проектами', 'Комплексный');
-INSERT INTO "Departments" ("id","department","work_kind_default") VALUES ('ООК','Отдел обеспечения и квалификации', 'Комплексный');
-INSERT INTO "Departments" ("id","department","work_kind_default") VALUES ('ОПиК','Отделение персонала и коммуникаций', 'Комплексный');
-INSERT INTO "Departments" ("id","department","work_kind_default") VALUES ('А','Администрация', 'Комплексный');
+INSERT INTO "Departments" ("id","short_name","name","work_kind_default") VALUES (1, 'ПО','Проектный отдел', 'ПИР');
+INSERT INTO "Departments" ("id","short_name","name","work_kind_default") VALUES (2, 'ПОиПНР','Отдел ПО и ПНР', 'ППО');
+INSERT INTO "Departments" ("id","short_name","name","work_kind_default") VALUES (3, 'ПНР','Отдел ПНР', 'ПНР');
+INSERT INTO "Departments" ("id","short_name","name","work_kind_default") VALUES (4, 'МО','Монтажный отдел', 'СМР');
+INSERT INTO "Departments" ("id","short_name","name","work_kind_default") VALUES (5, 'МСС','Сборочный сектор', 'Сборка');
+INSERT INTO "Departments" ("id","short_name","name","work_kind_default") VALUES (6, 'ОСО','Отдел сервисного обслуживания', 'Ремонт');
+INSERT INTO "Departments" ("id","short_name","name","work_kind_default") VALUES (7, 'ССТ','Сектор склада ТМЦ', 'Продажа');
+INSERT INTO "Departments" ("id","short_name","name","work_kind_default") VALUES (8, 'КО','Коммерческий отдел', 'Продажа');
+INSERT INTO "Departments" ("id","short_name","name","work_kind_default") VALUES (9, 'ОУП','Отдел управления проектами', 'Комплексный');
+INSERT INTO "Departments" ("id","short_name","name","work_kind_default") VALUES (10, 'ООК','Отдел обеспечения и квалификации', 'Комплексный');
+INSERT INTO "Departments" ("id","short_name","name","work_kind_default") VALUES (11, 'ОПиК','Отделение персонала и коммуникаций', 'Комплексный');
+INSERT INTO "Departments" ("id","short_name","name","work_kind_default") VALUES (12, 'А','Администрация', 'Комплексный');
 
 
 CREATE TABLE IF NOT EXISTS "Vacations" (

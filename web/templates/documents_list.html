@@ -32,13 +32,16 @@
             &rarr; <span style="color: var(--text-soft);">Документы</span>
         </div>
     </div>
-    
+
     <div class="actions">
         {{ if $c.ProjectURL }}
-            <a href="{{ $base }}/open-folder" target="_blank" class="btn btn-sm">📁 Открыть папку</a>
+            <a href="pm-agent://open?path={{ $c.ProjectURL | urlquery }}\2) Договор" class="btn btn-sm" title="Открыть папку проекта в проводнике">📁 Открыть папку</a>
         {{ end }}
         {{ if .CanEdit }}
-            <a href="{{ $base }}/documents/new" class="btn btn-sm btn-primary">+ Добавить документ</a>
+            {{ if not .HasMainDoc }}
+                <a href="{{ $base }}/documents/new?type=main" class="btn btn-sm btn-primary">+ Основной договор</a>
+            {{ end }}
+            <a href="{{ $base }}/documents/new?type=addendum" class="btn btn-sm btn-primary">+ Доп. соглашение (ДС)</a>
         {{ end }}
     </div>
     
@@ -65,14 +68,19 @@
                 <th class="actions">Действия</th>
             </tr>
         </thead>
-        <tbody>
+       <tbody>
             {{ range .Documents }}
             {{ $doc := . }}
             <tr>
                 <td>{{ call $.DocTypeName $doc.DocType }}</td>
                 <td>
                     <a href="{{ $base }}/documents/{{ $doc.ID }}">
-                        <strong>{{ if $doc.Number }}№ {{ $doc.Number }} — {{ end }}{{ $doc.Title }}</strong>
+                        <strong>
+                            {{ if $doc.Number }}№ {{ $doc.Number }}{{ end }}
+                            {{ if $doc.DocDate }} от {{ $doc.DocDate.Format "02.01.2006" }}{{ end }}
+                            {{ if or $doc.Number $doc.DocDate }} — {{ end }}
+                            {{ $doc.Title }}
+                        </strong>
                     </a>
                 </td>
                 <td>
@@ -95,6 +103,9 @@
                     {{ if $doc.Versions }}
                         {{ $latest := index $doc.Versions 0 }}
                         <button type="button" class="btn btn-sm js-open-doc-file" data-path="{{ $c.ProjectURL }}\{{ $latest.RelPath }}">📄 Открыть файл</button>
+                        {{ if $latest.AttachmentsRelPath }}
+                            <button type="button" class="btn btn-sm js-open-doc-file" data-path="{{ $c.ProjectURL }}\{{ $latest.AttachmentsRelPath }}">📁 Приложения</button>
+                        {{ end }}
                     {{ end }}
                     <a href="{{ $base }}/documents/{{ $doc.ID }}" class="btn btn-sm btn-primary">Версии и история</a>
                 </td>

@@ -58,7 +58,13 @@ func (h *DocumentHandler) Index(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-
+	hasMain := false
+	for _, d := range docs {
+		if d.DocType == "main" {
+			hasMain = true
+			break
+		}
+	}
 	users, _ := h.contractSvc.ListActiveUsers(r.Context())
 
 	data := ContractBaseData(r, "Документы договора "+c.ID, c, h.cpSvc)
@@ -71,6 +77,7 @@ func (h *DocumentHandler) Index(w http.ResponseWriter, r *http.Request) {
 	data["DocxTemplates"] = h.docSvc.ListDocxTemplates()
 	data["Flash"] = r.URL.Query().Get("flash")
 	data["Error"] = r.URL.Query().Get("err")
+	data["HasMainDoc"] = hasMain
 
 	data["DocTypeName"] = func(code string) string { return findRefItemName(models.GetDocTypes(), code) }
 	data["DocStageName"] = func(code string) string { return findRefItemName(models.GetDocStages(), code) }
@@ -98,7 +105,7 @@ func (h *DocumentHandler) Show(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	doc, err := h.docSvc.GetDocumentFull(r.Context(), docID)
+	doc, err := h.docSvc.GetDocumentFull(r.Context(), c.ID, docID)
 	if errors.Is(err, db.ErrDocumentNotFound) {
 		http.NotFound(w, r)
 		return
@@ -153,12 +160,17 @@ func (h *DocumentHandler) CreateDocument(w http.ResponseWriter, r *http.Request)
 	if formType == "" {
 		formType = "draft"
 	}
-	holder := strings.TrimSpace(r.FormValue("holder_info"))
+
+	holder := ""
+	if stage != "signed" {
+		holder = strings.TrimSpace(r.FormValue("holder_info"))
+	}
 
 	doc := &models.ContractDocument{
 		ContractID:   contractID,
 		DocType:      strings.TrimSpace(r.FormValue("doc_type")),
 		Number:       strings.TrimSpace(r.FormValue("number")),
+		DocDate:      services.ParseDate(r.FormValue("doc_date")),
 		Title:        strings.TrimSpace(r.FormValue("title")),
 		CurrentStage: stage,
 		CurrentForm:  formType,
@@ -183,7 +195,7 @@ func (h *DocumentHandler) CreateDocument(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Получаем ID созданной v1 (если файл был создан), чтобы привязать к стартовой отметке
-	if fullDoc, err := h.docSvc.GetDocumentFull(r.Context(), doc.ID); err == nil && len(fullDoc.Versions) > 0 {
+	if fullDoc, err := h.docSvc.GetDocumentFull(r.Context(), contractID, doc.ID); err == nil && len(fullDoc.Versions) > 0 {
 		createdVerID = &fullDoc.Versions[0].ID
 	}
 
@@ -309,10 +321,18 @@ func (h *DocumentHandler) New(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	docType := r.URL.Query().Get("type")
+	if docType != "main" {
+		docType = "addendum"
+	}
 	doc := &models.ContractDocument{
 		ContractID: c.ID,
-		DocType:    "main",
+		DocType:    docType,
 	}
+	if docType == "main" {
+		doc.Title = "Основной договор"
+	}
+
 	h.renderDocForm(w, r, c, doc, true, "")
 }
 
@@ -371,6 +391,7 @@ func (h *DocumentHandler) Update(w http.ResponseWriter, r *http.Request) {
 		ContractID: contractID,
 		DocType:    strings.TrimSpace(r.FormValue("doc_type")),
 		Number:     strings.TrimSpace(r.FormValue("number")),
+		DocDate:    services.ParseDate(r.FormValue("doc_date")),
 		Title:      strings.TrimSpace(r.FormValue("title")),
 		HolderInfo: strings.TrimSpace(r.FormValue("holder_info")),
 	}
@@ -513,4 +534,39 @@ func redirectDocShowFlash(w http.ResponseWriter, r *http.Request, contractID str
 
 func redirectDocShowErr(w http.ResponseWriter, r *http.Request, contractID string, docID int64, msg string) {
 	http.Redirect(w, r, fmt.Sprintf("/contracts/%s/documents/%d?err=%s", contractID, docID, url.QueryEscape(msg)), http.StatusSeeOther)
+}
+
+// UploadAttachments — загрузка файлов приложений любого формата в папку конкретной версии
+func (h *DocumentHandler) UploadAttachments(w http.ResponseWriter, r *http.Request) {
+	contractID := chi.URLParam(r, "id")
+	docID, err := strconv.ParseInt(chi.URLParam(r, "docID"), 10, 64)
+	if err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	verID, err := strconv.ParseInt(chi.URLParam(r, "verID"), 10, 64)
+	if err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	// Лимит 100 МБ на пакет приложений (чертежи, сметы, архивы и т.д.)
+	if err := r.ParseMultipartForm(100 << 20); err != nil {
+		redirectDocShowErr(w, r, contractID, docID, "Размер файлов превышает 100 МБ")
+		return
+	}
+
+	files := r.MultipartForm.File["attachments"]
+	if len(files) == 0 {
+		redirectDocShowErr(w, r, contractID, docID, "Выберите хотя бы один файл приложения")
+		return
+	}
+
+	if err := h.docSvc.UploadAttachments(r.Context(), contractID, verID, files); err != nil {
+		log.Printf("upload attachments: %v", err)
+		redirectDocShowErr(w, r, contractID, docID, err.Error())
+		return
+	}
+
+	redirectDocShowFlash(w, r, contractID, docID, fmt.Sprintf("Загружено приложений: %d шт.", len(files)))
 }

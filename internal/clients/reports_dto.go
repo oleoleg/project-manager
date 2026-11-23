@@ -4,7 +4,6 @@ package clients
 // GET /reports
 // =====================================================
 
-// ReportsResponse — ответ GET /reports.
 type ReportsResponse struct {
 	Items  []ReportItem `json:"items"`
 	Total  int          `json:"total"`
@@ -12,8 +11,6 @@ type ReportsResponse struct {
 	Offset int          `json:"offset"`
 }
 
-// ReportItem — одна сырая запись Reports источника.
-// Даты приходят строками в формате 2006-01-02T15:04:05 (локальное, без TZ).
 type ReportItem struct {
 	ID          int64   `json:"id"`
 	UserID      int64   `json:"userid"`
@@ -57,7 +54,7 @@ type UserItem struct {
 	Email        string `json:"email"`
 	IsAdmin      bool   `json:"is_admin"`
 	IsBlocked    bool   `json:"is_blocked"`
-	DepartmentID string `json:"department_id"`
+	DepartmentID int64  `json:"department_id"`
 }
 
 // =====================================================
@@ -82,7 +79,37 @@ type DepartmentsResponse struct {
 }
 
 type DepartmentItem struct {
-	ID         string `json:"id"`
-	Department string `json:"department"`
-	WorkKind   string `json:"work_kind"`
+	ID              int64  `json:"id"`
+	ShortName       string `json:"short_name"`
+	Name            string `json:"name"`
+	WorkKindDefault string `json:"work_kind_default"`
+}
+
+// =====================================================
+// POST /reports/update-work
+// =====================================================
+
+// UpdateResult — ответ POST /reports/update-work.
+type UpdateResult struct {
+	Updated int             `json:"updated"`
+	Failed  []UpdateFailure `json:"failed"`
+}
+
+type UpdateFailure struct {
+	ID    int64  `json:"id"`
+	Error string `json:"error"`
+}
+
+// UpdatePayload — корневой объект запроса.
+type UpdatePayload struct {
+	Items []UpdateItem `json:"items"`
+}
+
+// UpdateItem — одна строка для обновления.
+type UpdateItem struct {
+	ID       int64  `json:"id"`
+	UserID   int64  `json:"userid"`
+	PrjID    string `json:"prj_id"`
+	WorkKind string `json:"work_kind"`
+	PrjStage string `json:"prj_stage"`
 }

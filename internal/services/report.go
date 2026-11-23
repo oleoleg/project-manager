@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"log"
 	"sort"
 	"time"
 
@@ -18,6 +19,7 @@ const reportDateTimeLayout = "2006-01-02T15:04:05"
 // WorklogRow — расчётная строка табеля. Соответствует логике MainExport источника.
 type WorklogRow struct {
 	SourceID       int64
+	UserID         int64
 	ReportDate     time.Time
 	Weekday        string
 	StartTime      time.Time
@@ -30,8 +32,8 @@ type WorklogRow struct {
 	Description    string
 	EmployeeName   string
 	DepartmentName string
-	WorkKind       *string
-	StageNumber    *string
+	WorkKind       string
+	StageNumber    string
 }
 
 // BuildWorklogRow собирает WorklogRow из сырой записи и разрешённых справочников.
@@ -60,8 +62,17 @@ func BuildWorklogRow(
 		}
 	}
 
+	workKind, stage := "", ""
+	if it.WorkKind != nil {
+		workKind = *it.WorkKind
+	}
+	if it.PrjStage != nil {
+		stage = *it.PrjStage
+	}
+
 	return WorklogRow{
 		SourceID:       it.ID,
+		UserID:         it.UserID,
 		ReportDate:     start,
 		Weekday:        weekdayRU(start.Weekday()),
 		StartTime:      start,
@@ -74,8 +85,8 @@ func BuildWorklogRow(
 		Description:    it.Description,
 		EmployeeName:   employeeName,
 		DepartmentName: departmentName,
-		WorkKind:       it.WorkKind,
-		StageNumber:    it.PrjStage,
+		WorkKind:       workKind,
+		StageNumber:    stage,
 	}
 }
 
@@ -131,17 +142,7 @@ type ReportsPage struct {
 }
 
 // List делает один GET к источнику, обогащает строки справочниками и возвращает страницу.
-// Справочники грузятся параллельно (все четыре — быстрые, без пагинации).
 func (s *ReportsService) List(ctx context.Context, f ListFilter) (*ReportsPage, error) {
-	// 1. Параллельно — страница отчётов и справочники.
-	type dictResult struct {
-		users       []clients.UserItem
-		workTypes   []clients.WorktypeItem
-		departments []clients.DepartmentItem
-	}
-	// (Дальше — простой последовательный вариант; параллельность добавим, когда
-	//  понадобится. Один источник, 4 GET-а — это десятки миллисекунд.)
-
 	resp, err := s.client.FetchReports(ctx, clients.ReportsQuery{
 		From:         f.From,
 		To:           f.To,
@@ -177,19 +178,25 @@ func (s *ReportsService) List(ctx context.Context, f ListFilter) (*ReportsPage, 
 	for _, w := range workTypes {
 		workTypesByID[w.ID] = w
 	}
-	deptNames := make(map[string]string, len(departments))
+	deptNames := make(map[int64]string, len(departments))
 	for _, d := range departments {
-		deptNames[d.ID] = d.Department
+		deptNames[d.ID] = d.Name
 	}
 
 	rows := make([]WorklogRow, 0, len(resp.Items))
 	for _, it := range resp.Items {
-		start, err := time.ParseInLocation(reportDateTimeLayout, it.StartTime, time.Local)
+		start, err := parseReportTime(it.StartTime)
 		if err != nil {
+			log.Printf("skip report id=%d: bad start_time %q: %v", it.ID, it.StartTime, err)
 			continue
 		}
-		end, err := time.ParseInLocation(reportDateTimeLayout, it.EndTime, time.Local)
-		if err != nil || !end.After(start) {
+		end, err := parseReportTime(it.EndTime)
+		if err != nil {
+			log.Printf("skip report id=%d: bad end_time %q: %v", it.ID, it.EndTime, err)
+			continue
+		}
+		if !end.After(start) {
+			log.Printf("skip report id=%d: end <= start", it.ID)
 			continue
 		}
 
@@ -220,7 +227,7 @@ func (s *ReportsService) List(ctx context.Context, f ListFilter) (*ReportsPage, 
 	}, nil
 }
 
-// Dictionaries — три справочника для выпадающих списков на странице.
+// Dictionaries — справочники для выпадающих списков на странице.
 type Dictionaries struct {
 	Users       []clients.UserItem
 	Projects    []clients.ProjectItem
@@ -257,7 +264,7 @@ func (s *ReportsService) Dictionaries(ctx context.Context) (*Dictionaries, error
 		return ni < nj
 	})
 	sort.Slice(departments, func(i, j int) bool {
-		return departments[i].Department < departments[j].Department
+		return departments[i].Name < departments[j].Name
 	})
 	sort.Slice(projects, func(i, j int) bool {
 		return projects[i].PrjID < projects[j].PrjID
@@ -271,7 +278,27 @@ func (s *ReportsService) Dictionaries(ctx context.Context) (*Dictionaries, error
 	}, nil
 }
 
-// UpdateMappings — пакетное обновление work_kind и prj_stage на источнике.
-func (s *ReportsService) UpdateMappings(ctx context.Context, updates []clients.ReportUpdate) (*clients.UpdateResult, error) {
+// ReportUpdate — правка одной строки (заменяет старую).
+type ReportUpdate = clients.UpdateItem
+
+// UpdateMappings — пакетное обновление.
+func (s *ReportsService) UpdateMappings(ctx context.Context, updates []clients.UpdateItem) (*clients.UpdateResult, error) {
 	return s.client.UpdateReports(ctx, updates)
+}
+
+var reportTimeLayouts = []string{
+	"2006-01-02T15:04:05", // с секундами
+	"2006-01-02T15:04",    // без секунд (реальный формат источника)
+}
+
+func parseReportTime(s string) (time.Time, error) {
+	var lastErr error
+	for _, layout := range reportTimeLayouts {
+		t, err := time.ParseInLocation(layout, s, time.Local)
+		if err == nil {
+			return t, nil
+		}
+		lastErr = err
+	}
+	return time.Time{}, lastErr
 }

@@ -4,14 +4,27 @@
 {{ $c := .Contract }}
 {{ $doc := .Document }}
 {{ $base := printf "/contracts/%s" $c.ID }}
+{{ $isMain := eq $doc.DocType "main" }}
 
 <div class="breadcrumb">
     <a href="{{ $base }}">Договор {{ $c.ID }}</a> →
     <a href="{{ $base }}/documents">Документы</a> →
-    <span>{{ if .IsNew }}Новый документ{{ else }}Редактирование{{ end }}</span>
+    <span>
+        {{ if .IsNew }}
+            {{ if $isMain }}Новый основной договор{{ else }}Новое доп. соглашение (ДС){{ end }}
+        {{ else }}
+            Редактирование
+        {{ end }}
+    </span>
 </div>
 
-<h2>{{ if .IsNew }}Новый документ по договору {{ $c.ID }}{{ else }}Редактирование реквизитов документа{{ end }}</h2>
+<h2>
+    {{ if .IsNew }}
+        {{ if $isMain }}Добавление основного договора ({{ $c.ID }}){{ else }}Добавление доп. соглашения (ДС) по договору {{ $c.ID }}{{ end }}
+    {{ else }}
+        {{ if $isMain }}Редактирование основного договора{{ else }}Редактирование доп. соглашения (ДС){{ end }}
+    {{ end }}
+</h2>
 
 {{ if .Error }}<div class="error">{{ .Error }}</div>{{ end }}
 
@@ -20,28 +33,35 @@
       {{ if .IsNew }}enctype="multipart/form-data"{{ end }}
       class="form" style="max-width: 720px;">
 
-    <h3 class="form-section-title">1. Основные сведения</h3>
-    <label>
-        Тип документа *
-        <select name="doc_type" required style="padding: 9px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text);">
-            {{ range .DocTypes }}
-                <option value="{{ .Code }}" {{ if eq $doc.DocType .Code }}selected{{ end }}>{{ .Name }}</option>
-            {{ end }}
-        </select>
-    </label>
+    <input type="hidden" name="doc_type" value="{{ $doc.DocType }}">
 
-    <label>
-        Номер документа (необязательно для проекта)
-        <input type="text" name="number" value="{{ $doc.Number }}" placeholder="Например: 1 или ДС-1">
-    </label>
+    {{ if $isMain }}
+        <input type="hidden" name="title" value="Основной договор">
+        <div class="info-box" style="margin-bottom: 4px;">
+            Номер и дата основного договора подставляются в имена файлов автоматически из карточки договора
+            ({{ if $c.ContractNumber }}№ {{ $c.ContractNumber }}{{ else }}номер пока не присвоен{{ end }}{{ if $c.ContractDate }} от {{ $c.ContractDate.Format "02.01.2006" }}{{ end }}).
+        </div>
+    {{ else }}
+        <h3 class="form-section-title">1. Реквизиты доп. соглашения</h3>
+        <div style="display:flex; gap:12px; flex-wrap:wrap;">
+            <label style="flex:1 1 200px;">
+                Номер ДС
+                <input type="text" name="number" value="{{ $doc.Number }}" placeholder="Например: 1">
+            </label>
+            <label style="flex:1 1 200px;">
+                Дата ДС
+                <input type="date" name="doc_date" value="{{ if $doc.DocDate }}{{ $doc.DocDate.Format "2006-01-02" }}{{ end }}">
+            </label>
+        </div>
 
-    <label>
-        Наименование / Суть документа *
-        <input type="text" name="title" value="{{ $doc.Title }}" placeholder="Например: Договор подряда на СМР" required>
-    </label>
+        <label>
+            Наименование / Суть ДС *
+            <input type="text" name="title" value="{{ $doc.Title }}" placeholder="Например: О продлении сроков выполнения работ" required>
+        </label>
+    {{ end }}
 
     {{ if .IsNew }}
-    <h3 class="form-section-title">2. Файл первой версии (v1)</h3>
+    <h3 class="form-section-title">{{ if $isMain }}1{{ else }}2{{ end }}. Файл первой версии (v1)</h3>
     <label>
         Загрузить готовый файл (PDF / Word)
         <input type="file" name="file" accept=".pdf,.doc,.docx">
@@ -61,13 +81,13 @@
 
     <label>
         Комментарий к файлу
-        <input type="text" name="comment" placeholder="Например: Первичный проект от РП">
+        <input type="text" name="comment" placeholder="Например: Первичный проект">
     </label>
 
-    <h3 class="form-section-title">3. Начальный этап согласования / отправки</h3>
+    <h3 class="form-section-title">{{ if $isMain }}2{{ else }}3{{ end }}. Начальный этап согласования / отправки</h3>
     <label>
         Этап согласования
-        <select name="stage" style="padding: 9px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text);">
+        <select name="stage" class="js-stage-select" style="padding: 9px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text);">
             {{ range .DocStages }}
                 <option value="{{ .Code }}">{{ .Name }}</option>
             {{ end }}
@@ -83,9 +103,9 @@
         </select>
     </label>
 
-    <label>
+    <label class="js-holder-wrap">
         Кому отправлено / У кого находится
-        <input type="text" name="holder_info" list="users-list-new" value="{{ $doc.HolderInfo }}" placeholder="Например: Юридический отдел или Контрагент">
+        <input type="text" name="holder_info" class="js-holder-input" list="users-list-new" value="{{ $doc.HolderInfo }}" placeholder="Например: Юридический отдел или Контрагент">
         <datalist id="users-list-new">
             <option value="Контрагент (Заказчик)">
             <option value="Юридический отдел">
@@ -110,6 +130,8 @@
         <a href="{{ if .IsNew }}{{ $base }}/documents{{ else }}{{ $base }}/documents/{{ $doc.ID }}{{ end }}" class="btn btn-sm">Отмена</a>
     </div>
 </form>
+
+<script src="/static/documents.js"></script>
 
 {{ template "layout_footer" . }}
 {{ end }}

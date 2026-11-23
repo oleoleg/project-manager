@@ -369,7 +369,7 @@ func startHTTPServer(stopCh <-chan struct{}) {
 			r.Get("/contracts/{id}/budget/compare", budgetH.PlanFactIndex)
 
 			// Рапорт сотрудников
-			r.Post("/reports/update-mappings", reportsH.UpdateMappings)
+			r.Post("/reports/update-work", reportsH.UpdateMappings)
 
 		})
 
@@ -431,6 +431,7 @@ func startHTTPServer(stopCh <-chan struct{}) {
 			r.Post("/contracts/{id}/documents/{docID}/versions/{verID}/delete", docH.DeleteVersion)
 			r.Post("/contracts/{id}/documents/{docID}/generate", docH.GenerateFromTemplate)
 			r.Post("/contracts/{id}/documents/{docID}/history", docH.AddHistory)
+			r.Post("/contracts/{id}/documents/{docID}/versions/{verID}/attachments", docH.UploadAttachments)
 
 		})
 

@@ -5,7 +5,7 @@
 Общие требования:
 - Формат ответа: JSON, `Content-Type: application/json`.
 - Коды: `200` — успех, `400` — неверные параметры, `500` — ошибка сервера.
-- Даты/время в формате `YYYY-MM-DDTHH:MM:SS` (локальное время источника, без таймзоны), например `2024-01-16T09:00:00`.
+- Даты/время в формате `YYYY-MM-DDTHH:MM` (локальное время источника, без таймзоны), например `2024-01-16T09:00`.
 - Пагинация: `limit` (по умолчанию `1000`, максимум `5000`), `offset` (по умолчанию `0`).
 - Сортировка `Reports` — по `id ASC` (для стабильной пагинации).
 - API только на чтение (GET), без аутентификации. Но можно POST где будем искать по Reports.id  и перезаписывать только два поля work_kind и prj_stage
@@ -29,7 +29,7 @@
 - `prj_stage` — string.
 
 Ответ:
-```
+```json
 {
   "items": [
     {
@@ -37,8 +37,8 @@
       "userid": 7,
       "prj_id": 1024,
       "work_type": 1,
-      "start_time": "2024-01-16T09:00:00",
-      "end_time": "2024-01-16T18:00:00",
+      "start_time": "2024-01-16T09:00",
+      "end_time": "2024-01-16T18:00",
       "description": "Разработка модуля X",
       "timestamp": "2024-01-16T18:05:12",
       "work_kind": "ПИР",
@@ -69,7 +69,7 @@
 Справочник видов работ.
 
 Ответ:
-```
+```json
 {
   "items": [
     { "id": 1, "name": "Командировка", "calculate_hours": true }
@@ -89,7 +89,7 @@
 Справочник сотрудников.
 
 Ответ:
-```
+```json
 {
   "items": [
     {
@@ -100,7 +100,7 @@
       "email": "ivanov@example.com",
       "is_admin": false,
       "is_blocked": false,
-      "department_id": 'ПО'
+      "department_id": 1
     }
   ]
 }
@@ -114,7 +114,7 @@
 - `email` — `Users.email`.
 - `is_admin` — `Users.is_admin` (boolean).
 - `is_blocked` — `Users.is_blocked` (boolean).
-- `department_id` — `Users.department_id` (string)
+- `department_id` — `Users.department_id`.
 
 ---
 
@@ -123,10 +123,10 @@
 Справочник проектов.
 
 Ответ:
-```
+```json
 {
   "items": [
-    { "prj_id": 1024, "description": "Договор 1024-AA ..." }
+    { "prj_id": "2024", "description": "Договор 1024-AA ..." }
   ]
 }
 ```
@@ -142,29 +142,44 @@
 Справочник отделов.
 
 Ответ:
-```
+```json
 {
   "items": [
-    { "id": "ПОиПНР", "department": "Отдел ПО и ПНР", "work_kind": "ППО" }
+    { "id": 1, "short_name": "ПОиПНР", "name": "Отдел ПО и ПНР", "work_kind_default": "ППО" }
   ]
 }
 ```
 
 Поля:
 - `id` — `department.id`.
-- `department` — `department.department`.
-- `work_kind` — `department.work_kind_default`.
+- `short_name` — `department.short_name`.
+- `name` — `department.name`.
+- `work_kind_default` — `department.work_kind_default`.
 
 
-## 6) POST /reports/update
+## 6) POST /reports/update-work
 
-Обновить только work_kind и prj_stage (остальное оставить)
+Обновление полей `prj_id`, `work_kind`, `prj_stage` для конкретного отчета.
 
-Запрос:
-массив объектов {"id": ..., "work_kind": ..., "prj_stage": ...}
+**Content-Type:** `application/json`
+
+**Тело запроса:**
+```json
+{
+  "items": [
+    {
+      "id": 12345, - для поиска в БД и перезаписи
+      "userid": 7, - для поиска в БД и перезаписи
+      "prj_id": "6666", - перезаписываем
+      "work_kind": "ППО", - перезаписываем
+      "prj_stage": "1.2" - перезаписываем
+    }, ...
+  ]
+}
+```
 
 Ответ:
-```
+```json
 {
   "updated": 2,
   "failed": [ { "id": 12345, "error": "not found" } ]

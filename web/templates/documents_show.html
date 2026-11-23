@@ -81,7 +81,7 @@
                 {{ end }}
                 <label>
                     Этап согласования
-                    <select name="stage" required style="padding:8px 10px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:var(--text);">
+                    <select name="stage" class="js-stage-select" required style="padding:8px 10px; border:1px solid var(--border); border-radius:6px; background:var(--surface); color:var(--text);">
                         {{ range .DocStages }}
                             <option value="{{ .Code }}" {{ if eq $doc.CurrentStage .Code }}selected{{ end }}>{{ .Name }}</option>
                         {{ end }}
@@ -95,9 +95,9 @@
                         {{ end }}
                     </select>
                 </label>
-                <label>
+                <label class="js-holder-wrap" {{ if eq $doc.CurrentStage "signed" }}style="display:none;"{{ end }}>
                     У кого на рассмотрении
-                    <input type="text" name="recipient_info" list="users-stage-{{ $doc.ID }}" value="{{ $doc.HolderInfo }}" placeholder="Например: Юрист Иванов / Заказчик" required>
+                    <input type="text" name="recipient_info" class="js-holder-input" list="users-stage-{{ $doc.ID }}" value="{{ $doc.HolderInfo }}" placeholder="Например: Юрист Иванов / Заказчик" {{ if ne $doc.CurrentStage "signed" }}required{{ end }}>
                     <datalist id="users-stage-{{ $doc.ID }}">
                         <option value="Контрагент (Заказчик)">
                         <option value="Юридический отдел">
@@ -188,6 +188,37 @@
                         <div>{{ $v.FileName }}</div>
                         <div class="muted" style="font-size:11px;">{{ $v.RelPath }}</div>
                         {{ if $v.Comment }}<div style="font-size:12px; margin-top:2px;">{{ $v.Comment }}</div>{{ end }}
+
+                        <!-- Папка приложений этой версии -->
+                        {{ if $v.AttachmentsRelPath }}
+                        <div style="margin-top: 8px; padding: 8px 10px; background: var(--surface-alt); border: 1px solid var(--border-soft); border-radius: 6px; font-size: 12px;">
+                            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:4px;">
+                                <strong>📎 Приложения ({{ len $v.AttachmentFiles }}):</strong>
+                                <button type="button" class="btn btn-sm js-open-doc-file" data-path="{{ $c.ProjectURL }}\{{ $v.AttachmentsRelPath }}" style="padding: 2px 8px; font-size: 11px;">
+                                    📁 Открыть папку
+                                </button>
+                            </div>
+
+                            {{ if $v.AttachmentFiles }}
+                                <ul style="margin: 4px 0 6px 16px; padding: 0;">
+                                    {{ range $v.AttachmentFiles }}
+                                    <li style="margin-bottom: 2px;">
+                                        <a href="#" class="js-open-doc-file" data-path="{{ $c.ProjectURL }}\{{ $v.AttachmentsRelPath }}\{{ . }}">{{ . }}</a>
+                                    </li>
+                                    {{ end }}
+                                </ul>
+                            {{ else }}
+                                <div class="muted" style="margin-bottom: 4px;">Папка пуста (можно загрузить ниже или скопировать в Проводнике).</div>
+                            {{ end }}
+
+                            {{ if $.CanEdit }}
+                            <form method="POST" action="{{ $base }}/documents/{{ $doc.ID }}/versions/{{ $v.ID }}/attachments" enctype="multipart/form-data" style="display:flex; gap:6px; align-items:center; margin-top:6px;">
+                                <input type="file" name="attachments" multiple required style="font-size:11px; flex:1;">
+                                <button type="submit" class="btn btn-sm" style="padding: 2px 8px; font-size: 11px;">+ Загрузить</button>
+                            </form>
+                            {{ end }}
+                        </div>
+                        {{ end }}
                     </td>
                     <td>{{ call $.DocFormName $v.FormType }}</td>
                     <td>{{ if $v.UploaderName }}{{ $v.UploaderName }}{{ else }}—{{ end }}</td>
@@ -199,7 +230,7 @@
                 {{ end }}
             </tbody>
         </table>
-        
+
         {{ else }}
             <p class="muted" style="margin-bottom:14px;">Файлы ещё не загружены.</p>
         {{ end }}
@@ -314,6 +345,8 @@ document.addEventListener('click', function (e) {
     if (p) window.location.href = 'pm-agent://open?path=' + encodeURIComponent(p);
 });
 </script>
+
+<script src="/static/documents.js"></script>
 
 {{ template "layout_footer" . }}
 {{ end }}

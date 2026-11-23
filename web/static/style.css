@@ -41,6 +41,9 @@ html[data-theme="light"] {
 
     --btn-soft-bg: #eef1f5;
     --btn-soft-hover: #e0e5ec;
+
+    --row-changed-bg: #fffbe6;
+    --row-changed-selected-bg: #ffeaa7;
 }
 
 html[data-theme="dark"] {
@@ -82,6 +85,9 @@ html[data-theme="dark"] {
 
     --btn-soft-bg: #343a47;
     --btn-soft-hover: #3f4655;
+
+    --row-changed-bg: #4a3d1a;
+    --row-changed-selected-bg: #5a4a1e;
 }
 
 /* =====================================================
@@ -1820,4 +1826,22 @@ html[data-theme="dark"] .doc-badge--stage-review {
     font-size: 12px;
     color: var(--text-muted);
     margin-bottom: 4px;
+}
+
+
+/* =====================================================
+  Рапорта
+   ===================================================== */
+
+.report-row { cursor: pointer; user-select: none; }
+.report-row:hover { background-color: var(--surface-soft); }
+.report-row.row-selected { background-color: var(--accent-soft) !important; }
+.report-row.row-changed td { background-color: var(--row-changed-bg) !important; }
+.report-row.row-changed.row-selected td { background-color: var(--row-changed-selected-bg) !important; }
+.report-row.row-changed td { color: var(--text); }
+.sub-text {
+    font-size: 11px;
+    color: var(--text-soft);
+    margin-top: 2px;
+    line-height: 1.2;
 }

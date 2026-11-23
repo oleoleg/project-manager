@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -67,14 +68,25 @@ func BuildDocRelPath(
 	if stage != "signed" {
 		nameParts = append(nameParts, fmt.Sprintf("v%d", versionNum))
 	}
-	nameParts = append(nameParts, docLabel)
-
-	if c != nil {
-		if num := sanitizeFilename(c.ContractNumber); num != "" {
-			nameParts = append(nameParts, "№_"+num)
+	if doc.DocType == "addendum" {
+		if cleanDocNum != "" {
+			nameParts = append(nameParts, "ДС_"+cleanDocNum)
+		} else {
+			nameParts = append(nameParts, "ДС")
 		}
-		if c.ContractDate != nil {
-			nameParts = append(nameParts, "от_"+c.ContractDate.Format("2006-01-02"))
+		if doc.DocDate != nil {
+			nameParts = append(nameParts, "от_"+doc.DocDate.Format("2006-01-02"))
+		}
+	} else {
+		// Основной договор — берём номер и дату из карточки договора (contracts)
+		nameParts = append(nameParts, "Договор")
+		if c != nil {
+			if num := sanitizeFilename(c.ContractNumber); num != "" {
+				nameParts = append(nameParts, "№_"+num)
+			}
+			if c.ContractDate != nil {
+				nameParts = append(nameParts, "от_"+c.ContractDate.Format("2006-01-02"))
+			}
 		}
 	}
 
@@ -313,12 +325,23 @@ func (s *DocumentService) CreateDocument(ctx context.Context, d *models.Contract
 	d.Number = strings.TrimSpace(d.Number)
 	d.HolderInfo = strings.TrimSpace(d.HolderInfo)
 
-	if d.Title == "" {
-		return ErrDocTitleRequired
+	if d.DocType == "main" {
+		exists, err := s.repo.HasMainDocument(ctx, d.ContractID)
+		if err != nil {
+			return err
+		}
+		if exists {
+			return fmt.Errorf("основной договор по этому проекту уже создан (можно добавить только ДС)")
+		}
+		d.Title = "Основной договор"
 	}
-	if d.DocType == "" {
-		d.DocType = "main"
+
+	if d.DocType == "addendum" {
+		if d.Title == "" {
+			return ErrDocTitleRequired
+		}
 	}
+
 	if d.CurrentStage == "" {
 		d.CurrentStage = "draft"
 	}
@@ -329,7 +352,7 @@ func (s *DocumentService) CreateDocument(ctx context.Context, d *models.Contract
 	return s.repo.CreateDocument(ctx, d)
 }
 
-// UploadVersion сохраняет файл на UNC-сервер и регистрирует новую версию в БД.
+// UploadVersion сохраняет файл на UNC-сервер, создаёт папку приложений (копируя из прошлой версии) и пишет в БД.
 func (s *DocumentService) UploadVersion(
 	ctx context.Context,
 	contractID string,
@@ -348,7 +371,7 @@ func (s *DocumentService) UploadVersion(
 		return 0, ErrDocProjectURLRequired
 	}
 
-	doc, err := s.repo.GetDocumentByID(ctx, docID)
+	doc, err := s.repo.GetDocumentFull(ctx, docID)
 	if err != nil {
 		return 0, err
 	}
@@ -373,26 +396,35 @@ func (s *DocumentService) UploadVersion(
 		return 0, err
 	}
 
+	// Формируем папку приложений для новой версии и переносим туда приложения из предыдущей
+	attRelPath := BuildAttachmentsRelPath(doc, doc.CurrentStage, nextVer)
+	prevAttRelPath := ""
+	if len(doc.Versions) > 0 {
+		prevAttRelPath = doc.Versions[0].AttachmentsRelPath
+	}
+	_ = CopyDirContentsOnUNC(c.ProjectURL, prevAttRelPath, attRelPath)
+
 	ver := &models.DocumentVersion{
-		DocumentID: doc.ID,
-		VersionNum: nextVer,
-		RelPath:    relPath,
-		FileName:   filepath.Base(relPath),
-		FileExt:    ext,
-		FormType:   formType,
-		Comment:    strings.TrimSpace(comment),
-		UploadedBy: userID,
+		DocumentID:         doc.ID,
+		VersionNum:         nextVer,
+		RelPath:            relPath,
+		AttachmentsRelPath: attRelPath,
+		FileName:           filepath.Base(relPath),
+		FileExt:            ext,
+		FormType:           formType,
+		Comment:            strings.TrimSpace(comment),
+		UploadedBy:         userID,
 	}
 
 	if err := s.repo.AddVersion(ctx, ver); err != nil {
-		_ = os.Remove(fullPath) // откат файла при сбое БД
+		_ = os.Remove(fullPath)
 		return 0, err
 	}
 
 	return nextVer, nil
 }
 
-// GenerateFromTemplate формирует .docx из шаблона с автоподстановкой реквизитов договора и контрагента.
+// GenerateFromTemplate формирует .docx из шаблона и создаёт/копирует папку приложений.
 func (s *DocumentService) GenerateFromTemplate(
 	ctx context.Context,
 	contractID string,
@@ -413,7 +445,7 @@ func (s *DocumentService) GenerateFromTemplate(
 		return 0, ErrDocProjectURLRequired
 	}
 
-	doc, err := s.repo.GetDocumentByID(ctx, docID)
+	doc, err := s.repo.GetDocumentFull(ctx, docID)
 	if err != nil {
 		return 0, err
 	}
@@ -440,6 +472,7 @@ func (s *DocumentService) GenerateFromTemplate(
 		"{{DOC_NUMBER}}":        doc.Number,
 		"{{DOC_TITLE}}":         doc.Title,
 		"{{TODAY}}":             time.Now().Format("02.01.2006"),
+		"{{DOC_DATE}}":          doc.DocDate.Format("02.01.2006"),
 	}
 
 	nextVer, err := s.repo.NextVersionNumber(ctx, doc.ID)
@@ -455,15 +488,23 @@ func (s *DocumentService) GenerateFromTemplate(
 		return 0, err
 	}
 
+	attRelPath := BuildAttachmentsRelPath(doc, doc.CurrentStage, nextVer)
+	prevAttRelPath := ""
+	if len(doc.Versions) > 0 {
+		prevAttRelPath = doc.Versions[0].AttachmentsRelPath
+	}
+	_ = CopyDirContentsOnUNC(c.ProjectURL, prevAttRelPath, attRelPath)
+
 	ver := &models.DocumentVersion{
-		DocumentID: doc.ID,
-		VersionNum: nextVer,
-		RelPath:    relPath,
-		FileName:   filepath.Base(relPath),
-		FileExt:    "docx",
-		FormType:   "draft",
-		Comment:    "Из шаблона: " + templateName,
-		UploadedBy: userID,
+		DocumentID:         doc.ID,
+		VersionNum:         nextVer,
+		RelPath:            relPath,
+		AttachmentsRelPath: attRelPath,
+		FileName:           filepath.Base(relPath),
+		FileExt:            "docx",
+		FormType:           "draft",
+		Comment:            "Из шаблона: " + templateName,
+		UploadedBy:         userID,
 	}
 
 	if err := s.repo.AddVersion(ctx, ver); err != nil {
@@ -472,10 +513,6 @@ func (s *DocumentService) GenerateFromTemplate(
 	}
 
 	return nextVer, nil
-}
-
-func (s *DocumentService) GetDocumentFull(ctx context.Context, docID int64) (*models.ContractDocument, error) {
-	return s.repo.GetDocumentFull(ctx, docID)
 }
 
 // DeleteVersion удаляет промежуточную версию из БД (крайнюю удалять запрещено).
@@ -490,7 +527,23 @@ func (s *DocumentService) DeleteVersion(ctx context.Context, docID, verID int64)
 	return s.repo.DeleteVersion(ctx, verID)
 }
 
-// AddHistory записывает событие согласования/отправки и перемещает файл в папку нового этапа.
+// GetDocumentFull возвращает документ с версиями, историей и списком файлов из папок приложений.
+func (s *DocumentService) GetDocumentFull(ctx context.Context, contractID string, docID int64) (*models.ContractDocument, error) {
+	doc, err := s.repo.GetDocumentFull(ctx, docID)
+	if err != nil {
+		return nil, err
+	}
+	if c, err := s.contractRepo.GetByID(ctx, contractID); err == nil && c.ProjectURL != "" {
+		for i := range doc.Versions {
+			doc.Versions[i].AttachmentFiles = ListDirFilesOnUNC(c.ProjectURL, doc.Versions[i].AttachmentsRelPath)
+		}
+	}
+	return doc, nil
+}
+
+// AddHistory записывает событие согласования/отправки.
+// При подписании ("signed") — КОПИРУЕТ файл в корень и приложения в "Приложения_подписаны".
+// При смене рабочего этапа — перемещает файл и копирует приложения в папку нового этапа.
 func (s *DocumentService) AddHistory(ctx context.Context, contractID string, h *models.DocumentHistory) error {
 	h.Stage = strings.TrimSpace(h.Stage)
 	h.FormType = strings.TrimSpace(h.FormType)
@@ -504,11 +557,14 @@ func (s *DocumentService) AddHistory(ctx context.Context, contractID string, h *
 		h.FormType = "draft"
 	}
 
+	if h.Stage == "signed" {
+		h.RecipientInfo = ""
+	}
+
 	if err := s.repo.AddHistory(ctx, h); err != nil {
 		return err
 	}
 
-	// Перемещаем привязанную (крайнюю) версию в подпапку нового этапа или в корень при подписании
 	if h.VersionID != nil && *h.VersionID > 0 {
 		c, errC := s.contractRepo.GetByID(ctx, contractID)
 		doc, errD := s.repo.GetDocumentByID(ctx, h.DocumentID)
@@ -516,10 +572,76 @@ func (s *DocumentService) AddHistory(ctx context.Context, contractID string, h *
 
 		if errC == nil && errD == nil && errV == nil && c.ProjectURL != "" {
 			newRelPath := BuildDocRelPath(c, doc, h.Stage, h.FormType, ver.FileExt, ver.VersionNum)
-			if err := MoveFileOnUNC(c.ProjectURL, ver.RelPath, newRelPath); err == nil {
-				_ = s.repo.UpdateVersionPath(ctx, ver.ID, newRelPath, filepath.Base(newRelPath))
+			newAttRelPath := BuildAttachmentsRelPath(doc, h.Stage, ver.VersionNum)
+
+			var fileErr error
+			if h.Stage == "signed" {
+				// При подписании создаём копию в корне, исходный рабочий файл не вырезаем
+				fileErr = CopyFileOnUNC(c.ProjectURL, ver.RelPath, newRelPath)
+			} else {
+				fileErr = MoveFileOnUNC(c.ProjectURL, ver.RelPath, newRelPath)
+			}
+
+			// Перекопируем все файлы приложений в папку нового этапа
+			_ = CopyDirContentsOnUNC(c.ProjectURL, ver.AttachmentsRelPath, newAttRelPath)
+
+			if fileErr == nil {
+				_ = s.repo.UpdateVersionPath(ctx, ver.ID, newRelPath, filepath.Base(newRelPath), newAttRelPath)
 			}
 		}
+	}
+
+	return nil
+}
+
+// UploadAttachments загружает один или несколько файлов любого расширения в папку приложений версии.
+func (s *DocumentService) UploadAttachments(
+	ctx context.Context,
+	contractID string,
+	verID int64,
+	files []*multipart.FileHeader,
+) error {
+	c, err := s.contractRepo.GetByID(ctx, contractID)
+	if err != nil {
+		return err
+	}
+	if c.ProjectURL == "" {
+		return ErrDocProjectURLRequired
+	}
+
+	ver, err := s.repo.GetVersionByID(ctx, verID)
+	if err != nil {
+		return err
+	}
+	if ver.AttachmentsRelPath == "" {
+		return fmt.Errorf("у версии не задана папка приложений")
+	}
+
+	targetDir := filepath.Join(c.ProjectURL, ver.AttachmentsRelPath)
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		return fmt.Errorf("не удалось создать папку приложений: %w", err)
+	}
+
+	for _, fh := range files {
+		src, err := fh.Open()
+		if err != nil {
+			continue
+		}
+		cleanName := sanitizeFilename(filepath.Base(fh.Filename))
+		if cleanName == "" {
+			src.Close()
+			continue
+		}
+		destPath := filepath.Join(targetDir, cleanName)
+		_ = os.Chmod(destPath, 0666)
+
+		dst, err := os.Create(destPath)
+		if err == nil {
+			_, _ = io.Copy(dst, src)
+			dst.Close()
+			_ = os.Chmod(destPath, 0444)
+		}
+		src.Close()
 	}
 
 	return nil
@@ -584,4 +706,109 @@ func StageFolderName(stage string) string {
 	default:
 		return "В_работе"
 	}
+}
+
+// BuildAttachmentsRelPath формирует относительный путь к папке приложений конкретной версии:
+// - Не подписан: 2) Договор\Основной_договор\Подготовка_проекта\v1_Приложения
+// - Подписан:    2) Договор\Основной_договор\Приложения_подписаны
+func BuildAttachmentsRelPath(doc *models.ContractDocument, stage string, versionNum int) string {
+	docFolder := getDocBaseFolder(doc)
+	if stage == "signed" {
+		return filepath.Join("2) Договор", docFolder, "Приложения_подписаны")
+	}
+	attFolder := fmt.Sprintf("v%d_Приложения", versionNum)
+	return filepath.Join("2) Договор", docFolder, StageFolderName(stage), attFolder)
+}
+
+func getDocBaseFolder(doc *models.ContractDocument) string {
+	if doc.DocType == "addendum" {
+		if cleanNum := sanitizeFilename(doc.Number); cleanNum != "" {
+			return "ДС_" + cleanNum
+		}
+		return "Доп_соглашения"
+	}
+	return "Основной_договор"
+}
+
+// CopyFileOnUNC создаёт копию файла на сервере (исходный файл остаётся на месте) и вешает Read-Only.
+func CopyFileOnUNC(projectURL, oldRelPath, newRelPath string) error {
+	oldFull := filepath.Join(projectURL, oldRelPath)
+	if oldFull == filepath.Join(projectURL, newRelPath) {
+		return nil
+	}
+	f, err := os.Open(oldFull)
+	if err != nil {
+		return fmt.Errorf("не удалось открыть исходный файл для копирования: %w", err)
+	}
+	defer f.Close()
+
+	_, err = SaveFileToUNC(projectURL, newRelPath, f)
+	return err
+}
+
+// CopyDirContentsOnUNC копирует все файлы из старой папки приложений в новую (если старая существует).
+func CopyDirContentsOnUNC(projectURL, oldAttRelPath, newAttRelPath string) error {
+	if projectURL == "" || newAttRelPath == "" {
+		return nil
+	}
+	newFullDir := filepath.Join(projectURL, newAttRelPath)
+	if err := os.MkdirAll(newFullDir, 0755); err != nil {
+		return err
+	}
+
+	if oldAttRelPath == "" || oldAttRelPath == newAttRelPath {
+		return nil
+	}
+
+	oldFullDir := filepath.Join(projectURL, oldAttRelPath)
+	entries, err := os.ReadDir(oldFullDir)
+	if err != nil {
+		return nil // Если старой папки ещё не было — просто создали новую
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		srcPath := filepath.Join(oldFullDir, entry.Name())
+		dstPath := filepath.Join(newFullDir, entry.Name())
+
+		// Если в целевой папке уже есть файл с таким именем — не затираем
+		if _, err := os.Stat(dstPath); err == nil {
+			continue
+		}
+
+		in, err := os.Open(srcPath)
+		if err != nil {
+			continue
+		}
+		out, err := os.Create(dstPath)
+		if err != nil {
+			in.Close()
+			continue
+		}
+		_, _ = io.Copy(out, in)
+		in.Close()
+		out.Close()
+	}
+	return nil
+}
+
+// ListDirFilesOnUNC возвращает имена всех файлов внутри папки приложений на сервере.
+func ListDirFilesOnUNC(projectURL, attRelPath string) []string {
+	if projectURL == "" || attRelPath == "" {
+		return nil
+	}
+	fullDir := filepath.Join(projectURL, attRelPath)
+	entries, err := os.ReadDir(fullDir)
+	if err != nil {
+		return nil
+	}
+	var files []string
+	for _, e := range entries {
+		if !e.IsDir() && !strings.HasPrefix(e.Name(), "~$") && e.Name() != "Thumbs.db" {
+			files = append(files, e.Name())
+		}
+	}
+	return files
 }

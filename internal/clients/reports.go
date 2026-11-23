@@ -43,24 +43,6 @@ type ReportsQuery struct {
 	Offset       int
 }
 
-// ReportUpdate — правка одной строки отчёта.
-type ReportUpdate struct {
-	ID       int64  `json:"id"`
-	WorkKind string `json:"work_kind"`
-	PrjStage string `json:"prj_stage"`
-}
-
-// UpdateResult — ответ POST /reports/update.
-type UpdateResult struct {
-	Updated int             `json:"updated"`
-	Failed  []UpdateFailure `json:"failed"`
-}
-
-type UpdateFailure struct {
-	ID    int64  `json:"id"`
-	Error string `json:"error"`
-}
-
 // FetchReports — один GET /reports с параметрами. Возвращает страницу как есть.
 func (c *ReportsClient) FetchReports(ctx context.Context, q ReportsQuery) (*ReportsResponse, error) {
 	u, err := url.Parse(c.baseURL + "/reports")
@@ -133,18 +115,19 @@ func (c *ReportsClient) FetchDepartments(ctx context.Context) ([]DepartmentItem,
 	return resp.Items, nil
 }
 
-// UpdateReports — один POST /reports/update с массивом правок.
-func (c *ReportsClient) UpdateReports(ctx context.Context, updates []ReportUpdate) (*UpdateResult, error) {
+// UpdateReports — один POST /reports/update-work с массивом правок.
+func (c *ReportsClient) UpdateReports(ctx context.Context, updates []UpdateItem) (*UpdateResult, error) {
 	if len(updates) == 0 {
 		return &UpdateResult{}, nil
 	}
 
-	body, err := json.Marshal(updates)
+	payload := UpdatePayload{Items: updates}
+	body, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("marshal updates: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/reports/update", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/reports/update-work", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +136,7 @@ func (c *ReportsClient) UpdateReports(ctx context.Context, updates []ReportUpdat
 
 	res, err := c.http.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("post reports/update: %w", err)
+		return nil, fmt.Errorf("post reports/update-work: %w", err)
 	}
 	defer res.Body.Close()
 

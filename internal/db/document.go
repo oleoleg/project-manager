@@ -24,7 +24,7 @@ func NewDocumentRepo(pool *pgxpool.Pool) *DocumentRepo {
 // ListByContract возвращает все документы договора вместе с их версиями и историей согласования.
 func (r *DocumentRepo) ListByContract(ctx context.Context, contractID string) ([]models.ContractDocument, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, contract_id, doc_type, number, title, current_stage, current_form, holder_info, created_at, updated_at
+		SELECT id, contract_id, doc_type, number, doc_date, title, current_stage, current_form, holder_info, created_at, updated_at
 		FROM contract_documents
 		WHERE contract_id = $1
 		ORDER BY 
@@ -40,7 +40,7 @@ func (r *DocumentRepo) ListByContract(ctx context.Context, contractID string) ([
 	for rows.Next() {
 		var d models.ContractDocument
 		if err := rows.Scan(
-			&d.ID, &d.ContractID, &d.DocType, &d.Number, &d.Title,
+			&d.ID, &d.ContractID, &d.DocType, &d.Number, &d.DocDate, &d.Title,
 			&d.CurrentStage, &d.CurrentForm, &d.HolderInfo, &d.CreatedAt, &d.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan contract document: %w", err)
@@ -71,8 +71,9 @@ func (r *DocumentRepo) ListByContract(ctx context.Context, contractID string) ([
 
 func (r *DocumentRepo) listVersions(ctx context.Context, docID int64) ([]models.DocumentVersion, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT v.id, v.document_id, v.version_num, v.rel_path, v.file_name, v.file_ext,
-		       v.form_type, v.comment, v.uploaded_by, COALESCE(u.full_name, ''), v.created_at
+		SELECT v.id, v.document_id, v.version_num, v.rel_path, v.attachments_rel_path,
+		       v.file_name, v.file_ext, v.form_type, v.comment, v.uploaded_by,
+		       COALESCE(u.full_name, ''), v.created_at
 		FROM document_versions v
 		LEFT JOIN users u ON u.id = v.uploaded_by
 		WHERE v.document_id = $1
@@ -87,8 +88,9 @@ func (r *DocumentRepo) listVersions(ctx context.Context, docID int64) ([]models.
 	for rows.Next() {
 		var v models.DocumentVersion
 		if err := rows.Scan(
-			&v.ID, &v.DocumentID, &v.VersionNum, &v.RelPath, &v.FileName, &v.FileExt,
-			&v.FormType, &v.Comment, &v.UploadedBy, &v.UploaderName, &v.CreatedAt,
+			&v.ID, &v.DocumentID, &v.VersionNum, &v.RelPath, &v.AttachmentsRelPath,
+			&v.FileName, &v.FileExt, &v.FormType, &v.Comment, &v.UploadedBy,
+			&v.UploaderName, &v.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -130,12 +132,12 @@ func (r *DocumentRepo) listHistory(ctx context.Context, docID int64) ([]models.D
 
 func (r *DocumentRepo) GetDocumentByID(ctx context.Context, docID int64) (*models.ContractDocument, error) {
 	row := r.pool.QueryRow(ctx, `
-		SELECT id, contract_id, doc_type, number, title, current_stage, current_form, holder_info, created_at, updated_at
+		SELECT id, contract_id, doc_type, number, doc_date, title, current_stage, current_form, holder_info, created_at, updated_at
 		FROM contract_documents WHERE id = $1
 	`, docID)
 	var d models.ContractDocument
 	if err := row.Scan(
-		&d.ID, &d.ContractID, &d.DocType, &d.Number, &d.Title,
+		&d.ID, &d.ContractID, &d.DocType, &d.Number, &d.DocDate, &d.Title,
 		&d.CurrentStage, &d.CurrentForm, &d.HolderInfo, &d.CreatedAt, &d.UpdatedAt,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -148,13 +150,14 @@ func (r *DocumentRepo) GetDocumentByID(ctx context.Context, docID int64) (*model
 
 func (r *DocumentRepo) GetVersionByID(ctx context.Context, verID int64) (*models.DocumentVersion, error) {
 	row := r.pool.QueryRow(ctx, `
-		SELECT id, document_id, version_num, rel_path, file_name, file_ext, form_type, comment, uploaded_by, created_at
+		SELECT id, document_id, version_num, rel_path, attachments_rel_path,
+		       file_name, file_ext, form_type, comment, uploaded_by, created_at
 		FROM document_versions WHERE id = $1
 	`, verID)
 	var v models.DocumentVersion
 	if err := row.Scan(
-		&v.ID, &v.DocumentID, &v.VersionNum, &v.RelPath, &v.FileName, &v.FileExt,
-		&v.FormType, &v.Comment, &v.UploadedBy, &v.CreatedAt,
+		&v.ID, &v.DocumentID, &v.VersionNum, &v.RelPath, &v.AttachmentsRelPath,
+		&v.FileName, &v.FileExt, &v.FormType, &v.Comment, &v.UploadedBy, &v.CreatedAt,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrVersionNotFound
@@ -167,10 +170,10 @@ func (r *DocumentRepo) GetVersionByID(ctx context.Context, verID int64) (*models
 // CreateDocument создаёт логическую карточку документа (Договор / ДС / Приложение).
 func (r *DocumentRepo) CreateDocument(ctx context.Context, d *models.ContractDocument) error {
 	return r.pool.QueryRow(ctx, `
-		INSERT INTO contract_documents (contract_id, doc_type, number, title, current_stage, current_form, holder_info)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO contract_documents (contract_id, doc_type, number, doc_date, title, current_stage, current_form, holder_info)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id, created_at, updated_at
-	`, d.ContractID, d.DocType, d.Number, d.Title, d.CurrentStage, d.CurrentForm, d.HolderInfo).
+	`, d.ContractID, d.DocType, d.Number, d.DocDate, d.Title, d.CurrentStage, d.CurrentForm, d.HolderInfo).
 		Scan(&d.ID, &d.CreatedAt, &d.UpdatedAt)
 }
 
@@ -190,10 +193,13 @@ func (r *DocumentRepo) AddVersion(ctx context.Context, v *models.DocumentVersion
 	defer tx.Rollback(ctx)
 
 	err = tx.QueryRow(ctx, `
-		INSERT INTO document_versions (document_id, version_num, rel_path, file_name, file_ext, form_type, comment, uploaded_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO document_versions (
+			document_id, version_num, rel_path, attachments_rel_path,
+			file_name, file_ext, form_type, comment, uploaded_by
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id, created_at
-	`, v.DocumentID, v.VersionNum, v.RelPath, v.FileName, v.FileExt, v.FormType, v.Comment, v.UploadedBy).
+	`, v.DocumentID, v.VersionNum, v.RelPath, v.AttachmentsRelPath, v.FileName, v.FileExt, v.FormType, v.Comment, v.UploadedBy).
 		Scan(&v.ID, &v.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("insert document version: %w", err)
@@ -250,9 +256,9 @@ func (r *DocumentRepo) DeleteDocument(ctx context.Context, docID int64) error {
 func (r *DocumentRepo) UpdateDocument(ctx context.Context, d *models.ContractDocument) error {
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE contract_documents
-		SET doc_type = $2, number = $3, title = $4, holder_info = $5, updated_at = NOW()
+		SET number = $2, doc_date = $3, title = $4, holder_info = $5, updated_at = NOW()
 		WHERE id = $1
-	`, d.ID, d.DocType, d.Number, d.Title, d.HolderInfo)
+	`, d.ID, d.Number, d.DocDate, d.Title, d.HolderInfo)
 	if err != nil {
 		return fmt.Errorf("update contract document: %w", err)
 	}
@@ -280,10 +286,12 @@ func (r *DocumentRepo) GetDocumentFull(ctx context.Context, docID int64) (*model
 }
 
 // UpdateVersionPath обновляет путь и имя файла версии (при перемещении в другую папку этапа).
-func (r *DocumentRepo) UpdateVersionPath(ctx context.Context, verID int64, newRelPath, newFileName string) error {
+func (r *DocumentRepo) UpdateVersionPath(ctx context.Context, verID int64, newRelPath, newFileName, newAttRelPath string) error {
 	_, err := r.pool.Exec(ctx, `
-		UPDATE document_versions SET rel_path = $2, file_name = $3 WHERE id = $1
-	`, verID, newRelPath, newFileName)
+		UPDATE document_versions
+		SET rel_path = $2, file_name = $3, attachments_rel_path = $4
+		WHERE id = $1
+	`, verID, newRelPath, newFileName, newAttRelPath)
 	return err
 }
 
@@ -291,4 +299,12 @@ func (r *DocumentRepo) UpdateVersionPath(ctx context.Context, verID int64, newRe
 func (r *DocumentRepo) DeleteVersion(ctx context.Context, verID int64) error {
 	_, err := r.pool.Exec(ctx, `DELETE FROM document_versions WHERE id = $1`, verID)
 	return err
+}
+
+func (r *DocumentRepo) HasMainDocument(ctx context.Context, contractID string) (bool, error) {
+	var exists bool
+	err := r.pool.QueryRow(ctx, `
+		SELECT EXISTS(SELECT 1 FROM contract_documents WHERE contract_id = $1 AND doc_type = 'main')
+	`, contractID).Scan(&exists)
+	return exists, err
 }

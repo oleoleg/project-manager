@@ -5,8 +5,9 @@ import "time"
 type ContractDocument struct {
 	ID           int64
 	ContractID   string
-	DocType      string // main, addendum, appendix
-	Number       string
+	DocType      string     // main, addendum
+	Number       string     // Номер документа (для ДС)
+	DocDate      *time.Time // Дата документа (для ДС)
 	Title        string
 	CurrentStage string
 	CurrentForm  string
@@ -20,17 +21,19 @@ type ContractDocument struct {
 }
 
 type DocumentVersion struct {
-	ID           int64
-	DocumentID   int64
-	VersionNum   int
-	RelPath      string
-	FileName     string
-	FileExt      string
-	FormType     string
-	Comment      string
-	UploadedBy   *int64
-	UploaderName string
-	CreatedAt    time.Time
+	ID                 int64
+	DocumentID         int64
+	VersionNum         int
+	RelPath            string
+	AttachmentsRelPath string
+	FileName           string
+	FileExt            string
+	FormType           string
+	Comment            string
+	UploadedBy         *int64
+	UploaderName       string
+	CreatedAt          time.Time
+	AttachmentFiles    []string // Заполняется при чтении папки с файлового сервера (не хранится в БД)
 }
 
 type DocumentHistory struct {
@@ -56,7 +59,6 @@ func GetDocTypes() []RefItem {
 	return []RefItem{
 		{Code: "main", Name: "Основной договор"},
 		{Code: "addendum", Name: "Доп. соглашение (ДС)"},
-		{Code: "appendix", Name: "Приложение / Спецификация"},
 	}
 }
 

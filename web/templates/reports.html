@@ -16,7 +16,6 @@
 {{ end }}
 
 <form method="get" action="/reports" class="filter-form">
-    <!-- Договор -->
     <input list="contracts-list" name="contract_id" placeholder="Введите или выберите договор..."
            value="{{ deref .Filter.PrjID }}"
            style="min-width: 250px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; background: var(--surface); color: var(--text);">
@@ -26,7 +25,6 @@
         {{ end }}
     </datalist>
 
-    <!-- Сотрудник -->
     <select name="employee_id" style="min-width: 200px;">
         <option value="">— все сотрудники —</option>
         {{ range .Employees }}
@@ -36,17 +34,15 @@
         {{ end }}
     </select>
 
-    <!-- Отдел (строковый ID) -->
     <select name="department_id" style="min-width: 200px;">
         <option value="">— все отделы —</option>
         {{ range .Departments }}
-            <option value="{{ .ID }}" {{ if and $.Filter.DepartmentID (eq (deref $.Filter.DepartmentID) .ID) }}selected{{ end }}>
-                {{ .Department }}
+            <option value="{{ .ID }}" {{ if and $.Filter.DepartmentID (eq (deref $.Filter.DepartmentID) (printf "%d" .ID)) }}selected{{ end }}>
+                {{ .Name }}
             </option>
         {{ end }}
     </select>
 
-    <!-- Этап -->
     <input type="text" name="stage" placeholder="Этап" value="{{ deref .Filter.PrjStage }}" style="width: 100px;">
 
     <input type="date" name="from" value="{{ if .Filter.From }}{{ .Filter.From.Format "2006-01-02" }}{{ end }}" title="С даты">
@@ -56,16 +52,37 @@
 </form>
 
 {{ if .Reports }}
-<form method="post" action="/reports/update-mappings">
+
+<!-- Кнопки режимов -->
+<div style="margin-bottom: 12px; display: flex; gap: 8px; align-items: center;">
+    <button type="button" id="btn-edit-mode" class="btn btn-primary">✎ Редактировать</button>
+    <button type="submit" form="reports-form" id="btn-save-mode" class="btn btn-primary" style="display: none;">💾 Сохранить</button>
+    <button type="button" id="btn-cancel-edit" class="btn btn-ghost-dark" style="display: none;">Отмена</button>
+    <span id="edit-hint" class="muted" style="display: none; font-size: 13px;">
+        Выделите строки (клик / Shift+клик / Ctrl+клик) и примените массовое изменение.
+    </span>
+</div>
+
+<!-- Панель массового изменения -->
+<div id="edit-toolbar" style="display: none; margin-bottom: 12px; padding: 12px; background: var(--surface-soft); border-radius: 8px; align-items: center; gap: 8px;">
+    <span><strong>Массовое изменение:</strong></span>
+    <select id="bulk-field" class="fact-input">
+        <option value="work_kind">Вид работ</option>
+        <option value="prj_stage">Этап</option>
+        <option value="prj_id">ID Договора</option>
+    </select>
+    <input type="text" id="bulk-value" class="fact-input" placeholder="Новое значение" style="min-width: 160px;">
+    <button type="button" id="btn-bulk-apply" class="btn btn-sm btn-primary">Применить к выделенным</button>
+</div>
+
+<form method="post" action="/reports/update-work" id="reports-form">
     <input type="hidden" name="page_query" value="{{ .QueryString }}">
 
-    <table class="data-table">
+    <table class="data-table" id="reports-table">
         <thead>
         <tr>
             <th>Дата</th>
-            <th>День</th>
             <th>Сотрудник</th>
-            <th>Отдел</th>
             <th>Договор</th>
             <th>Вид работ</th>
             <th>Этап</th>
@@ -73,20 +90,28 @@
             <th class="num">Часы</th>
             <th class="num">Перераб.</th>
             <th>Место</th>
-            <th>Описание</th>
         </tr>
         </thead>
         <tbody>
         {{ range .Reports }}
-            <tr>
-                <input type="hidden" name="report_id[]" value="{{ .SourceID }}">
-                <td>{{ .ReportDate.Format "02.01.2006" }}</td>
-                <td><span class="muted">{{ .Weekday }}</span></td>
-                <td>{{ .EmployeeName }}</td>
-                <td>{{ .DepartmentName }}</td>
-                <td><a href="/contracts/{{ .PrjID }}">{{ .PrjID }}</a></td>
+            <tr class="report-row" data-id="{{ .SourceID }}">
+                <input type="hidden" name="report_id[]" value="{{ .SourceID }}" disabled>
+                <input type="hidden" name="userid[]" value="{{ .UserID }}" disabled>
+                <input type="hidden" name="prj_id[]" value="{{ .PrjID }}" disabled>
+
                 <td>
-                    <select name="work_kind[]" class="fact-input" style="min-width: 120px;">
+                    <div>{{ .ReportDate.Format "02.01.2006" }}</div>
+                    <div class="sub-text">{{ .Weekday }}</div>
+                </td>
+
+                <td>
+                    <div>{{ .EmployeeName }}</div>
+                    <div class="sub-text">{{ .DepartmentName }}</div>
+                </td>
+
+                <td><a href="/contracts/{{ .PrjID }}" target="_blank" onclick="return false;">{{ .PrjID }}</a></td>
+                <td>
+                    <select name="work_kind[]" class="fact-input editable-field" style="min-width: 120px;" disabled>
                         <option value="">— не указан —</option>
                         {{ $currentWK := .WorkKind }}
                         {{ range $.WorkKinds }}
@@ -95,21 +120,19 @@
                     </select>
                 </td>
                 <td>
-                    <input type="text" name="prj_stage[]" value="{{ .StageNumber }}" class="fact-input" style="width: 80px;" placeholder="№">
+                    <input type="text" name="prj_stage[]" value="{{ .StageNumber }}" class="fact-input editable-field" style="width: 80px;" placeholder="№" disabled>
                 </td>
                 <td>{{ .StartTime.Format "15:04" }} - {{ .EndTime.Format "15:04" }}</td>
                 <td class="num">{{ printf "%.1f" .Hours }}</td>
                 <td class="num">{{ if gt .Overwork 0.0 }}{{ printf "%.1f" .Overwork }}{{ else }}—{{ end }}</td>
-                <td>{{ .Place }}</td>
-                <td>{{ .Description }}</td>
+                <td>
+                    <div>{{ .Place }}</div>
+                    <div class="sub-text">{{ .Description }}</div>
+                </td>
             </tr>
         {{ end }}
         </tbody>
     </table>
-
-    <div style="margin-top: 16px; text-align: right;">
-        <button type="submit" class="btn btn-primary">Сохранить изменения</button>
-    </div>
 </form>
 
 <!-- Пагинация -->

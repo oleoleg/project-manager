@@ -1,13 +1,11 @@
 package handlers
 
 import (
-	"encoding/json"
 	"html/template"
 	"log"
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/oleoleg/project-manager/internal/clients"
@@ -39,11 +37,8 @@ func NewReportsHandler(reportsSvc *services.ReportsService, contractSvc *service
 func (h *ReportsHandler) Index(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 
-	// 1. Фильтры
-	f := services.ListFilter{
-		Limit:  reportsPageLimit,
-		Offset: 0,
-	}
+	f := services.ListFilter{Limit: reportsPageLimit, Offset: 0}
+
 	if v := q.Get("contract_id"); v != "" {
 		f.PrjID = &v
 	}
@@ -59,9 +54,8 @@ func (h *ReportsHandler) Index(w http.ResponseWriter, r *http.Request) {
 		f.PrjStage = &v
 	}
 
-	// from/to: если не заданы — с начала предыдущего года по сегодня.
 	now := time.Now()
-	from, to := f.From, f.To
+	var from, to *time.Time
 	if v := q.Get("from"); v != "" {
 		if t, err := time.Parse(dateLayout, v); err == nil {
 			from = &t
@@ -88,7 +82,6 @@ func (h *ReportsHandler) Index(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 2. Данные
 	page, err := h.reportsSvc.List(r.Context(), f)
 	if err != nil {
 		log.Printf("list reports: %v", err)
@@ -101,10 +94,8 @@ func (h *ReportsHandler) Index(w http.ResponseWriter, r *http.Request) {
 		dict = &services.Dictionaries{}
 	}
 
-	// 3. Договоры (для фильтра «Введите или выберите договор»)
 	contracts, _ := h.contractSvc.List(r.Context(), db.ContractFilter{})
 
-	// 4. Данные для шаблона
 	data := BaseData(r, "Рапорт сотрудников")
 	data["Reports"] = page.Rows
 	data["Total"] = page.Total
@@ -143,7 +134,7 @@ func (h *ReportsHandler) Index(w http.ResponseWriter, r *http.Request) {
 
 func reportsQueryString(q url.Values) string {
 	v := url.Values{}
-	for _, k := range []string{"contract_id", "employee_id", "department_id", "stage", "from", "to"} {
+	for _, k := range []string{"contract_id", "employee_id", "department_id", "stage", "from", "to", "offset"} {
 		if val := q.Get(k); val != "" {
 			v.Set(k, val)
 		}
@@ -151,46 +142,62 @@ func reportsQueryString(q url.Values) string {
 	return v.Encode()
 }
 
-// UpdateMappings — POST /reports/update-mappings
-// Принимает форму с массивами report_id[] / work_kind[] / prj_stage[]
-// и одним POST-ом отправляет правки на источник.
+// UpdateMappings — POST /reports/update-work
 func (h *ReportsHandler) UpdateMappings(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 
 	ids := r.Form["report_id[]"]
+	userIDs := r.Form["userid[]"]
+	prjIDs := r.Form["prj_id[]"]
 	workKinds := r.Form["work_kind[]"]
 	stages := r.Form["prj_stage[]"]
 
-	updates := make([]clients.ReportUpdate, 0, len(ids))
+	updates := make([]clients.UpdateItem, 0, len(ids))
 	for i, idStr := range ids {
 		id, err := strconv.ParseInt(idStr, 10, 64)
 		if err != nil {
 			continue
 		}
-		var wk, st string
+		var uid int64
+		if i < len(userIDs) {
+			uid, _ = strconv.ParseInt(userIDs[i], 10, 64)
+		}
+		var pj, wk, st string
+		if i < len(prjIDs) {
+			pj = prjIDs[i]
+		}
 		if i < len(workKinds) {
 			wk = workKinds[i]
 		}
 		if i < len(stages) {
 			st = stages[i]
 		}
-		updates = append(updates, clients.ReportUpdate{ID: id, WorkKind: wk, PrjStage: st})
+		updates = append(updates, clients.UpdateItem{
+			ID:       id,
+			UserID:   uid,
+			PrjID:    pj,
+			WorkKind: wk,
+			PrjStage: st,
+		})
 	}
 
-	referer := r.Referer()
-	if referer == "" {
-		referer = "/reports"
+	// Куда вернуться: page_query из формы (сохраняет фильтры и offset), иначе Referer.
+	backURL := "/reports"
+	if pq := r.FormValue("page_query"); pq != "" {
+		backURL += "?" + pq
+	} else if ref := r.Referer(); ref != "" {
+		backURL = ref
 	}
 
 	if len(updates) == 0 {
-		http.Redirect(w, r, referer+"?flash="+urlQueryEscape("Нет изменений"), http.StatusSeeOther)
+		http.Redirect(w, r, appendQuery(backURL, "flash", "Нет изменений"), http.StatusSeeOther)
 		return
 	}
 
 	res, err := h.reportsSvc.UpdateMappings(r.Context(), updates)
 	if err != nil {
 		log.Printf("update reports mappings: %v", err)
-		http.Redirect(w, r, referer+"?update_error="+urlQueryEscape(err.Error()), http.StatusSeeOther)
+		http.Redirect(w, r, appendQuery(backURL, "update_error", err.Error()), http.StatusSeeOther)
 		return
 	}
 
@@ -198,18 +205,30 @@ func (h *ReportsHandler) UpdateMappings(w http.ResponseWriter, r *http.Request) 
 	if len(res.Failed) > 0 {
 		msg += ", не удалось: " + strconv.Itoa(len(res.Failed))
 	}
-	sep := "?"
-	if len(referer) > 0 && containsQuery(referer) {
-		sep = "&"
-	}
-	http.Redirect(w, r, referer+sep+"flash="+urlQueryEscape(msg), http.StatusSeeOther)
+	http.Redirect(w, r, appendQuery(backURL, "flash", msg), http.StatusSeeOther)
 }
 
-// --- мелкие хелперы (можно вынести в util, если уже есть) ---
+// appendQuery аккуратно добавляет ?k=v или &k=v.
+func appendQuery(u, k, v string) string {
+	sep := "?"
+	if containsQuery(u) {
+		sep = "&"
+	}
+	return u + sep + k + "=" + url.QueryEscape(v)
+}
 
-func urlQueryEscape(s string) string { return url.QueryEscape(s) }
+func containsQuery(u string) bool {
+	return len(u) > 0 && (indexOf(u, '?') >= 0)
+}
 
-func containsQuery(u string) bool { return strings.Contains(u, "?") }
+func indexOf(s string, c byte) int {
+	for i := 0; i < len(s); i++ {
+		if s[i] == c {
+			return i
+		}
+	}
+	return -1
+}
 
 func maxInt(a, b int) int {
 	if a > b {
@@ -217,6 +236,3 @@ func maxInt(a, b int) int {
 	}
 	return b
 }
-
-// на случай, если json понадобится ниже — оставим импорт «живым»
-var _ = json.Marshal
