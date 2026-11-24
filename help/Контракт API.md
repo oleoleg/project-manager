@@ -27,6 +27,7 @@
 - `offset` — integer, по умолчанию `0`.
 - `department_id` — integer.
 - `prj_stage` — string.
+- `work_type` - integer.
 
 Ответ:
 ```json

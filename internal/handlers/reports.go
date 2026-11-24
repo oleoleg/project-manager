@@ -19,6 +19,15 @@ const (
 	dateLayout       = "2006-01-02"
 )
 
+type reportsFilterView struct {
+	PrjID        *string
+	UserID       *int64
+	DepartmentID *int64
+	PrjStage     *string
+	WorkType     *int32
+	From, To     *time.Time
+}
+
 type ReportsHandler struct {
 	reportsSvc  *services.ReportsService
 	contractSvc *services.ContractService
@@ -48,10 +57,19 @@ func (h *ReportsHandler) Index(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if v := q.Get("department_id"); v != "" {
-		f.DepartmentID = &v
+		if id, err := strconv.ParseInt(v, 10, 64); err == nil {
+			f.DepartmentID = &id
+		}
 	}
 	if v := q.Get("stage"); v != "" {
 		f.PrjStage = &v
+	}
+
+	if v := q.Get("work_type"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 32); err == nil {
+			wt := int32(n)
+			f.WorkType = &wt
+		}
 	}
 
 	now := time.Now()
@@ -107,17 +125,12 @@ func (h *ReportsHandler) Index(w http.ResponseWriter, r *http.Request) {
 	data["NextOffset"] = page.Offset + page.Limit
 	data["QueryString"] = reportsQueryString(q)
 
-	data["Filter"] = struct {
-		PrjID        *string
-		UserID       *int64
-		DepartmentID *string
-		PrjStage     *string
-		From, To     *time.Time
-	}{
+	data["Filter"] = reportsFilterView{
 		PrjID:        f.PrjID,
 		UserID:       f.UserID,
 		DepartmentID: f.DepartmentID,
 		PrjStage:     f.PrjStage,
+		WorkType:     f.WorkType,
 		From:         f.From,
 		To:           f.To,
 	}
@@ -134,7 +147,7 @@ func (h *ReportsHandler) Index(w http.ResponseWriter, r *http.Request) {
 
 func reportsQueryString(q url.Values) string {
 	v := url.Values{}
-	for _, k := range []string{"contract_id", "employee_id", "department_id", "stage", "from", "to", "offset"} {
+	for _, k := range []string{"contract_id", "employee_id", "department_id", "stage", "work_type", "from", "to", "offset"} {
 		if val := q.Get(k); val != "" {
 			v.Set(k, val)
 		}

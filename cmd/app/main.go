@@ -133,6 +133,12 @@ func startHTTPServer(stopCh <-chan struct{}) {
 			}
 			return *p
 		},
+		"derefInt32": func(p *int32) int32 {
+			if p == nil {
+				return -1
+			}
+			return *p
+		},
 		"money": func(v float64) string {
 			s := strconv.FormatFloat(v, 'f', 2, 64)
 			return groupThousands(s) + " ₽"

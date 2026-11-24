@@ -37,8 +37,9 @@ type ReportsQuery struct {
 	To           *time.Time
 	PrjID        *string
 	UserID       *int64
-	DepartmentID *string
+	DepartmentID *int64
 	PrjStage     *string
+	WorkType     *int32
 	Limit        int // 0 — дефолт источника (1000)
 	Offset       int
 }
@@ -63,10 +64,13 @@ func (c *ReportsClient) FetchReports(ctx context.Context, q ReportsQuery) (*Repo
 		v.Set("userid", strconv.FormatInt(*q.UserID, 10))
 	}
 	if q.DepartmentID != nil {
-		v.Set("department_id", *q.DepartmentID)
+		v.Set("department_id", strconv.FormatInt(*q.DepartmentID, 10))
 	}
 	if q.PrjStage != nil {
 		v.Set("prj_stage", *q.PrjStage)
+	}
+	if q.WorkType != nil {
+		v.Set("work_type", strconv.FormatInt(int64(*q.WorkType), 10))
 	}
 	if q.Limit > 0 {
 		v.Set("limit", strconv.Itoa(q.Limit))

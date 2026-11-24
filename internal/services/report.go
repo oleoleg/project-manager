@@ -127,8 +127,9 @@ type ListFilter struct {
 	To           *time.Time
 	PrjID        *string
 	UserID       *int64
-	DepartmentID *string
+	DepartmentID *int64
 	PrjStage     *string
+	WorkType     *int32
 	Limit        int
 	Offset       int
 }
@@ -150,6 +151,7 @@ func (s *ReportsService) List(ctx context.Context, f ListFilter) (*ReportsPage, 
 		UserID:       f.UserID,
 		DepartmentID: f.DepartmentID,
 		PrjStage:     f.PrjStage,
+		WorkType:     f.WorkType,
 		Limit:        f.Limit,
 		Offset:       f.Offset,
 	})

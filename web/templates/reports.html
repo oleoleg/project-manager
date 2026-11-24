@@ -42,6 +42,15 @@
             </option>
         {{ end }}
     </select>
+    
+    <select name="work_type" style="min-width: 180px;">
+        <option value="">— все места —</option>
+        {{ range .WorkTypes }}
+            <option value="{{ .ID }}" {{ if and $.Filter.WorkType (eq (derefInt32 $.Filter.WorkType) .ID) }}selected{{ end }}>
+                {{ .Name }}
+            </option>
+        {{ end }}
+    </select>
 
     <input type="text" name="stage" placeholder="Этап" value="{{ deref .Filter.PrjStage }}" style="width: 100px;">
 
@@ -86,10 +95,8 @@
             <th>Договор</th>
             <th>Вид работ</th>
             <th>Этап</th>
-            <th>Время</th>
-            <th class="num">Часы</th>
-            <th class="num">Перераб.</th>
-            <th>Место</th>
+            <th>Часы</th>
+            <th>ОПИСАНИЕ РАБОТЫ</th>
         </tr>
         </thead>
         <tbody>
@@ -99,17 +106,23 @@
                 <input type="hidden" name="userid[]" value="{{ .UserID }}" disabled>
                 <input type="hidden" name="prj_id[]" value="{{ .PrjID }}" disabled>
 
-                <td>
+                <td style="min-width: 120px;">
                     <div>{{ .ReportDate.Format "02.01.2006" }}</div>
                     <div class="sub-text">{{ .Weekday }}</div>
                 </td>
 
-                <td>
+                <td style="min-width: 160px;">
                     <div>{{ .EmployeeName }}</div>
                     <div class="sub-text">{{ .DepartmentName }}</div>
                 </td>
 
-                <td><a href="/contracts/{{ .PrjID }}" target="_blank" onclick="return false;">{{ .PrjID }}</a></td>
+                <td>
+                    {{ if eq .PrjID "0" }}
+                        <span class="muted">не учтен </span> 
+                    {{ else }}
+                        <a href="/contracts/{{ .PrjID }}" target="_blank" onclick="return false;">{{ .PrjID }}</a>
+                    {{ end }}
+                </td>
                 <td>
                     <select name="work_kind[]" class="fact-input editable-field" style="min-width: 120px;" disabled>
                         <option value="">— не указан —</option>
@@ -122,9 +135,12 @@
                 <td>
                     <input type="text" name="prj_stage[]" value="{{ .StageNumber }}" class="fact-input editable-field" style="width: 80px;" placeholder="№" disabled>
                 </td>
-                <td>{{ .StartTime.Format "15:04" }} - {{ .EndTime.Format "15:04" }}</td>
-                <td class="num">{{ printf "%.1f" .Hours }}</td>
-                <td class="num">{{ if gt .Overwork 0.0 }}{{ printf "%.1f" .Overwork }}{{ else }}—{{ end }}</td>
+                
+                <td style="min-width: 120px;">
+                    <div>{{ .Hours }}</div>
+                    <div class="sub-text">{{ .StartTime.Format "15:04" }} - {{ .EndTime.Format "15:04" }}</div>
+                    <div class="sub-text" class="num">{{ if gt .Overwork 0.0 }}Перераб.:{{ printf "%.1f" .Overwork }}{{ end }}</div>
+                </td>
                 <td>
                     <div>{{ .Place }}</div>
                     <div class="sub-text">{{ .Description }}</div>
